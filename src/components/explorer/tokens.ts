@@ -1,15 +1,16 @@
 export const tokens = {
-  cream:       'oklch(96% 0.012 80)',
-  creamDark:   'oklch(92% 0.018 78)',
-  creamBorder: 'oklch(88% 0.02 75)',
-  ink:         'oklch(14% 0.02 60)',
-  inkMid:      'oklch(42% 0.02 60)',
-  inkLight:    'oklch(65% 0.015 70)',
-  terra:       'oklch(54% 0.15 44)',
-  terraLight:  'oklch(90% 0.06 60)',
-  green:       'oklch(43% 0.11 150)',
-  greenLight:  'oklch(90% 0.06 150)',
-  blue:        'oklch(48% 0.12 240)',
+  cream:       'var(--bg)',
+  creamDark:   'var(--bg-dark)',
+  creamBorder: 'var(--bg-border)',
+  surface:     'var(--surface)',
+  ink:         'var(--ink)',
+  inkMid:      'var(--ink-mid)',
+  inkLight:    'var(--ink-light)',
+  terra:       'var(--terra)',
+  terraLight:  'var(--terra-light)',
+  green:       'var(--green)',
+  greenLight:  'var(--green-light)',
+  blue:        'var(--blue)',
 } as const;
 
 export interface Activity {
@@ -17,6 +18,7 @@ export interface Activity {
   type: 'cycling' | 'hiking';
   title: string;
   date: string;
+  rawDate: string;
   location: string;
   duration: string;
   distance: number;
@@ -24,48 +26,62 @@ export interface Activity {
   elevation: number;
   descent: number;
   photos: string[];
+  gps: { lat: number; lng: number }[];
+  duration_min?: number;
+  max_speed?: number;
+  max_incline?: number | null;
+  min_incline?: number | null;
+  avg_hr?: number | null;
+  max_hr?: number | null;
+  calories?: number | null;
+  speed_kmh?: number[];
+  altitude?: number[];
+  heartrate?: number[];
+  time_s?: number[];
+  distance_m?: number[];
+  // Advanced training metrics
+  np?: number | null;
+  avg_power?: number | null;
+  tss?: number | null;
+  if_factor?: number | null;
+  vi?: number | null;
+  wkg?: number | null;
+  ef?: number | null;
+  trimp?: number | null;
+  hrZones?: { z1: number; z2: number; z3: number; z4: number; z5: number } | null;
+  aed?: number | null;
+  vam?: number | null;
+  // Weather
+  weather?: {
+    temp: number;
+    windspeed: number;
+    humidity: number;
+    code: number;
+    description: string;
+  } | null;
 }
 
-export const activities: Activity[] = [
-  {
-    id: 1, type: 'cycling', title: 'De Dardilly à Alix', date: '22 AVR. 2026', location: 'Dardilly, France',
-    duration: '1h 43m', distance: 33.3, speed: 19.3, elevation: 520, descent: 520,
-    photos: [
-      'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600&q=80',
-      'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=400&q=80',
-      'https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?w=400&q=80',
-    ],
-  },
-  {
-    id: 2, type: 'hiking', title: "Crête du Mont Cindre", date: '18 AVR. 2026', location: "Saint-Cyr-au-Mont-d'Or",
-    duration: '2h 15m', distance: 9.8, speed: null, elevation: 380, descent: 380,
-    photos: [
-      'https://images.unsplash.com/photo-1551632811-561732d1e306?w=600&q=80',
-      'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&q=80',
-    ],
-  },
-  {
-    id: 3, type: 'cycling', title: "Boucle des Monts d'Or", date: '14 AVR. 2026', location: 'Lyon, France',
-    duration: '3h 02m', distance: 57.1, speed: 18.8, elevation: 820, descent: 820,
-    photos: [
-      'https://images.unsplash.com/photo-1471506480208-91b3a4cc78be?w=600&q=80',
-    ],
-  },
-  {
-    id: 4, type: 'hiking', title: 'Gorges du Régalon', date: '6 AVR. 2026', location: 'Luberon, France',
-    duration: '4h 30m', distance: 14.2, speed: null, elevation: 610, descent: 610,
-    photos: [
-      'https://images.unsplash.com/photo-1527489377706-5bf97e608852?w=600&q=80',
-      'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=400&q=80',
-    ],
-  },
-];
+export interface GlobalStats {
+  totalActivities: number;
+  totalDistance: number;
+  totalElevation: number;
+  totalHours: number;
+  cycling: number;
+  hiking: number;
+}
 
-export const globalStats = {
-  totalActivities: 89,
-  totalDistance: 2847,
-  totalElevation: 48200,
-  totalHours: 312,
-  cycling: 54,
-  hiking: 35,
-};
+export function deriveStats(activities: Activity[]): GlobalStats {
+  const cycling = activities.filter(a => a.type === 'cycling');
+  const hiking  = activities.filter(a => a.type === 'hiking');
+  return {
+    totalActivities: activities.length,
+    totalDistance:   +activities.reduce((s, a) => s + a.distance, 0).toFixed(0),
+    totalElevation:  +activities.reduce((s, a) => s + a.elevation, 0).toFixed(0),
+    totalHours:      +activities.reduce((s, a) => {
+      const [h = 0, m = 0] = a.duration.replace('h ', ':').replace('m', '').split(':').map(Number);
+      return s + h + m / 60;
+    }, 0).toFixed(0),
+    cycling: cycling.length,
+    hiking:  hiking.length,
+  };
+}

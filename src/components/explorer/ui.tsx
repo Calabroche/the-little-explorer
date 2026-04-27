@@ -73,9 +73,9 @@ export function TypeBadge({ type }: { type: 'cycling' | 'hiking' }) {
 export function StatChip({ label, value, unit }: { label: string; value: string | number; unit: string }) {
   return (
     <div style={{ flex: 1 }}>
-      <Label style={{ display: 'block', marginBottom: 4 }}>{label}</Label>
-      <span style={{ fontFamily: "'Playfair Display'", fontSize: 22, fontWeight: 700, color: tokens.ink }}>{value}</span>
-      <span style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight, marginLeft: 4 }}>{unit}</span>
+      <Label style={{ display: 'block', marginBottom: 5, fontSize: 10 }}>{label}</Label>
+      <span style={{ fontFamily: "'Playfair Display'", fontSize: 26, fontWeight: 700, color: tokens.ink }}>{value}</span>
+      <span style={{ fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.inkLight, marginLeft: 4 }}>{unit}</span>
     </div>
   );
 }

@@ -2,7 +2,39 @@
 @tailwind components;
 @tailwind utilities;
 
+@import 'leaflet/dist/leaflet.css';
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:          oklch(96% 0.012 80);
+  --bg-dark:     oklch(92% 0.018 78);
+  --bg-border:   oklch(88% 0.02 75);
+  --surface:     #ffffff;
+  --ink:         oklch(14% 0.02 60);
+  --ink-mid:     oklch(42% 0.02 60);
+  --ink-light:   oklch(65% 0.015 70);
+  --terra:       oklch(54% 0.15 44);
+  --terra-light: oklch(90% 0.06 60);
+  --green:       oklch(43% 0.11 150);
+  --green-light: oklch(90% 0.06 150);
+  --blue:        oklch(48% 0.12 240);
+}
+
+[data-dark] {
+  --bg:          oklch(12% 0.008 265);
+  --bg-dark:     oklch(16% 0.01 265);
+  --bg-border:   oklch(26% 0.012 265);
+  --surface:     oklch(19% 0.01 265);
+  --ink:         oklch(94% 0.006 80);
+  --ink-mid:     oklch(68% 0.008 80);
+  --ink-light:   oklch(50% 0.008 80);
+  --terra:       oklch(62% 0.17 44);
+  --terra-light: oklch(22% 0.08 44);
+  --green:       oklch(55% 0.14 150);
+  --green-light: oklch(18% 0.06 150);
+  --blue:        oklch(60% 0.14 240);
+}
 
 html, body, #__next {
   height: 100%;
@@ -10,11 +42,11 @@ html, body, #__next {
 
 body {
   font-family: 'Space Grotesk', sans-serif;
-  background: oklch(96% 0.012 80);
-  color: oklch(14% 0.02 60);
+  background: var(--bg);
+  color: var(--ink);
   overflow: hidden;
 }
 
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: oklch(75% 0.015 80); border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: var(--bg-border); border-radius: 2px; }

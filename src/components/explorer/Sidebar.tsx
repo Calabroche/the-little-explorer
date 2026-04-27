@@ -1,6 +1,6 @@
 'use client';
 
-import { tokens, globalStats } from './tokens';
+import { tokens, GlobalStats } from './tokens';
 import { Label } from './ui';
 
 export type PageId = 'feed' | 'map' | 'stats' | 'photos';
@@ -12,16 +12,38 @@ const navItems: { id: PageId; icon: string; label: string }[] = [
   { id: 'photos', icon: '◻', label: 'Photos' },
 ];
 
-export function Sidebar({ activePage, onNav }: { activePage: PageId; onNav: (id: PageId) => void }) {
+interface Props {
+  activePage: PageId;
+  onNav: (id: PageId) => void;
+  stats: GlobalStats | null;
+  darkMode: boolean;
+  onToggleDark: () => void;
+}
+
+export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark }: Props) {
   return (
     <div style={{
-      width: 220, background: 'white', borderRight: `1px solid ${tokens.creamBorder}`,
+      width: 220, background: tokens.surface, borderRight: `1px solid ${tokens.creamBorder}`,
       display: 'flex', flexDirection: 'column', flexShrink: 0, padding: '0 0 24px',
     }}>
       <div style={{ padding: '28px 24px 24px', borderBottom: `1px solid ${tokens.creamBorder}` }}>
-        <div style={{ fontFamily: "'Playfair Display'", fontSize: 18, fontWeight: 900, color: tokens.ink, lineHeight: 1 }}>
-          The Little<br />
-          <em style={{ color: tokens.terra }}>Explorer</em>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+          <div style={{ fontFamily: "'Playfair Display'", fontSize: 18, fontWeight: 900, color: tokens.ink, lineHeight: 1 }}>
+            The Little<br />
+            <em style={{ color: tokens.terra }}>Explorer</em>
+          </div>
+          <button
+            onClick={onToggleDark}
+            title={darkMode ? 'Mode clair' : 'Mode sombre'}
+            style={{
+              background: tokens.creamDark, border: `1px solid ${tokens.creamBorder}`,
+              borderRadius: 20, padding: '4px 10px', cursor: 'pointer',
+              fontFamily: "'Space Grotesk'", fontSize: 13, color: tokens.inkMid,
+              lineHeight: 1, flexShrink: 0,
+            }}
+          >
+            {darkMode ? '◑' : '◐'}
+          </button>
         </div>
         <Label style={{ marginTop: 6, display: 'block' }}>Florian Calabrese</Label>
       </div>
@@ -49,22 +71,24 @@ export function Sidebar({ activePage, onNav }: { activePage: PageId; onNav: (id:
         })}
       </nav>
 
-      <div style={{ margin: '0 12px', padding: 16, background: tokens.creamDark, borderRadius: 4 }}>
-        <Label style={{ display: 'block', marginBottom: 12 }}>En un coup d&apos;œil</Label>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          {[
-            { v: globalStats.totalActivities, u: 'sorties' },
-            { v: globalStats.totalDistance + 'k', u: 'km' },
-            { v: globalStats.totalElevation + 'k', u: 'm D+' },
-            { v: globalStats.totalHours + 'h', u: 'total' },
-          ].map((s, i) => (
-            <div key={i}>
-              <div style={{ fontFamily: "'Playfair Display'", fontSize: 18, fontWeight: 700, color: tokens.ink }}>{s.v}</div>
-              <Label>{s.u}</Label>
-            </div>
-          ))}
+      {stats && (
+        <div style={{ margin: '0 12px', padding: 16, background: tokens.creamDark, borderRadius: 4 }}>
+          <Label style={{ display: 'block', marginBottom: 12 }}>En un coup d&apos;œil</Label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            {[
+              { v: stats.totalActivities,              u: 'sorties' },
+              { v: stats.totalDistance + ' km',        u: 'distance' },
+              { v: stats.totalElevation + ' m',        u: 'D+' },
+              { v: stats.totalHours + 'h',             u: 'total' },
+            ].map((s, i) => (
+              <div key={i}>
+                <div style={{ fontFamily: "'Playfair Display'", fontSize: 18, fontWeight: 700, color: tokens.ink }}>{s.v}</div>
+                <Label>{s.u}</Label>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
