@@ -1,19 +1,20 @@
 'use client';
 
 import { tokens, Activity } from '../tokens';
-import { SectionTag, Label } from '../ui';
+import { SectionTag, Label, useIsMobile } from '../ui';
 
 interface Props {
   activities: Activity[];
 }
 
 export function PhotosPage({ activities }: Props) {
+  const isMobile = useIsMobile();
   const allPhotos = activities.flatMap(a => a.photos.map(p => ({ url: p, title: a.title })));
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: '32px 40px' }}>
+    <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '20px 16px' : '32px 40px' }}>
       <SectionTag num={4} title="GALERIE PHOTOS" />
-      <h1 style={{ fontFamily: "'Playfair Display'", fontSize: 40, fontWeight: 900, color: tokens.ink, marginBottom: 32, lineHeight: 1.1 }}>
+      <h1 style={{ fontFamily: "'Playfair Display'", fontSize: isMobile ? 28 : 40, fontWeight: 900, color: tokens.ink, marginBottom: isMobile ? 20 : 32, lineHeight: 1.1 }}>
         {allPhotos.length} photos.<br />
         <em style={{ color: tokens.green, fontStyle: 'italic' }}>Des souvenirs.</em>
       </h1>
@@ -22,7 +23,7 @@ export function PhotosPage({ activities }: Props) {
           Les photos apparaîtront ici une fois synchronisées depuis Strava.
         </p>
       ) : (
-        <div style={{ columns: 3, gap: 10 }}>
+        <div style={{ columns: isMobile ? 1 : 3, gap: 10 }}>
           {allPhotos.map((p, i) => (
             <div key={i} style={{ breakInside: 'avoid', marginBottom: 10, borderRadius: 4, overflow: 'hidden', position: 'relative' }}>
               <img src={p.url} alt="" style={{ width: '100%', display: 'block' }} />

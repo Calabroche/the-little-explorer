@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { Activity, tokens } from './tokens';
-import { Label } from './ui';
+import { Label, useIsMobile } from './ui';
 
 const RouteModalMap = dynamic(
   () => import('./RouteModalMap').then(m => m.RouteModalMap),
@@ -65,6 +65,7 @@ export function RouteModal({
   const [route, setRoute]   = useState<[number, number][]>([]);
   const [loading, setLoading] = useState(true);
   const [osrmDist, setOsrmDist] = useState<number | null>(null);
+  const isMobile = useIsMobile();
 
   const start: [number, number] = (() => {
     const sorted = [...activities]
@@ -92,10 +93,14 @@ export function RouteModal({
       background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
       <div onClick={e => e.stopPropagation()} style={{
-        width: '82vw', maxWidth: 1060, height: '82vh',
-        background: tokens.surface, borderRadius: 6, overflow: 'hidden',
+        width: isMobile ? '100%' : '82vw',
+        maxWidth: isMobile ? 'none' : 1060,
+        height: isMobile ? '100%' : '82vh',
+        background: tokens.surface,
+        borderRadius: isMobile ? 0 : 6,
+        overflow: 'hidden',
         display: 'flex', flexDirection: 'column',
-        border: `1px solid ${tokens.creamBorder}`,
+        border: isMobile ? 'none' : `1px solid ${tokens.creamBorder}`,
         boxShadow: '0 24px 64px rgba(0,0,0,0.35)',
       }}>
         {/* Header */}
@@ -104,18 +109,20 @@ export function RouteModal({
           padding: '14px 20px', borderBottom: `1px solid ${tokens.creamBorder}`,
           background: tokens.creamDark, flexShrink: 0,
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ background: proposal.color, padding: '4px 10px', borderRadius: 2 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, overflow: 'hidden', flex: 1 }}>
+            <div style={{ background: proposal.color, padding: '4px 10px', borderRadius: 2, flexShrink: 0 }}>
               <span style={{ fontFamily: "'Space Grotesk'", fontSize: 10, fontWeight: 700, color: 'white', letterSpacing: '0.1em' }}>
-                {proposal.tag}
+                {isMobile ? proposal.tag.split(' ')[0] : proposal.tag}
               </span>
             </div>
-            <span style={{ fontFamily: "'Playfair Display'", fontSize: 18, fontWeight: 700, color: tokens.ink }}>
+            <span style={{ fontFamily: "'Playfair Display'", fontSize: isMobile ? 15 : 18, fontWeight: 700, color: tokens.ink, whiteSpace: 'nowrap' }}>
               {proposal.title}
             </span>
-            <span style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight }}>
-              — {proposal.tracks[selectedIdx].name}
-            </span>
+            {!isMobile && (
+              <span style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight }}>
+                — {proposal.tracks[selectedIdx].name}
+              </span>
+            )}
           </div>
           <button onClick={onClose} style={{
             background: 'none', border: 'none', cursor: 'pointer',
@@ -123,9 +130,9 @@ export function RouteModal({
           }}>✕</button>
         </div>
 
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', flex: 1, overflow: isMobile ? 'auto' : 'hidden' }}>
           {/* Map */}
-          <div style={{ flex: 1, position: 'relative' }}>
+          <div style={{ flex: isMobile ? 'none' : 1, height: isMobile ? 280 : undefined, position: 'relative', flexShrink: 0 }}>
             {loading && (
               <div style={{
                 position: 'absolute', inset: 0, zIndex: 10,
@@ -141,7 +148,10 @@ export function RouteModal({
 
           {/* Right panel */}
           <div style={{
-            width: 256, flexShrink: 0, borderLeft: `1px solid ${tokens.creamBorder}`,
+            width: isMobile ? '100%' : 256,
+            flexShrink: 0,
+            borderLeft: isMobile ? 'none' : `1px solid ${tokens.creamBorder}`,
+            borderTop: isMobile ? `1px solid ${tokens.creamBorder}` : 'none',
             display: 'flex', flexDirection: 'column', overflowY: 'auto',
           }}>
             {/* Track selector */}

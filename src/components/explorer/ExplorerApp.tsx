@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Activity, GlobalStats, deriveStats, tokens } from './tokens';
 import { Sidebar, PageId } from './Sidebar';
+import { useIsMobile } from './ui';
 import { FeedPage } from './pages/FeedPage';
 import { MapPage } from './pages/MapPage';
 import { StatsPage } from './pages/StatsPage';
@@ -17,6 +18,7 @@ export function ExplorerApp() {
   const [stats, setStats] = useState<GlobalStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     const saved = localStorage.getItem('tle_page') as PageId | null;
@@ -70,14 +72,19 @@ export function ExplorerApp() {
   };
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      <Sidebar activePage={page} onNav={handleNav} stats={stats} darkMode={darkMode} onToggleDark={toggleDark} />
-      <main style={{ flex: 1, display: 'flex', overflow: 'hidden', background: tokens.cream }}>
+    <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: '100vh', overflow: 'hidden' }}>
+      {!isMobile && (
+        <Sidebar activePage={page} onNav={handleNav} stats={stats} darkMode={darkMode} onToggleDark={toggleDark} />
+      )}
+      <main style={{ flex: 1, display: 'flex', overflow: 'hidden', background: tokens.cream, minHeight: 0 }}>
         {analysisActivity
           ? <AnalysisPage activity={analysisActivity} onBack={() => setAnalysisActivity(null)} />
           : pageContent[page]
         }
       </main>
+      {isMobile && (
+        <Sidebar activePage={page} onNav={handleNav} stats={stats} darkMode={darkMode} onToggleDark={toggleDark} mobile />
+      )}
     </div>
   );
 }

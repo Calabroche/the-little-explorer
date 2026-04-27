@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { tokens, Activity, GlobalStats } from '../tokens';
-import { SectionTag, Label } from '../ui';
+import { SectionTag, Label, useIsMobile } from '../ui';
 import { ActivityCard } from '../ActivityCard';
 import { RouteModal, Proposal } from '../RouteModal';
 
@@ -17,6 +17,7 @@ function formatPredictedDate(iso: string) {
 }
 
 function TrainingProgram({ activities }: { activities: Activity[] }) {
+  const isMobile = useIsMobile();
   const sorted = [...activities].sort((a, b) => new Date(b.rawDate).getTime() - new Date(a.rawDate).getTime());
   const last5  = sorted.slice(0, 5);
   if (last5.length < 2) return null;
@@ -62,7 +63,7 @@ function TrainingProgram({ activities }: { activities: Activity[] }) {
         <Label>ANALYSE & PROCHAINE SORTIE</Label>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: isMobile ? 20 : 24 }}>
 
         {/* TSS trend bars */}
         <div>
@@ -98,7 +99,7 @@ function TrainingProgram({ activities }: { activities: Activity[] }) {
         </div>
 
         {/* Next ride prediction */}
-        <div style={{ borderLeft: `1px solid ${tokens.creamBorder}`, paddingLeft: 24 }}>
+        <div style={{ borderLeft: isMobile ? 'none' : `1px solid ${tokens.creamBorder}`, paddingLeft: isMobile ? 0 : 24, borderTop: isMobile ? `1px solid ${tokens.creamBorder}` : 'none', paddingTop: isMobile ? 20 : 0 }}>
           <Label style={{ display: 'block', marginBottom: 12 }}>PROCHAINE SORTIE PRÉVUE</Label>
           <div style={{ fontFamily: "'Playfair Display'", fontSize: 18, fontWeight: 700, color: tokens.terra, lineHeight: 1.3, marginBottom: 6 }}>
             {formatPredictedDate(nextDate.toISOString())}
@@ -134,7 +135,7 @@ function TrainingProgram({ activities }: { activities: Activity[] }) {
         </div>
 
         {/* Advice + TSS explainer */}
-        <div style={{ borderLeft: `1px solid ${tokens.creamBorder}`, paddingLeft: 24 }}>
+        <div style={{ borderLeft: isMobile ? 'none' : `1px solid ${tokens.creamBorder}`, paddingLeft: isMobile ? 0 : 24, borderTop: isMobile ? `1px solid ${tokens.creamBorder}` : 'none', paddingTop: isMobile ? 20 : 0 }}>
           <Label style={{ display: 'block', marginBottom: 12 }}>RECOMMANDATION</Label>
           <p style={{ fontFamily: "'Space Grotesk'", fontSize: 13, color: tokens.inkMid, lineHeight: 1.7, marginBottom: 14 }}>
             {advice}
@@ -160,6 +161,7 @@ function TrainingProgram({ activities }: { activities: Activity[] }) {
 
 function RouteProposals({ activities }: { activities: Activity[] }) {
   const [selected, setSelected] = useState<Proposal | null>(null);
+  const isMobile = useIsMobile();
 
   const sorted = [...activities].sort((a, b) => new Date(b.rawDate).getTime() - new Date(a.rawDate).getTime());
   const last5  = sorted.slice(0, 5);
@@ -314,7 +316,7 @@ function RouteProposals({ activities }: { activities: Activity[] }) {
         Basé sur tes 5 dernières sorties · dist. moy. {avgDist} km · D+ moy. {avgElev} m · TSS moy. {avgTSS} · <em>Clique sur une carte pour voir le tracé</em>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 16 }}>
         {proposals.map((p, i) => (
           <div key={i}
             onClick={() => setSelected(p)}
@@ -458,10 +460,11 @@ interface Props {
 }
 
 export function FeedPage({ activities, stats, onSelect }: Props) {
+  const isMobile = useIsMobile();
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: '32px 40px' }}>
+    <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '20px 16px' : '32px 40px' }}>
       <SectionTag num={1} title="ACTIVITÉS RÉCENTES" />
-      <h1 style={{ fontFamily: "'Playfair Display'", fontSize: 40, fontWeight: 900, color: tokens.ink, lineHeight: 1.1, marginBottom: 32 }}>
+      <h1 style={{ fontFamily: "'Playfair Display'", fontSize: isMobile ? 28 : 40, fontWeight: 900, color: tokens.ink, lineHeight: 1.1, marginBottom: isMobile ? 20 : 32 }}>
         {stats.totalActivities} sorties.<br />
         <em style={{ color: tokens.terra, fontStyle: 'italic', fontWeight: 700 }}>Toujours plus loin.</em>
       </h1>

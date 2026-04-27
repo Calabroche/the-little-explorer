@@ -18,9 +18,43 @@ interface Props {
   stats: GlobalStats | null;
   darkMode: boolean;
   onToggleDark: () => void;
+  mobile?: boolean;
 }
 
-export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark }: Props) {
+export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobile }: Props) {
+  if (mobile) {
+    return (
+      <div style={{
+        height: 60, background: tokens.surface, borderTop: `1px solid ${tokens.creamBorder}`,
+        display: 'flex', flexShrink: 0,
+      }}>
+        {navItems.map(item => {
+          const active = activePage === item.id;
+          return (
+            <div key={item.id} onClick={() => onNav(item.id)} style={{
+              flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+              justifyContent: 'center', gap: 3, cursor: 'pointer',
+              color: active ? tokens.terra : tokens.inkMid,
+            }}>
+              <span style={{ fontSize: 18 }}>{item.icon}</span>
+              <span style={{ fontFamily: "'Space Grotesk'", fontSize: 9, fontWeight: active ? 600 : 400, letterSpacing: '0.05em' }}>
+                {item.label}
+              </span>
+            </div>
+          );
+        })}
+        <div onClick={onToggleDark} style={{
+          width: 52, display: 'flex', flexDirection: 'column', alignItems: 'center',
+          justifyContent: 'center', gap: 3, cursor: 'pointer', color: tokens.inkMid,
+          borderLeft: `1px solid ${tokens.creamBorder}`,
+        }}>
+          <span style={{ fontSize: 18 }}>{darkMode ? '◑' : '◐'}</span>
+          <span style={{ fontFamily: "'Space Grotesk'", fontSize: 9, letterSpacing: '0.05em' }}>Mode</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{
       width: 220, background: tokens.surface, borderRight: `1px solid ${tokens.creamBorder}`,

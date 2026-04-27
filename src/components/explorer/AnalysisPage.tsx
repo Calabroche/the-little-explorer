@@ -7,7 +7,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { Activity, tokens } from './tokens';
-import { Label, TypeBadge, StatChip } from './ui';
+import { Label, TypeBadge, StatChip, useIsMobile } from './ui';
 
 const ActivityRouteMap = dynamic(
   () => import('./ActivityRouteMap').then(m => m.ActivityRouteMap),
@@ -233,6 +233,7 @@ function MetricList({ rows, accentColor }: { rows: MetricRow[]; accentColor: str
 export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack: () => void }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+  const isMobile = useIsMobile();
 
   const data   = useMemo(() => buildChartData(activity), [activity]);
   const hasHR  = (activity.heartrate?.length ?? 0) > 10;
@@ -325,7 +326,7 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
   );
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: '32px 40px', background: tokens.cream }}>
+    <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '16px 16px' : '32px 40px', background: tokens.cream }}>
       {/* Header */}
       <button onClick={onBack} style={{
         background: 'none', border: 'none', cursor: 'pointer',
@@ -339,7 +340,7 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
         <TypeBadge type={activity.type} />
         <Label>{activity.date} · {activity.location}</Label>
       </div>
-      <h1 style={{ fontFamily: "'Playfair Display'", fontSize: 36, fontWeight: 900, color: tokens.ink, marginBottom: 24, lineHeight: 1.1 }}>
+      <h1 style={{ fontFamily: "'Playfair Display'", fontSize: isMobile ? 24 : 36, fontWeight: 900, color: tokens.ink, marginBottom: 24, lineHeight: 1.1 }}>
         {activity.title}
       </h1>
 
@@ -359,7 +360,7 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
       {(activity.np || activity.tss || activity.trimp) && (
         <div style={{ ...CARD_STYLE, marginBottom: 20 }}>
           <Label style={{ display: 'block', marginBottom: 16 }}>EFFORT & ÉNERGIE</Label>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, marginBottom: activity.hrZones ? 24 : 0 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 20, marginBottom: activity.hrZones ? 24 : 0 }}>
             {/* Effort */}
             <div>
               <Label style={{ display: 'block', marginBottom: 12, color: tokens.terra }}>PUISSANCE</Label>
@@ -513,20 +514,20 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
         </div>
       )}
 
-      {/* 2×2 chart grid — Row 1: FC | Vitesse */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
+      {/* Chart grid — Row 1: FC | Vitesse */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20, marginBottom: 20 }}>
         {hrGradChart || <div />}
         {speedChart}
       </div>
 
-      {/* 2×2 chart grid — Row 2: Puissance | Altitude */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
+      {/* Chart grid — Row 2: Puissance | Altitude */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20, marginBottom: 20 }}>
         {powerChart || <div />}
         {altChart}
       </div>
 
       {/* VO2 Max + Power summary */}
-      <div style={{ display: 'flex', gap: 20, marginBottom: 20 }}>
+      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 20, marginBottom: 20 }}>
         {activity.max_hr && <VO2MaxCard activity={activity} />}
         {hasPow && <PowerCard activity={activity} data={data} />}
       </div>
