@@ -7,7 +7,7 @@ const WEATHER_CACHE = path.join(process.cwd(), 'data', 'weather_cache.json'); //
 
 // ── Physics & training constants ──────────────────────────────────────────────
 const MASS = 74.18, G = 9.81, CRR = 0.004, CDA = 0.3, RHO = 1.225;
-const FTP       = 200;  // Functional Threshold Power (W) — calibrate to your level
+const FTP       = 291;  // FTP estimé : 66kg × 2.205 lb/kg × 2 = 291W
 const RIDER_KG  = 66;   // rider weight (kg)
 const HR_REST   = 60;   // resting heart rate (bpm)
 
