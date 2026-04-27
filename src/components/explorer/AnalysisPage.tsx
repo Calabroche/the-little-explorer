@@ -240,14 +240,16 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
   const hasPow = data.some(d => d.power > 0);
   const hasGPS = (activity.gps?.length ?? 0) > 1;
 
+  const chartHeight = isMobile ? 260 : 300;
+
   const hrGradChart = hasHR && mounted && (
     <ChartCard title="FRÉQUENCE CARDIAQUE · INCLINAISON">
-      <ResponsiveContainer width="100%" height={220}>
-        <ComposedChart syncId="ride" data={data} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
+      <ResponsiveContainer width="100%" height={chartHeight}>
+        <ComposedChart syncId="ride" data={data} margin={{ top: 4, right: 2, left: -10, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={tokens.creamBorder} />
           <XAxis dataKey="dist" tick={{ fontFamily: "'Space Grotesk'", fontSize: 10 }} tickFormatter={v => `${v}km`} />
-          <YAxis yAxisId="hr"   orientation="left"  tick={{ fontFamily: "'Space Grotesk'", fontSize: 10 }} domain={['auto', 'auto']} />
-          <YAxis yAxisId="grad" orientation="right" tick={{ fontFamily: "'Space Grotesk'", fontSize: 10 }} tickFormatter={v => `${v}%`} domain={[-25, 25]} />
+          <YAxis yAxisId="hr"   orientation="left"  width={38} tick={{ fontFamily: "'Space Grotesk'", fontSize: 10 }} domain={['auto', 'auto']} />
+          <YAxis yAxisId="grad" orientation="right" width={32} tick={{ fontFamily: "'Space Grotesk'", fontSize: 10 }} tickFormatter={v => `${v}%`} domain={[-25, 25]} />
           <Tooltip content={<ChartTooltip />} />
           <Bar yAxisId="grad" dataKey="gradUp"   name="Montée (%)"  fill={tokens.terra} opacity={0.7} maxBarSize={6} />
           <Bar yAxisId="grad" dataKey="gradDown" name="Descente (%)" fill={tokens.blue}  opacity={0.7} maxBarSize={6} />
@@ -264,8 +266,8 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
 
   const speedChart = mounted && (
     <ChartCard title="VITESSE (km/h)">
-      <ResponsiveContainer width="100%" height={220}>
-        <AreaChart syncId="ride" data={data} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
+      <ResponsiveContainer width="100%" height={chartHeight}>
+        <AreaChart syncId="ride" data={data} margin={{ top: 4, right: 2, left: -10, bottom: 0 }}>
           <defs>
             <linearGradient id="spdGrad" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%"   stopColor={tokens.blue} stopOpacity={0.35} />
@@ -274,7 +276,7 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke={tokens.creamBorder} />
           <XAxis dataKey="dist" tick={{ fontFamily: "'Space Grotesk'", fontSize: 10 }} tickFormatter={v => `${v}km`} />
-          <YAxis tick={{ fontFamily: "'Space Grotesk'", fontSize: 10 }} unit=" km/h" />
+          <YAxis width={44} tick={{ fontFamily: "'Space Grotesk'", fontSize: 10 }} unit=" km/h" />
           <Tooltip content={<ChartTooltip />} />
           <Area dataKey="speed" name="Vitesse (km/h)" stroke={tokens.blue} fill="url(#spdGrad)" strokeWidth={2} dot={false} type="monotone" />
         </AreaChart>
@@ -284,8 +286,8 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
 
   const powerChart = hasPow && mounted && (
     <ChartCard title="PUISSANCE ESTIMÉE (W)">
-      <ResponsiveContainer width="100%" height={220}>
-        <AreaChart syncId="ride" data={data} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
+      <ResponsiveContainer width="100%" height={chartHeight}>
+        <AreaChart syncId="ride" data={data} margin={{ top: 4, right: 2, left: -10, bottom: 0 }}>
           <defs>
             <linearGradient id="powGrad" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%"   stopColor={tokens.green} stopOpacity={0.4} />
@@ -294,7 +296,7 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke={tokens.creamBorder} />
           <XAxis dataKey="dist" tick={{ fontFamily: "'Space Grotesk'", fontSize: 10 }} tickFormatter={v => `${v}km`} />
-          <YAxis tick={{ fontFamily: "'Space Grotesk'", fontSize: 10 }} tickFormatter={v => `${v}W`} />
+          <YAxis width={38} tick={{ fontFamily: "'Space Grotesk'", fontSize: 10 }} tickFormatter={v => `${v}W`} />
           <Tooltip content={<PowerTooltip />} />
           <Area dataKey="power" name="Puissance (W)" stroke={tokens.green} fill="url(#powGrad)" strokeWidth={2} dot={false} type="monotone" />
         </AreaChart>
@@ -307,8 +309,8 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
 
   const altChart = mounted && (
     <ChartCard title="PROFIL D'ALTITUDE">
-      <ResponsiveContainer width="100%" height={220}>
-        <AreaChart syncId="ride" data={data} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
+      <ResponsiveContainer width="100%" height={chartHeight}>
+        <AreaChart syncId="ride" data={data} margin={{ top: 4, right: 2, left: -10, bottom: 0 }}>
           <defs>
             <linearGradient id="altGrad" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%"   stopColor={tokens.terra} stopOpacity={0.3} />
@@ -317,7 +319,7 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke={tokens.creamBorder} />
           <XAxis dataKey="dist" tick={{ fontFamily: "'Space Grotesk'", fontSize: 10 }} tickFormatter={v => `${v}km`} />
-          <YAxis tick={{ fontFamily: "'Space Grotesk'", fontSize: 10 }} tickFormatter={v => `${v}m`} />
+          <YAxis width={38} tick={{ fontFamily: "'Space Grotesk'", fontSize: 10 }} tickFormatter={v => `${v}m`} />
           <Tooltip content={<ChartTooltip />} />
           <Area dataKey="altitude" name="Altitude (m)" stroke={tokens.terra} fill="url(#altGrad)" strokeWidth={2} dot={false} type="monotone" />
         </AreaChart>
