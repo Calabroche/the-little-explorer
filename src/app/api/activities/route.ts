@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 
-const DATA_DIR     = path.join(process.cwd(), 'data', 'activities');
-const WEATHER_CACHE = path.join(process.cwd(), 'data', 'weather_cache.json');
+const DATA_DIR      = path.join(process.cwd(), 'data', 'activities');
+const WEATHER_CACHE = path.join(process.cwd(), 'data', 'weather_cache.json'); // read-only on serverless
 
 // ── Physics & training constants ──────────────────────────────────────────────
 const MASS = 74.18, G = 9.81, CRR = 0.004, CDA = 0.3, RHO = 1.225;
@@ -174,20 +174,16 @@ function weatherDesc(code: number): string {
   return 'Orage';
 }
 
-function loadWeatherCache(): Record<string, WeatherData> {
+// In-memory cache for serverless environments (Vercel)
+const memWeatherCache: Record<string, WeatherData> = (() => {
   try { if (fs.existsSync(WEATHER_CACHE)) return JSON.parse(fs.readFileSync(WEATHER_CACHE, 'utf8')); }
   catch {}
   return {};
-}
-
-function saveWeatherCache(cache: Record<string, WeatherData>) {
-  try { fs.writeFileSync(WEATHER_CACHE, JSON.stringify(cache)); } catch {}
-}
+})();
 
 async function getWeather(id: number, lat: number, lng: number, isoDate: string): Promise<WeatherData | null> {
-  const cache = loadWeatherCache();
-  const key   = String(id);
-  if (cache[key]) return cache[key];
+  const key = String(id);
+  if (memWeatherCache[key]) return memWeatherCache[key];
   const date = isoDate.split('T')[0];
   const hour = new Date(isoDate).getUTCHours();
   try {
@@ -204,8 +200,7 @@ async function getWeather(id: number, lat: number, lng: number, isoDate: string)
       code:        data.hourly.weathercode[h] ?? 0,
       description: weatherDesc(data.hourly.weathercode[h] ?? 0),
     };
-    cache[key] = weather;
-    saveWeatherCache(cache);
+    memWeatherCache[key] = weather;
     return weather;
   } catch { return null; }
 }
