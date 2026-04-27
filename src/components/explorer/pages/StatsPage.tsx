@@ -1,7 +1,7 @@
 'use client';
 
 import { tokens, Activity, GlobalStats } from '../tokens';
-import { SectionTag, StatBar, Label } from '../ui';
+import { SectionTag, StatBar, Label, useIsMobile } from '../ui';
 
 interface Props {
   activities: Activity[];
@@ -33,15 +33,16 @@ export function StatsPage({ activities, stats }: Props) {
   const maxMonth = Math.max(...monthValues, 1);
   const currentMonth = new Date().getMonth();
 
+  const isMobile = useIsMobile();
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: '32px 40px' }}>
+    <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '20px 16px' : '32px 40px' }}>
       <SectionTag num={3} title="STATISTIQUES" />
-      <h1 style={{ fontFamily: "'Playfair Display'", fontSize: 40, fontWeight: 900, color: tokens.ink, marginBottom: 40, lineHeight: 1.1 }}>
+      <h1 style={{ fontFamily: "'Playfair Display'", fontSize: isMobile ? 28 : 40, fontWeight: 900, color: tokens.ink, marginBottom: isMobile ? 20 : 40, lineHeight: 1.1 }}>
         {stats.totalDistance.toLocaleString()} km<br />
         <em style={{ color: tokens.terra, fontStyle: 'italic' }}>parcourus.</em>
       </h1>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? 16 : 24 }}>
         <div style={{ background: tokens.surface, border: `1px solid ${tokens.creamBorder}`, borderRadius: 4, padding: 24 }}>
           <Label style={{ display: 'block', marginBottom: 20 }}>DISTANCE · PAR ACTIVITÉ</Label>
           <StatBar label="Vélo · total"        value={cyclingDist} max={distMax * 1.2 || 1} unit="km" color={tokens.terra} />

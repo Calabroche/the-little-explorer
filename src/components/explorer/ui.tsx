@@ -3,6 +3,17 @@
 import { CSSProperties, ReactNode, useEffect, useState } from 'react';
 import { tokens } from './tokens';
 
+export function useIsMobile() {
+  const [m, setM] = useState(false);
+  useEffect(() => {
+    const check = () => setM(window.innerWidth < 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+  return m;
+}
+
 export function Label({ children, style }: { children: ReactNode; style?: CSSProperties }) {
   return (
     <span style={{
