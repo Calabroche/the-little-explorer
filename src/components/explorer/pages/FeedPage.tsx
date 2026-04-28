@@ -65,7 +65,7 @@ function TrainingProgram({ activities }: { activities: Activity[] }) {
 
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: isMobile ? 20 : 24 }}>
 
-        {/* TSS trend bars */}
+        {/* TSS + Power trend bars */}
         <div>
           <Label style={{ display: 'block', marginBottom: 12 }}>5 DERNIÈRES SORTIES — TSS</Label>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 60 }}>
@@ -80,7 +80,18 @@ function TrainingProgram({ activities }: { activities: Activity[] }) {
               );
             })}
           </div>
-          <div style={{ marginTop: 14, display: 'flex', gap: 20 }}>
+          {/* Avg power per ride */}
+          <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+            {last5.slice().reverse().map((a, i) => (
+              <div key={i} style={{ flex: 1, textAlign: 'center' }}>
+                {a.avg_power != null
+                  ? <Label style={{ fontSize: 8, color: tokens.green }}>{a.avg_power}W</Label>
+                  : <Label style={{ fontSize: 8 }}>—</Label>}
+              </div>
+            ))}
+          </div>
+          <Label style={{ fontSize: 9, color: tokens.green, marginTop: 2, display: 'block' }}>puissance moy. par sortie</Label>
+          <div style={{ marginTop: 10, display: 'flex', gap: 20 }}>
             <div>
               <Label style={{ display: 'block', marginBottom: 3 }}>INTERVALLE MOY.</Label>
               <span style={{ fontFamily: "'Playfair Display'", fontSize: 20, fontWeight: 700, color: tokens.ink }}>
@@ -398,15 +409,16 @@ function Last5Stats({ activities }: { activities: Activity[] }) {
   const last5  = sorted.slice(0, 5);
   if (last5.length < 2) return null;
 
-  const dur   = formatAvgDuration(last5);
-  const dist  = avg(last5.map(a => a.distance));
-  const elev  = avgInt(last5.map(a => a.elevation));
-  const speed = avg(last5.map(a => a.speed));
-  const hr    = avgInt(last5.map(a => a.avg_hr));
-  const np    = avgInt(last5.map(a => a.np));
-  const tss   = avgInt(last5.map(a => a.tss));
-  const wkg   = avg(last5.map(a => a.wkg));
-  const cal   = avgInt(last5.map(a => a.calories));
+  const dur      = formatAvgDuration(last5);
+  const dist     = avg(last5.map(a => a.distance));
+  const elev     = avgInt(last5.map(a => a.elevation));
+  const speed    = avg(last5.map(a => a.speed));
+  const hr       = avgInt(last5.map(a => a.avg_hr));
+  const np       = avgInt(last5.map(a => a.np));
+  const avgPower = avgInt(last5.map(a => a.avg_power));
+  const tss      = avgInt(last5.map(a => a.tss));
+  const wkg      = avg(last5.map(a => a.wkg));
+  const cal      = avgInt(last5.map(a => a.calories));
 
   const CARD: React.CSSProperties = {
     background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
@@ -426,9 +438,10 @@ function Last5Stats({ activities }: { activities: Activity[] }) {
         <Stat label="Distance"  value={dist}  unit="km" />
         <Stat label="D+"        value={elev}  unit="m" />
         <Stat label="Vitesse"   value={speed} unit="km/h" />
-        {hr  && <Stat label="FC moy"   value={hr}   unit="bpm" color={tokens.terra} />}
-        {np  && <Stat label="NP"       value={np}   unit="W"   color={tokens.green} />}
-        {tss && <Stat label="TSS"      value={tss}            color={tokens.terra} />}
+        {hr       && <Stat label="FC moy"   value={hr}       unit="bpm" color={tokens.terra} />}
+        {avgPower && <Stat label="Puis. moy" value={avgPower} unit="W"   color={tokens.green} />}
+        {np       && <Stat label="NP moy"    value={np}       unit="W"   color={tokens.green} />}
+        {tss      && <Stat label="TSS"       value={tss}                 color={tokens.terra} />}
         {wkg && <Stat label="W/kg"     value={wkg}            color={tokens.blue}  />}
         {cal && <Stat label="Calories" value={cal}  unit="kcal" />}
       </div>
@@ -444,6 +457,7 @@ function Last5Stats({ activities }: { activities: Activity[] }) {
             <div style={{ fontFamily: "'Playfair Display'", fontSize: 15, fontWeight: 700, color: tokens.ink, marginBottom: 2 }}>{a.distance} km</div>
             <div style={{ fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight }}>{a.elevation} m · {a.duration}</div>
             {a.tss != null && <div style={{ fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.terra, marginTop: 2 }}>TSS {a.tss}</div>}
+            {a.avg_power != null && <div style={{ fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.green, marginTop: 1 }}>{a.avg_power} W moy.</div>}
           </div>
         ))}
       </div>
