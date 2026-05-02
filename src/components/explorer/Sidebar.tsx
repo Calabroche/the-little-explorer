@@ -8,10 +8,8 @@ export type PageId = 'feed' | 'planner' | 'map' | 'stats' | 'photos' | 'ftp';
 const navItems: { id: PageId; icon: string; label: string }[] = [
   { id: 'feed',    icon: '◎', label: 'Activités' },
   { id: 'planner', icon: '✦', label: 'Planificateur' },
-  { id: 'map',     icon: '◈', label: 'Carte' },
   { id: 'stats',   icon: '▬', label: 'Stats' },
   { id: 'ftp',     icon: '⚡', label: 'FTP' },
-  { id: 'photos',  icon: '◻', label: 'Photos' },
 ];
 
 interface Props {
