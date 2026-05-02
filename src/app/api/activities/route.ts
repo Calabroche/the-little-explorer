@@ -282,5 +282,13 @@ export async function GET() {
     })
   );
 
-  return NextResponse.json(activities);
+  return NextResponse.json(activities, {
+    headers: {
+      // Forcer l'invalidation au niveau CDN edge (Vercel) — sinon une réponse
+      // précédemment baked au build reste servie en HIT pendant des jours.
+      'Cache-Control': 'no-store, must-revalidate',
+      'CDN-Cache-Control': 'no-store',
+      'Vercel-CDN-Cache-Control': 'no-store',
+    },
+  });
 }
