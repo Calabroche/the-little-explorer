@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
@@ -69,23 +69,7 @@ function PdcTooltip({ active, payload }: any) {
 export function FtpPage({ activities }: { activities: Activity[] }) {
   const isMobile = useIsMobile();
 
-  const [override, setOverride] = useState<number | null>(null);
-  const [draftOverride, setDraftOverride] = useState<string>('');
-
-  useEffect(() => {
-    const saved = localStorage.getItem('tle_ftp_override');
-    if (saved) {
-      const n = Number(saved);
-      if (!isNaN(n) && n > 0) {
-        setOverride(n);
-        setDraftOverride(String(n));
-      }
-    }
-  }, []);
-
   // Exclure les sorties Strava typées EBikeRide : l'assistance fausse les chiffres.
-  // Les Ride manuellement assistés (titre "vélo électrique") ne sont pas filtrés
-  // automatiquement — l'utilisateur peut s'appuyer sur le tooltip + override manuel.
   const ftpActivities = useMemo(
     () => activities.filter(a => a.original_type !== 'EBikeRide'),
     [activities]
@@ -95,34 +79,9 @@ export function FtpPage({ activities }: { activities: Activity[] }) {
   const estimatedFtp = best20 != null ? Math.round(best20 * 0.95) : null;
   const excludedCount = activities.length - ftpActivities.length;
 
-  const effectiveFtp = override ?? estimatedFtp ?? DEFAULT_FTP_W;
-  const effectiveSource =
-    override          ? 'override manuel'
-    : estimatedFtp    ? 'estimé (best 20 min × 0.95)'
-    : 'défaut (66 kg × 2.205 × 2)';
-
+  const effectiveFtp = estimatedFtp ?? DEFAULT_FTP_W;
+  const effectiveSource = estimatedFtp ? 'estimé (best 20 min × 0.95)' : 'défaut (66 kg × 2.205 × 2)';
   const wkg = +(effectiveFtp / RIDER_KG).toFixed(2);
-
-  const saveOverride = () => {
-    const n = Number(draftOverride);
-    if (!draftOverride.trim()) {
-      localStorage.removeItem('tle_ftp_override');
-      setOverride(null);
-      return;
-    }
-    if (isNaN(n) || n <= 0 || n > 600) {
-      alert('Entre une valeur de FTP entre 1 et 600 W');
-      return;
-    }
-    localStorage.setItem('tle_ftp_override', String(n));
-    setOverride(n);
-  };
-
-  const clearOverride = () => {
-    localStorage.removeItem('tle_ftp_override');
-    setOverride(null);
-    setDraftOverride('');
-  };
 
   const hasData = efforts.some(e => e.power != null);
 
@@ -150,9 +109,9 @@ export function FtpPage({ activities }: { activities: Activity[] }) {
           <Label>SEUIL FONCTIONNEL DE PUISSANCE</Label>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 24, marginBottom: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 24, marginBottom: 20 }}>
           <div>
-            <Label style={{ display: 'block', marginBottom: 6 }}>FTP EFFECTIF</Label>
+            <Label style={{ display: 'block', marginBottom: 6 }}>FTP ESTIMÉ</Label>
             <div style={{ fontFamily: "'Playfair Display'", fontSize: 56, fontWeight: 900, color: tokens.terra, lineHeight: 1 }}>
               {effectiveFtp}<span style={{ fontFamily: "'Space Grotesk'", fontSize: 14, color: tokens.inkLight, marginLeft: 6 }}>W</span>
             </div>
@@ -162,52 +121,11 @@ export function FtpPage({ activities }: { activities: Activity[] }) {
           </div>
 
           <div>
-            <Label style={{ display: 'block', marginBottom: 6 }}>ESTIMATION DATA-DRIVEN</Label>
-            <div style={{ fontFamily: "'Playfair Display'", fontSize: 32, fontWeight: 700, color: tokens.ink, lineHeight: 1 }}>
-              {estimatedFtp != null ? <>{estimatedFtp}<span style={{ fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.inkLight, marginLeft: 4 }}>W</span></> : '—'}
+            <Label style={{ display: 'block', marginBottom: 6 }}>FORMULE</Label>
+            <div style={{ fontFamily: "'Space Grotesk'", fontSize: 13, color: tokens.inkMid, lineHeight: 1.7 }}>
+              best 20 min × 0.95 (Coggan){best20 != null && <> — best 20 min : <strong style={{ color: tokens.ink }}>{best20} W</strong></>}
+              {excludedCount > 0 && <><br /><span style={{ color: tokens.inkLight }}>{excludedCount} sortie{excludedCount > 1 ? 's' : ''} EBikeRide exclue{excludedCount > 1 ? 's' : ''}</span></>}
             </div>
-            <div style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight, marginTop: 4, lineHeight: 1.5 }}>
-              best 20 min × 0.95 (formule Coggan){best20 != null && <> — best 20 min : {best20} W</>}
-              {excludedCount > 0 && <><br />{excludedCount} sortie{excludedCount > 1 ? 's' : ''} EBikeRide exclue{excludedCount > 1 ? 's' : ''}</>}
-            </div>
-          </div>
-
-          <div>
-            <Label style={{ display: 'block', marginBottom: 6 }}>OVERRIDE MANUEL</Label>
-            <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-              <input
-                type="number"
-                value={draftOverride}
-                onChange={e => setDraftOverride(e.target.value)}
-                placeholder="ex: 220"
-                min={50}
-                max={600}
-                style={{
-                  flex: 1, padding: '8px 10px',
-                  border: `1px solid ${tokens.creamBorder}`, borderRadius: 3,
-                  fontFamily: "'Space Grotesk'", fontSize: 14, color: tokens.ink,
-                  background: tokens.creamDark,
-                }}
-              />
-              <button
-                onClick={saveOverride}
-                style={{
-                  padding: '0 14px', background: tokens.terra, color: 'white',
-                  border: 'none', borderRadius: 3, cursor: 'pointer',
-                  fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 700, letterSpacing: '0.1em',
-                }}
-              >OK</button>
-            </div>
-            {override != null && (
-              <button
-                onClick={clearOverride}
-                style={{
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight,
-                  textDecoration: 'underline', padding: 0,
-                }}
-              >Effacer l&apos;override (revenir à l&apos;estimation)</button>
-            )}
           </div>
         </div>
 
@@ -216,10 +134,6 @@ export function FtpPage({ activities }: { activities: Activity[] }) {
           elle est dérivée d&apos;un modèle physique (vitesse + pente + masse + Crr + CdA). C&apos;est utile en relatif (suivre la
           progression) mais l&apos;absolu dépend de la qualité des constantes. Pour avoir un chiffre fiable, un capteur de puissance
           (pédales / manivelle / home-trainer) reste la seule solution.
-          {override != null && (
-            <span><br /><strong style={{ color: tokens.terra }}>L&apos;override est sauvegardé localement</strong> et utilisé sur cette page.
-            Pour qu&apos;il s&apos;applique aux autres métriques (TSS, IF), il faudra recalculer côté API — ping-moi si tu veux que je l&apos;ajoute.</span>
-          )}
         </div>
       </div>
 
