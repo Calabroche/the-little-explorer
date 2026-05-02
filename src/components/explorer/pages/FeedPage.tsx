@@ -18,8 +18,10 @@ function TrainingProgram({ activities }: { activities: Activity[] }) {
   const isMobile = useIsMobile();
   const sorted = [...activities].sort((a, b) => new Date(b.rawDate).getTime() - new Date(a.rawDate).getTime());
   const last5  = sorted.slice(0, 5);
+  const last10 = sorted.slice(0, 10);
   if (last5.length < 2) return null;
 
+  // Gap moyen + prochaine sortie : basés sur les 5 dernières (tendance récente).
   const gaps: number[] = [];
   for (let i = 0; i < last5.length - 1; i++)
     gaps.push(daysBetween(last5[i].rawDate, last5[i + 1].rawDate));
@@ -29,19 +31,24 @@ function TrainingProgram({ activities }: { activities: Activity[] }) {
   nextDate.setDate(nextDate.getDate() + avgGap);
   const daysUntil = daysBetween(nextDate.toISOString(), new Date().toISOString());
 
-  const tssValues = last5.map(a => a.tss).filter((t): t is number => t != null);
-  const avgTSS    = tssValues.length ? Math.round(tssValues.reduce((s, v) => s + v, 0) / tssValues.length) : null;
-  const lastTSS   = tssValues[0] ?? null;
-  const targetTSS = avgTSS ? Math.round(avgTSS * 1.1) : null;
-  const tssMax    = tssValues.length ? Math.max(...tssValues) : 1;
+  // TSS chart : 10 sorties.
+  const tssValues10 = last10.map(a => a.tss).filter((t): t is number => t != null);
+  const avgTSS10    = tssValues10.length ? Math.round(tssValues10.reduce((s, v) => s + v, 0) / tssValues10.length) : null;
+  const tssMax10    = tssValues10.length ? Math.max(...tssValues10) : 1;
+
+  // Conseils + TSS cible : basés sur les 5 dernières (tendance récente).
+  const tssValues5 = last5.map(a => a.tss).filter((t): t is number => t != null);
+  const avgTSS5    = tssValues5.length ? Math.round(tssValues5.reduce((s, v) => s + v, 0) / tssValues5.length) : null;
+  const lastTSS    = tssValues5[0] ?? null;
+  const targetTSS  = avgTSS5 ? Math.round(avgTSS5 * 1.1) : null;
 
   let advice = 'Maintiens ta régularité et augmente progressivement le volume.';
-  if (lastTSS && avgTSS) {
-    if (lastTSS > avgTSS * 1.3)
+  if (lastTSS && avgTSS5) {
+    if (lastTSS > avgTSS5 * 1.3)
       advice = 'Sortie intense récente — prévois une séance légère ou récupération active.';
-    else if (lastTSS < avgTSS * 0.7)
+    else if (lastTSS < avgTSS5 * 0.7)
       advice = 'Sortie légère récente — tu peux remettre le paquet sur la prochaine.';
-    else if (avgTSS > 80)
+    else if (avgTSS5 > 80)
       advice = 'Charge élevée maintenue. Surveille ta récupération, intègre une semaine allégée.';
   }
 
@@ -53,6 +60,10 @@ function TrainingProgram({ activities }: { activities: Activity[] }) {
     borderRadius: 4, padding: 24, marginBottom: 32,
   };
 
+  const NEXT_RIDE_STAT: React.CSSProperties = {
+    display: 'flex', flexDirection: 'column', gap: 1,
+  };
+
   return (
     <div style={CARD}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
@@ -61,27 +72,27 @@ function TrainingProgram({ activities }: { activities: Activity[] }) {
         <Label>ANALYSE & PROCHAINE SORTIE</Label>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: isMobile ? 20 : 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.4fr 1fr', gap: isMobile ? 20 : 28 }}>
 
-        {/* TSS + Power trend bars */}
+        {/* Col 1 : TSS chart (10 sorties) + next ride compact dessous */}
         <div>
-          <Label style={{ display: 'block', marginBottom: 12 }}>5 DERNIÈRES SORTIES — TSS</Label>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 60 }}>
-            {last5.slice().reverse().map((a, i) => {
+          <Label style={{ display: 'block', marginBottom: 12 }}>10 DERNIÈRES SORTIES — TSS</Label>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 80 }}>
+            {last10.slice().reverse().map((a, i) => {
               const tss = a.tss ?? 0;
-              const h   = tssMax ? Math.max(4, (tss / tssMax) * 100) : 4;
+              const h   = tssMax10 ? Math.max(4, (tss / tssMax10) * 100) : 4;
               return (
-                <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                  <div style={{ width: '100%', height: `${h}%`, background: tokens.terra, borderRadius: 2, opacity: 0.55 + i * 0.09 }} />
+                <div key={a.id} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                  <div style={{ width: '100%', height: `${h}%`, background: tokens.terra, borderRadius: 2, opacity: 0.4 + (i / Math.max(last10.length - 1, 1)) * 0.55 }} />
                   <Label style={{ fontSize: 8 }}>{tss || '—'}</Label>
                 </div>
               );
             })}
           </div>
-          {/* Avg power per ride */}
-          <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-            {last5.slice().reverse().map((a, i) => (
-              <div key={i} style={{ flex: 1, textAlign: 'center' }}>
+          {/* Avg power per ride (10 sorties) */}
+          <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
+            {last10.slice().reverse().map(a => (
+              <div key={a.id} style={{ flex: 1, textAlign: 'center' }}>
                 {a.avg_power != null
                   ? <Label style={{ fontSize: 8, color: tokens.green }}>{a.avg_power}W</Label>
                   : <Label style={{ fontSize: 8 }}>—</Label>}
@@ -89,53 +100,58 @@ function TrainingProgram({ activities }: { activities: Activity[] }) {
             ))}
           </div>
           <Label style={{ fontSize: 9, color: tokens.green, marginTop: 2, display: 'block' }}>puissance moy. par sortie</Label>
-          <div style={{ marginTop: 10, display: 'flex', gap: 20 }}>
+
+          <div style={{ marginTop: 12, display: 'flex', gap: 24 }}>
             <div>
               <Label style={{ display: 'block', marginBottom: 3 }}>INTERVALLE MOY.</Label>
               <span style={{ fontFamily: "'Playfair Display'", fontSize: 20, fontWeight: 700, color: tokens.ink }}>
                 {avgGap}j
               </span>
             </div>
-            {avgTSS && (
+            {avgTSS10 && (
               <div>
-                <Label style={{ display: 'block', marginBottom: 3 }}>TSS MOY.</Label>
+                <Label style={{ display: 'block', marginBottom: 3 }}>TSS MOY. (10)</Label>
                 <span style={{ fontFamily: "'Playfair Display'", fontSize: 20, fontWeight: 700, color: tokens.ink }}>
-                  {avgTSS}
+                  {avgTSS10}
                 </span>
               </div>
             )}
           </div>
-        </div>
 
-        {/* Next ride prediction */}
-        <div style={{ borderLeft: isMobile ? 'none' : `1px solid ${tokens.creamBorder}`, paddingLeft: isMobile ? 0 : 24, borderTop: isMobile ? `1px solid ${tokens.creamBorder}` : 'none', paddingTop: isMobile ? 20 : 0 }}>
-          <Label style={{ display: 'block', marginBottom: 12 }}>PROCHAINE SORTIE PRÉVUE</Label>
-          <div style={{ fontFamily: "'Playfair Display'", fontSize: 18, fontWeight: 700, color: tokens.terra, lineHeight: 1.3, marginBottom: 6 }}>
-            {formatPredictedDate(nextDate.toISOString())}
-          </div>
-          <div style={{ fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.inkLight, marginBottom: 16 }}>
-            {daysUntil > 0
-              ? `Dans ${daysUntil} jour${daysUntil > 1 ? 's' : ''}`
-              : daysUntil === 0 ? "Aujourd'hui !"
-              : `Dépassé de ${Math.abs(daysUntil)}j`}
-          </div>
-          <div style={{ display: 'flex', gap: 20 }}>
+          {/* Prochaine sortie — compact, sous le graphique */}
+          <div style={{
+            marginTop: 18, paddingTop: 14, borderTop: `1px solid ${tokens.creamBorder}`,
+            display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
+          }}>
             <div>
-              <Label style={{ display: 'block', marginBottom: 3 }}>DISTANCE</Label>
-              <span style={{ fontFamily: "'Playfair Display'", fontSize: 20, fontWeight: 700, color: tokens.ink }}>
-                {avgDist}<span style={{ fontSize: 11, fontFamily: "'Space Grotesk'", color: tokens.inkLight, marginLeft: 3 }}>km</span>
+              <Label style={{ display: 'block', marginBottom: 2 }}>PROCHAINE SORTIE</Label>
+              <div style={{ fontFamily: "'Playfair Display'", fontSize: 14, fontWeight: 700, color: tokens.terra, lineHeight: 1.2 }}>
+                {formatPredictedDate(nextDate.toISOString())}
+              </div>
+              <div style={{ fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight, marginTop: 1 }}>
+                {daysUntil > 0
+                  ? `dans ${daysUntil} jour${daysUntil > 1 ? 's' : ''}`
+                  : daysUntil === 0 ? "aujourd'hui"
+                  : `dépassé de ${Math.abs(daysUntil)}j`}
+              </div>
+            </div>
+            <div style={{ width: 1, alignSelf: 'stretch', background: tokens.creamBorder }} />
+            <div style={NEXT_RIDE_STAT}>
+              <Label>DIST.</Label>
+              <span style={{ fontFamily: "'Playfair Display'", fontSize: 14, fontWeight: 700, color: tokens.ink }}>
+                {avgDist}<span style={{ fontSize: 9, fontFamily: "'Space Grotesk'", color: tokens.inkLight, marginLeft: 2 }}>km</span>
               </span>
             </div>
-            <div>
-              <Label style={{ display: 'block', marginBottom: 3 }}>D+</Label>
-              <span style={{ fontFamily: "'Playfair Display'", fontSize: 20, fontWeight: 700, color: tokens.ink }}>
-                {avgElev}<span style={{ fontSize: 11, fontFamily: "'Space Grotesk'", color: tokens.inkLight, marginLeft: 3 }}>m</span>
+            <div style={NEXT_RIDE_STAT}>
+              <Label>D+</Label>
+              <span style={{ fontFamily: "'Playfair Display'", fontSize: 14, fontWeight: 700, color: tokens.ink }}>
+                {avgElev}<span style={{ fontSize: 9, fontFamily: "'Space Grotesk'", color: tokens.inkLight, marginLeft: 2 }}>m</span>
               </span>
             </div>
             {targetTSS && (
-              <div>
-                <Label style={{ display: 'block', marginBottom: 3 }}>TSS CIBLE</Label>
-                <span style={{ fontFamily: "'Playfair Display'", fontSize: 20, fontWeight: 700, color: tokens.terra }}>
+              <div style={NEXT_RIDE_STAT}>
+                <Label>TSS CIBLE</Label>
+                <span style={{ fontFamily: "'Playfair Display'", fontSize: 14, fontWeight: 700, color: tokens.terra }}>
                   {targetTSS}
                 </span>
               </div>
@@ -143,8 +159,13 @@ function TrainingProgram({ activities }: { activities: Activity[] }) {
           </div>
         </div>
 
-        {/* Advice + TSS explainer */}
-        <div style={{ borderLeft: isMobile ? 'none' : `1px solid ${tokens.creamBorder}`, paddingLeft: isMobile ? 0 : 24, borderTop: isMobile ? `1px solid ${tokens.creamBorder}` : 'none', paddingTop: isMobile ? 20 : 0 }}>
+        {/* Col 2 : Recommandation + Règle 10% + TSS explainer */}
+        <div style={{
+          borderLeft: isMobile ? 'none' : `1px solid ${tokens.creamBorder}`,
+          paddingLeft: isMobile ? 0 : 24,
+          borderTop: isMobile ? `1px solid ${tokens.creamBorder}` : 'none',
+          paddingTop: isMobile ? 20 : 0,
+        }}>
           <Label style={{ display: 'block', marginBottom: 12 }}>RECOMMANDATION</Label>
           <p style={{ fontFamily: "'Space Grotesk'", fontSize: 13, color: tokens.inkMid, lineHeight: 1.7, marginBottom: 14 }}>
             {advice}
