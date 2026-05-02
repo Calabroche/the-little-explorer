@@ -3,6 +3,7 @@
 import { tokens, Activity } from '../tokens';
 import { SectionTag, useIsMobile } from '../ui';
 import { RouteBuilder } from '../RouteBuilder';
+import { RouteProposals } from '../RouteProposals';
 
 export function PlannerPage({ activities }: { activities: Activity[] }) {
   const isMobile = useIsMobile();
@@ -19,6 +20,7 @@ export function PlannerPage({ activities }: { activities: Activity[] }) {
         </em>
       </h1>
       <RouteBuilder activities={activities} />
+      <RouteProposals activities={activities} />
     </div>
   );
 }
