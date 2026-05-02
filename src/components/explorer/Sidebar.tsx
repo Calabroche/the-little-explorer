@@ -27,8 +27,15 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
   if (mobile) {
     return (
       <div style={{
-        height: 60, background: tokens.surface, borderTop: `1px solid ${tokens.creamBorder}`,
-        display: 'flex', flexShrink: 0,
+        background: tokens.surface,
+        borderTop: `1px solid ${tokens.creamBorder}`,
+        display: 'flex',
+        flexShrink: 0,
+        // Safe-area iOS : laisser de la place pour la barre URL Safari et le
+        // home indicator. La hauteur de base reste 60 (icônes), à laquelle
+        // s'ajoute le inset.
+        height: `calc(60px + env(safe-area-inset-bottom))`,
+        paddingBottom: 'env(safe-area-inset-bottom)',
       }}>
         {navItems.map(item => {
           const active = activePage === item.id;
