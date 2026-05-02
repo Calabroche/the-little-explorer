@@ -79,6 +79,30 @@ function computePowerStream(speed_kmh: number[], altitude: number[], distance_m:
   return power;
 }
 
+// Best rolling average over a window — used to find best efforts per duration.
+function bestRollingAvg(stream: number[], windowSec: number): number | null {
+  if (stream.length < windowSec) return null;
+  let sum = 0;
+  for (let i = 0; i < windowSec; i++) sum += stream[i];
+  let best = sum;
+  for (let i = windowSec; i < stream.length; i++) {
+    sum += stream[i] - stream[i - windowSec];
+    if (sum > best) best = sum;
+  }
+  return Math.round(best / windowSec);
+}
+
+function computeBestEfforts(power: number[]) {
+  return {
+    s60:   bestRollingAvg(power, 60),
+    s300:  bestRollingAvg(power, 300),
+    s600:  bestRollingAvg(power, 600),
+    s1200: bestRollingAvg(power, 1200),
+    s1800: bestRollingAvg(power, 1800),
+    s3600: bestRollingAvg(power, 3600),
+  };
+}
+
 // NP: rolling 30s avg → ^4 → mean → ^0.25
 function computeNP(power: number[]): number {
   const W = 30;
@@ -219,6 +243,7 @@ function transform(raw: any) {
 
   const np       = powerStream.length > 30 ? computeNP(powerStream) : null;
   const avgPower = powerStream.length ? Math.round(powerStream.reduce((s, v) => s + v, 0) / powerStream.length) : null;
+  const bestEfforts = powerStream.length > 60 ? computeBestEfforts(powerStream) : null;
   const ifFactor = np ? +(np / FTP).toFixed(2) : null;
   const tss      = (np && ifFactor && duration_s) ? Math.round((duration_s * np * ifFactor) / (FTP * 3600) * 100) : null;
   const vi       = (np && avgPower) ? +(np / avgPower).toFixed(2) : null;
@@ -236,6 +261,7 @@ function transform(raw: any) {
   return {
     id:          raw.id,
     type:        'cycling' as const,
+    original_type: raw.type as string,
     title:       raw.name,
     date:        formatDate(raw.date),
     rawDate:     raw.date,
@@ -258,6 +284,7 @@ function transform(raw: any) {
     distance_m,
     // Advanced metrics
     np, avg_power: avgPower, tss, if_factor: ifFactor, vi, wkg, ef, trimp, hrZones, aed, vam,
+    bestEfforts,
   };
 }
 

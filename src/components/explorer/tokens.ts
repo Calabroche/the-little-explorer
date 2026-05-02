@@ -51,6 +51,15 @@ export interface Activity {
   hrZones?: { z1: number; z2: number; z3: number; z4: number; z5: number } | null;
   aed?: number | null;
   vam?: number | null;
+  bestEfforts?: {
+    s60:   number | null;
+    s300:  number | null;
+    s600:  number | null;
+    s1200: number | null;
+    s1800: number | null;
+    s3600: number | null;
+  } | null;
+  original_type?: string;
   // Weather
   weather?: {
     temp: number;
