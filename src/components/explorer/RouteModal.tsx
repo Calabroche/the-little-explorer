@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { Activity, tokens } from './tokens';
+import { tokens } from './tokens';
 import { Label, useIsMobile } from './ui';
 
 const RouteModalMap = dynamic(
@@ -10,13 +10,19 @@ const RouteModalMap = dynamic(
   { ssr: false }
 );
 
+// Départ/arrivée fixe : Chemin du Manoir, Dardilly 69570, France
+const HOME: [number, number] = [45.8183, 4.7521];
+
 // ── OSRM ─────────────────────────────────────────────────────────────────────
 
 interface OSRMResult { positions: [number, number][]; distKm: number; }
 
 async function fetchOSRMRoute(waypoints: [number, number][]): Promise<OSRMResult> {
   const coords = waypoints.map(([lat, lng]) => `${lng},${lat}`).join(';');
-  const url = `https://router.project-osrm.org/route/v1/cycling/${coords}?overview=full&geometries=geojson`;
+  // continue_straight=true : interdit les demi-tours aux waypoints intermédiaires
+  // → empêche les aller-retour sur petites rues, force une vraie boucle.
+  const url = `https://router.project-osrm.org/route/v1/cycling/${coords}`
+    + `?overview=full&geometries=geojson&continue_straight=true`;
   const res = await fetch(url);
   if (!res.ok) throw new Error('OSRM error');
   const data = await res.json();
@@ -54,11 +60,9 @@ export interface Proposal {
 
 export function RouteModal({
   proposal,
-  activities,
   onClose,
 }: {
   proposal: Proposal;
-  activities: Activity[];
   onClose: () => void;
 }) {
   const [selectedIdx, setSelectedIdx] = useState(0);
@@ -67,13 +71,7 @@ export function RouteModal({
   const [osrmDist, setOsrmDist] = useState<number | null>(null);
   const isMobile = useIsMobile();
 
-  const start: [number, number] = (() => {
-    const sorted = [...activities]
-      .filter(a => (a.gps?.length ?? 0) > 0)
-      .sort((a, b) => new Date(b.rawDate).getTime() - new Date(a.rawDate).getTime());
-    if (sorted.length) { const p = sorted[0].gps[0]; return [p.lat, p.lng]; }
-    return [45.824, 4.773];
-  })();
+  const start: [number, number] = HOME;
 
   useEffect(() => {
     setLoading(true);
@@ -213,7 +211,7 @@ export function RouteModal({
             </div>
 
             <div style={{ marginTop: 'auto', padding: '10px 16px', borderTop: `1px solid ${tokens.creamBorder}`, fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight, lineHeight: 1.7 }}>
-              Tracé OSRM · Zone Dardilly / Monts d'Or
+              Départ &amp; arrivée : Chemin du Manoir, Dardilly · Tracé OSRM
             </div>
           </div>
         </div>
