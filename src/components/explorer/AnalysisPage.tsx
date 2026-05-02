@@ -19,7 +19,7 @@ const ActivityRouteMap = dynamic(
 const MASS = 74.18; // 66 kg rider + 8.18 kg bike
 const G = 9.81, CRR = 0.004, CDA = 0.3, RHO = 1.225;
 const Fr_FIXED = +(MASS * G * CRR).toFixed(1);
-const FTP = 291;    // 66 kg × 2.205 lb/kg × 2 = 291 W
+const FTP_FALLBACK = 291;    // 66 kg × 2.205 lb/kg × 2 = 291 W (utilisé si activity.ftp manque)
 const RIDER_KG = 66;
 
 // ── Data prep ────────────────────────────────────────────────────────────────
@@ -366,14 +366,14 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
           <div style={{ flex: 1, minWidth: 220 }}>
             <Label style={{ display: 'block', marginBottom: 4 }}>FTP ESTIMÉ</Label>
             <div style={{ fontFamily: "'Playfair Display'", fontSize: 32, fontWeight: 900, color: tokens.ink, lineHeight: 1 }}>
-              {FTP} <span style={{ fontSize: 14, fontFamily: "'Space Grotesk'", color: tokens.inkLight, fontWeight: 400 }}>W</span>
+              {activity.ftp ?? FTP_FALLBACK} <span style={{ fontSize: 14, fontFamily: "'Space Grotesk'", color: tokens.inkLight, fontWeight: 400 }}>W</span>
             </div>
           </div>
           <div style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight, lineHeight: 1.9 }}>
-            <div><strong style={{ color: tokens.ink }}>Formule :</strong> poids (kg) × 2.205 × 2</div>
-            <div>= {RIDER_KG} kg × 2.205 × 2 = <strong style={{ color: tokens.terra }}>{FTP} W</strong></div>
+            <div><strong style={{ color: tokens.ink }}>Formule :</strong> best 20 min × 0.95 (Coggan)</div>
+            <div>FTP = <strong style={{ color: tokens.terra }}>{activity.ftp ?? FTP_FALLBACK} W</strong> · {RIDER_KG} kg → {((activity.ftp ?? FTP_FALLBACK) / RIDER_KG).toFixed(2)} W/kg</div>
             <div style={{ marginTop: 2, color: tokens.inkLight }}>
-              Estimation conservatrice basée sur le poids · à affiner avec un test FTP réel (20 min max effort × 0.95)
+              Calculée depuis tes meilleures sorties non assistées · pour mesurer (vs estimer), un capteur de puissance est nécessaire
             </div>
           </div>
         </div>
@@ -407,7 +407,7 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
                     '<strong>TSS</strong> = (durée_s × NP × IF) / (FTP × 3600) × 100',
                     `= (${(activity.duration_min ?? 0) * 60}s × ${activity.np}W × ${activity.if_factor}) / (291 × 3600) × 100`,
                     `= <strong>${activity.tss}</strong>`,
-                    'FTP = 291W (66kg × 2.205 × 2) · <50 = récupération · 50–75 = modéré · 75–100 = difficile · >100 = très exigeant',
+                    `FTP = ${activity.ftp ?? FTP_FALLBACK}W (best 20 min × 0.95) · <50 = récupération · 50–75 = modéré · 75–100 = difficile · >100 = très exigeant`,
                   ]},
                 { k: 'IF', v: activity.if_factor, u: '', tip: 'Intensité relative au FTP (survole →)',
                   formula: [

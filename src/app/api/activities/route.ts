@@ -12,7 +12,10 @@ const WEATHER_CACHE = path.join(process.cwd(), 'data', 'weather_cache.json'); //
 
 // ── Physics & training constants ──────────────────────────────────────────────
 const MASS = 74.18, G = 9.81, CRR = 0.004, CDA = 0.3, RHO = 1.225;
-const FTP       = 291;  // FTP estimé : 66kg × 2.205 lb/kg × 2 = 291W
+// FTP fallback si aucune donnée exploitable (rule of thumb 66 kg × 2.205 × 2).
+// La FTP utilisée pour TSS/IF est en fait calculée dynamiquement depuis les
+// best 20 min réels (cf. deriveFtpFromBests) sur les sorties non assistées.
+const FTP_FALLBACK = 291;
 const RIDER_KG  = 66;   // rider weight (kg)
 const HR_REST   = 60;   // resting heart rate (bpm)
 
@@ -228,24 +231,58 @@ async function getWeather(id: number, lat: number, lng: number, isoDate: string)
   } catch { return null; }
 }
 
-// ── Main transform ────────────────────────────────────────────────────────────
+// ── Pré-calcul streams & bests (sert à dériver la FTP avant transform) ───────
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function transform(raw: any) {
+function computeStreamsAndBests(raw: any) {
+  const speed_kmh: number[]  = raw.speed_kmh  ?? [];
+  const altitude:  number[]  = raw.altitude   ?? [];
+  const distance_m: number[] = raw.distance_m ?? [];
+  const n = Math.min(speed_kmh.length, altitude.length, distance_m.length);
+  const powerStream = n > 60 ? computePowerStream(speed_kmh, altitude, distance_m) : [];
+  const bestEfforts = powerStream.length > 60 ? computeBestEfforts(powerStream) : null;
+  return { powerStream, bestEfforts };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function isAssistedRide(raw: any): boolean {
+  if (raw.type === 'EBikeRide') return true;
+  const t = (raw.name || '').toLowerCase();
+  return /électrique|electrique|e[- ]?bike|assistance/.test(t);
+}
+
+// FTP = best 20 min × 0.95 (Coggan), agrégé sur les sorties non assistées.
+// Tombe sur le fallback (66 kg × 2.205 × 2 = 291 W) si aucune donnée.
+function deriveFtpFromBests(
+  items: { raw: { type?: string; name?: string }; bestEfforts: ReturnType<typeof computeBestEfforts> | null }[]
+): number {
+  let max = 0;
+  for (const { raw, bestEfforts } of items) {
+    if (isAssistedRide(raw)) continue;
+    const v = bestEfforts?.s1200;
+    if (v != null && v > max) max = v;
+  }
+  return max ? Math.round(max * 0.95) : FTP_FALLBACK;
+}
+
+// ── Main transform ────────────────────────────────────────────────────────────
+function transform(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  raw: any,
+  ftp: number,
+  powerStream: number[],
+  bestEfforts: ReturnType<typeof computeBestEfforts> | null,
+) {
   const { max_incline, min_incline } = calcInclines(raw.altitude, raw.distance_m);
-  const speed_kmh: number[] = raw.speed_kmh  ?? [];
-  const altitude:  number[] = raw.altitude   ?? [];
+  const speed_kmh: number[]  = raw.speed_kmh  ?? [];
+  const altitude:  number[]  = raw.altitude   ?? [];
   const distance_m: number[] = raw.distance_m ?? [];
   const heartrate:  number[] = raw.heartrate  ?? [];
   const duration_s = (raw.duration_min ?? 0) * 60;
 
-  const n = Math.min(speed_kmh.length, altitude.length, distance_m.length);
-  const powerStream = n > 60 ? computePowerStream(speed_kmh, altitude, distance_m) : [];
-
   const np       = powerStream.length > 30 ? computeNP(powerStream) : null;
   const avgPower = powerStream.length ? Math.round(powerStream.reduce((s, v) => s + v, 0) / powerStream.length) : null;
-  const bestEfforts = powerStream.length > 60 ? computeBestEfforts(powerStream) : null;
-  const ifFactor = np ? +(np / FTP).toFixed(2) : null;
-  const tss      = (np && ifFactor && duration_s) ? Math.round((duration_s * np * ifFactor) / (FTP * 3600) * 100) : null;
+  const ifFactor = np ? +(np / ftp).toFixed(2) : null;
+  const tss      = (np && ifFactor && duration_s) ? Math.round((duration_s * np * ifFactor) / (ftp * 3600) * 100) : null;
   const vi       = (np && avgPower) ? +(np / avgPower).toFixed(2) : null;
   const wkg      = np ? +(np / RIDER_KG).toFixed(2) : null;
 
@@ -285,6 +322,7 @@ function transform(raw: any) {
     // Advanced metrics
     np, avg_power: avgPower, tss, if_factor: ifFactor, vi, wkg, ef, trimp, hrZones, aed, vam,
     bestEfforts,
+    ftp, // FTP utilisée pour calculer tss/if (dynamique, dérivée des bests).
   };
 }
 
@@ -299,9 +337,16 @@ export async function GET() {
 
   raws.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
+  // Pass 1 : calculer les power streams + bestEfforts pour chaque sortie.
+  const enriched = raws.map(raw => ({ raw, ...computeStreamsAndBests(raw) }));
+
+  // Pass 2 : dériver la FTP à partir des best 20 min sur sorties non assistées.
+  const ftp = deriveFtpFromBests(enriched);
+
+  // Pass 3 : transformer chaque sortie en passant la FTP dynamique.
   const activities = await Promise.all(
-    raws.map(async (raw) => {
-      const act    = transform(raw);
+    enriched.map(async ({ raw, powerStream, bestEfforts }) => {
+      const act    = transform(raw, ftp, powerStream, bestEfforts);
       const lat    = raw.gps?.[0]?.[0] ?? 0;
       const lng    = raw.gps?.[0]?.[1] ?? 0;
       const weather = (lat && lng) ? await getWeather(raw.id, lat, lng, raw.date) : null;

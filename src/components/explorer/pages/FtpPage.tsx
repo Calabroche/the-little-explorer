@@ -85,11 +85,17 @@ export function FtpPage({ activities }: { activities: Activity[] }) {
   );
   const efforts = useMemo(() => aggregateBestEfforts(ftpActivities), [ftpActivities]);
   const best20  = efforts.find(e => e.sec === 1200)?.power ?? null;
-  const estimatedFtp = best20 != null ? Math.round(best20 * 0.95) : null;
   const excludedCount = activities.length - ftpActivities.length;
 
+  // L'API renvoie déjà la FTP dynamique (calculée pareil côté serveur). On la
+  // privilégie pour rester aligné avec les TSS/IF affichés ailleurs dans l'app.
+  const apiFtp       = activities[0]?.ftp ?? null;
+  const estimatedFtp = apiFtp ?? (best20 != null ? Math.round(best20 * 0.95) : null);
+
   const effectiveFtp = estimatedFtp ?? DEFAULT_FTP_W;
-  const effectiveSource = estimatedFtp ? 'estimé (best 20 min × 0.95)' : 'défaut (66 kg × 2.205 × 2)';
+  const effectiveSource = apiFtp ? 'utilisée par toute l\'app · best 20 min × 0.95'
+    : estimatedFtp ? 'estimé (best 20 min × 0.95)'
+    : 'défaut (66 kg × 2.205 × 2)';
   const wkg = +(effectiveFtp / RIDER_KG).toFixed(2);
 
   const hasData = efforts.some(e => e.power != null);

@@ -274,7 +274,7 @@ function TrainingProgram({ activities }: { activities: Activity[] }) {
             <strong style={{ color: tokens.terra }}>Qu&apos;est-ce que le TSS ?</strong><br />
             <strong>T</strong>raining <strong>S</strong>tress <strong>S</strong>core mesure la charge d&apos;une sortie.<br />
             Formule : <code style={{ color: tokens.ink }}>(durée_s × NP × IF) / (FTP × 3600) × 100</code><br />
-            <strong style={{ color: tokens.ink }}>FTP = 291W</strong> (66 kg × 2.205 × 2 — seuil fonctionnel estimé)<br />
+            <strong style={{ color: tokens.ink }}>FTP = {last5[0]?.ftp ?? 291} W</strong> (estimée depuis tes best 20 min × 0.95)<br />
             <span style={{ color: tokens.green }}>{'< 50'}</span> récupération · <span style={{ color: tokens.terra }}>50–75</span> modéré · <span style={{ color: '#e07030' }}>75–100</span> difficile · <span style={{ color: '#cc3333' }}>{'>100'}</span> très exigeant
           </div>
         </div>
