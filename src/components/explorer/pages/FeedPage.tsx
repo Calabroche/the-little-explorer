@@ -1,8 +1,32 @@
 'use client';
 
+import {
+  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+} from 'recharts';
 import { tokens, Activity, GlobalStats } from '../tokens';
 import { SectionTag, Label, useIsMobile } from '../ui';
 import { ActivityCard } from '../ActivityCard';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function TssChartTooltip({ active, payload }: any) {
+  if (!active || !payload?.length) return null;
+  const p = payload[0].payload;
+  return (
+    <div style={{
+      background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
+      borderRadius: 4, padding: '8px 10px',
+      fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.ink,
+      boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+    }}>
+      <div style={{ fontWeight: 700, marginBottom: 4 }}>{p.dateFull}</div>
+      <div style={{ color: tokens.terra }}>TSS : <strong>{p.tss}</strong></div>
+      {p.power != null && (
+        <div style={{ color: tokens.green }}>Puissance : <strong>{p.power} W</strong></div>
+      )}
+      <div style={{ color: tokens.inkLight, marginTop: 2 }}>{p.distance} km · {p.elev} m D+</div>
+    </div>
+  );
+}
 
 // ── Training Program ──────────────────────────────────────────────────────────
 
@@ -34,7 +58,21 @@ function TrainingProgram({ activities }: { activities: Activity[] }) {
   // TSS chart : 10 sorties.
   const tssValues10 = last10.map(a => a.tss).filter((t): t is number => t != null);
   const avgTSS10    = tssValues10.length ? Math.round(tssValues10.reduce((s, v) => s + v, 0) / tssValues10.length) : null;
-  const tssMax10    = tssValues10.length ? Math.max(...tssValues10) : 1;
+
+  // Données du graphique : ordre chronologique (ancien → récent).
+  const chartData = last10.slice().reverse().map(a => {
+    const d = new Date(a.rawDate);
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    return {
+      date:     `${dd}/${mm}`,
+      dateFull: d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'long' }),
+      tss:      a.tss ?? 0,
+      power:    a.avg_power ?? null,
+      distance: a.distance,
+      elev:     a.elevation,
+    };
+  });
 
   // Conseils + TSS cible : basés sur les 5 dernières (tendance récente).
   const tssValues5 = last5.map(a => a.tss).filter((t): t is number => t != null);
@@ -76,30 +114,62 @@ function TrainingProgram({ activities }: { activities: Activity[] }) {
 
         {/* Col 1 : TSS chart (10 sorties) + next ride compact dessous */}
         <div>
-          <Label style={{ display: 'block', marginBottom: 12 }}>10 DERNIÈRES SORTIES — TSS</Label>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 80 }}>
-            {last10.slice().reverse().map((a, i) => {
-              const tss = a.tss ?? 0;
-              const h   = tssMax10 ? Math.max(4, (tss / tssMax10) * 100) : 4;
-              return (
-                <div key={a.id} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                  <div style={{ width: '100%', height: `${h}%`, background: tokens.terra, borderRadius: 2, opacity: 0.4 + (i / Math.max(last10.length - 1, 1)) * 0.55 }} />
-                  <Label style={{ fontSize: 8 }}>{tss || '—'}</Label>
-                </div>
-              );
-            })}
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
+            <Label>10 DERNIÈRES SORTIES — TSS &amp; PUISSANCE</Label>
+            <div style={{ display: 'flex', gap: 12, fontFamily: "'Space Grotesk'", fontSize: 9, color: tokens.inkLight }}>
+              <span><span style={{ display: 'inline-block', width: 8, height: 8, background: tokens.terra, marginRight: 4, verticalAlign: 'middle' }} />TSS</span>
+              <span><span style={{ display: 'inline-block', width: 12, height: 2, background: tokens.green, marginRight: 4, verticalAlign: 'middle' }} />W moy.</span>
+            </div>
           </div>
-          {/* Avg power per ride (10 sorties) */}
-          <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
-            {last10.slice().reverse().map(a => (
-              <div key={a.id} style={{ flex: 1, textAlign: 'center' }}>
-                {a.avg_power != null
-                  ? <Label style={{ fontSize: 8, color: tokens.green }}>{a.avg_power}W</Label>
-                  : <Label style={{ fontSize: 8 }}>—</Label>}
-              </div>
-            ))}
+          <div style={{ width: '100%', height: 180 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={chartData} margin={{ top: 8, right: 4, left: -12, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={tokens.creamBorder} vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontFamily: "'Space Grotesk'", fontSize: 10, fill: tokens.inkLight }}
+                  tickLine={false}
+                  axisLine={{ stroke: tokens.creamBorder }}
+                />
+                <YAxis
+                  yAxisId="tss"
+                  orientation="left"
+                  width={32}
+                  tick={{ fontFamily: "'Space Grotesk'", fontSize: 10, fill: tokens.inkLight }}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <YAxis
+                  yAxisId="pow"
+                  orientation="right"
+                  width={36}
+                  tick={{ fontFamily: "'Space Grotesk'", fontSize: 10, fill: tokens.inkLight }}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={v => `${v}W`}
+                />
+                <Tooltip content={<TssChartTooltip />} cursor={{ fill: tokens.creamBorder, opacity: 0.4 }} />
+                <Bar
+                  yAxisId="tss"
+                  dataKey="tss"
+                  name="TSS"
+                  fill={tokens.terra}
+                  radius={[3, 3, 0, 0]}
+                  maxBarSize={32}
+                />
+                <Line
+                  yAxisId="pow"
+                  type="monotone"
+                  dataKey="power"
+                  name="Puissance moy."
+                  stroke={tokens.green}
+                  strokeWidth={2}
+                  dot={{ r: 3, fill: tokens.green, strokeWidth: 0 }}
+                  connectNulls
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
           </div>
-          <Label style={{ fontSize: 9, color: tokens.green, marginTop: 2, display: 'block' }}>puissance moy. par sortie</Label>
 
           <div style={{ marginTop: 12, display: 'flex', gap: 24 }}>
             <div>
