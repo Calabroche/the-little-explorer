@@ -60,6 +60,7 @@ export interface Activity {
     s3600: number | null;
   } | null;
   original_type?: string;
+  ftp?: number;
   // Weather
   weather?: {
     temp: number;
