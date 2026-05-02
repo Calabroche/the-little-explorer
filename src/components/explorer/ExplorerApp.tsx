@@ -8,6 +8,7 @@ import { FeedPage } from './pages/FeedPage';
 import { MapPage } from './pages/MapPage';
 import { StatsPage } from './pages/StatsPage';
 import { PhotosPage } from './pages/PhotosPage';
+import { PlannerPage } from './pages/PlannerPage';
 import { AnalysisPage } from './AnalysisPage';
 
 export function ExplorerApp() {
@@ -61,14 +62,15 @@ export function ExplorerApp() {
   }
 
   const pageContent: Record<PageId, React.ReactNode> = {
-    feed:   <FeedPage
-              activities={activities}
-              stats={stats!}
-              onSelect={(a) => setAnalysisActivity(a)}
-            />,
-    map:    <MapPage activities={activities} selectedActivity={selectedActivityForMap} />,
-    stats:  <StatsPage activities={activities} stats={stats!} />,
-    photos: <PhotosPage activities={activities} />,
+    feed:    <FeedPage
+               activities={activities}
+               stats={stats!}
+               onSelect={(a) => setAnalysisActivity(a)}
+             />,
+    planner: <PlannerPage activities={activities} />,
+    map:     <MapPage activities={activities} selectedActivity={selectedActivityForMap} />,
+    stats:   <StatsPage activities={activities} stats={stats!} />,
+    photos:  <PhotosPage activities={activities} />,
   };
 
   return (
