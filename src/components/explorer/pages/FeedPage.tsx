@@ -1,7 +1,7 @@
 'use client';
 
 import {
-  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 import { tokens, Activity, GlobalStats } from '../tokens';
 import { SectionTag, Label, useIsMobile } from '../ui';
@@ -58,6 +58,12 @@ function TrainingProgram({ activities }: { activities: Activity[] }) {
   // TSS chart : 10 sorties.
   const tssValues10 = last10.map(a => a.tss).filter((t): t is number => t != null);
   const avgTSS10    = tssValues10.length ? Math.round(tssValues10.reduce((s, v) => s + v, 0) / tssValues10.length) : null;
+
+  // Moyennes sur TOUTES les sorties (référence sur le graph).
+  const tssValuesAll = activities.map(a => a.tss).filter((t): t is number => t != null);
+  const avgTSSAll    = tssValuesAll.length ? Math.round(tssValuesAll.reduce((s, v) => s + v, 0) / tssValuesAll.length) : null;
+  const powerValuesAll = activities.map(a => a.avg_power).filter((p): p is number => p != null);
+  const avgPowerAll    = powerValuesAll.length ? Math.round(powerValuesAll.reduce((s, v) => s + v, 0) / powerValuesAll.length) : null;
 
   // Données du graphique : ordre chronologique (ancien → récent).
   const chartData = last10.slice().reverse().map(a => {
@@ -149,6 +155,26 @@ function TrainingProgram({ activities }: { activities: Activity[] }) {
                   tickFormatter={v => `${v}W`}
                 />
                 <Tooltip content={<TssChartTooltip />} cursor={{ fill: tokens.creamBorder, opacity: 0.4 }} />
+                {avgTSSAll != null && (
+                  <ReferenceLine
+                    yAxisId="tss"
+                    y={avgTSSAll}
+                    stroke={tokens.terra}
+                    strokeDasharray="4 4"
+                    strokeOpacity={0.6}
+                    label={{ value: `moy. ${avgTSSAll}`, position: 'insideTopLeft', fill: tokens.terra, fontFamily: "'Space Grotesk'", fontSize: 9 }}
+                  />
+                )}
+                {avgPowerAll != null && (
+                  <ReferenceLine
+                    yAxisId="pow"
+                    y={avgPowerAll}
+                    stroke={tokens.green}
+                    strokeDasharray="4 4"
+                    strokeOpacity={0.6}
+                    label={{ value: `moy. ${avgPowerAll}W`, position: 'insideBottomRight', fill: tokens.green, fontFamily: "'Space Grotesk'", fontSize: 9 }}
+                  />
+                )}
                 <Bar
                   yAxisId="tss"
                   dataKey="tss"
