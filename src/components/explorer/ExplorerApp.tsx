@@ -9,6 +9,7 @@ import { MapPage } from './pages/MapPage';
 import { StatsPage } from './pages/StatsPage';
 import { PhotosPage } from './pages/PhotosPage';
 import { PlannerPage } from './pages/PlannerPage';
+import { FtpPage } from './pages/FtpPage';
 import { AnalysisPage } from './AnalysisPage';
 
 // ── URL <-> state helpers ────────────────────────────────────────────────────
@@ -18,6 +19,7 @@ const PAGE_PATHS: Record<PageId, string> = {
   planner: '/planificateur',
   map:     '/carte',
   stats:   '/stats',
+  ftp:     '/ftp',
   photos:  '/photos',
 };
 
@@ -25,6 +27,7 @@ function pathToPage(pathname: string): PageId {
   if (pathname.startsWith('/planificateur')) return 'planner';
   if (pathname.startsWith('/carte'))         return 'map';
   if (pathname.startsWith('/stats'))         return 'stats';
+  if (pathname.startsWith('/ftp'))           return 'ftp';
   if (pathname.startsWith('/photos'))        return 'photos';
   return 'feed';
 }
@@ -152,6 +155,7 @@ export function ExplorerApp() {
     planner: <PlannerPage activities={activities} />,
     map:     <MapPage     activities={activities} selectedActivity={selectedActivityForMap} />,
     stats:   <StatsPage   activities={activities} stats={stats!} />,
+    ftp:     <FtpPage     activities={activities} />,
     photos:  <PhotosPage  activities={activities} />,
   };
 
