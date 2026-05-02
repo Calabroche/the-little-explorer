@@ -405,14 +405,14 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
                 { k: 'TSS', v: activity.tss, u: '', tip: 'Charge totale de la sortie (survole →)',
                   formula: [
                     '<strong>TSS</strong> = (durée_s × NP × IF) / (FTP × 3600) × 100',
-                    `= (${(activity.duration_min ?? 0) * 60}s × ${activity.np}W × ${activity.if_factor}) / (291 × 3600) × 100`,
+                    `= (${(activity.duration_min ?? 0) * 60}s × ${activity.np}W × ${activity.if_factor}) / (${activity.ftp ?? FTP_FALLBACK} × 3600) × 100`,
                     `= <strong>${activity.tss}</strong>`,
                     `FTP = ${activity.ftp ?? FTP_FALLBACK}W (best 20 min × 0.95) · <50 = récupération · 50–75 = modéré · 75–100 = difficile · >100 = très exigeant`,
                   ]},
                 { k: 'IF', v: activity.if_factor, u: '', tip: 'Intensité relative au FTP (survole →)',
                   formula: [
                     '<strong>IF</strong> = NP / FTP',
-                    `= ${activity.np} / 291`,
+                    `= ${activity.np} / ${activity.ftp ?? FTP_FALLBACK}`,
                     `= <strong>${activity.if_factor}</strong>`,
                     '0.75 = endurance · 0.85 = tempo · >0.95 = seuil/VO₂max',
                   ]},
