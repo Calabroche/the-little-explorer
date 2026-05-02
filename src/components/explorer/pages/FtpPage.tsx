@@ -69,9 +69,18 @@ function PdcTooltip({ active, payload }: any) {
 export function FtpPage({ activities }: { activities: Activity[] }) {
   const isMobile = useIsMobile();
 
-  // Exclure les sorties Strava typées EBikeRide : l'assistance fausse les chiffres.
+  // Exclure les sorties avec assistance électrique : le modèle physique
+  // surestime la puissance car il interprète la vitesse comme produite par
+  // le rider seul. On filtre :
+  //   1. les sorties typées EBikeRide côté Strava
+  //   2. les Ride dont le titre mentionne "électrique" / "assistance" / "ebike"
   const ftpActivities = useMemo(
-    () => activities.filter(a => a.original_type !== 'EBikeRide'),
+    () => activities.filter(a => {
+      if (a.original_type === 'EBikeRide') return false;
+      const t = (a.title || '').toLowerCase();
+      if (/électrique|electrique|e[- ]?bike|assistance/.test(t)) return false;
+      return true;
+    }),
     [activities]
   );
   const efforts = useMemo(() => aggregateBestEfforts(ftpActivities), [ftpActivities]);
@@ -124,7 +133,7 @@ export function FtpPage({ activities }: { activities: Activity[] }) {
             <Label style={{ display: 'block', marginBottom: 6 }}>FORMULE</Label>
             <div style={{ fontFamily: "'Space Grotesk'", fontSize: 13, color: tokens.inkMid, lineHeight: 1.7 }}>
               best 20 min × 0.95 (Coggan){best20 != null && <> — best 20 min : <strong style={{ color: tokens.ink }}>{best20} W</strong></>}
-              {excludedCount > 0 && <><br /><span style={{ color: tokens.inkLight }}>{excludedCount} sortie{excludedCount > 1 ? 's' : ''} EBikeRide exclue{excludedCount > 1 ? 's' : ''}</span></>}
+              {excludedCount > 0 && <><br /><span style={{ color: tokens.inkLight }}>{excludedCount} sortie{excludedCount > 1 ? 's' : ''} avec assistance électrique exclue{excludedCount > 1 ? 's' : ''} (EBikeRide ou titre mentionnant « électrique »)</span></>}
             </div>
           </div>
         </div>
