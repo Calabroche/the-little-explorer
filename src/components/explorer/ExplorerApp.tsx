@@ -144,7 +144,7 @@ export function ExplorerApp() {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', background: tokens.cream }}>
+      <div style={{ display: 'flex', height: '100dvh', alignItems: 'center', justifyContent: 'center', background: tokens.cream }}>
         <p style={{ fontFamily: "'Space Grotesk'", color: tokens.inkLight, letterSpacing: 2 }}>CHARGEMENT…</p>
       </div>
     );
@@ -160,7 +160,7 @@ export function ExplorerApp() {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: '100vh', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: '100dvh', overflow: 'hidden' }}>
       {!isMobile && (
         <Sidebar activePage={page} onNav={handleNav} stats={stats} darkMode={darkMode} onToggleDark={toggleDark} />
       )}
