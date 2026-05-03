@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Activity, GlobalStats, deriveStats, tokens } from './tokens';
-import { Sidebar, PageId } from './Sidebar';
+import { Sidebar, PageId, SportId } from './Sidebar';
 import { useIsMobile } from './ui';
 import { FeedPage } from './pages/FeedPage';
 import { MapPage } from './pages/MapPage';
@@ -61,14 +61,28 @@ export function ExplorerApp() {
   const [stats, setStats] = useState<GlobalStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
+  const [sport, setSport] = useState<SportId>('cycling');
   const isMobile = useIsMobile();
 
-  // Dark mode persistence (localStorage — pas lié à l'URL)
+  // Dark mode + sport persistence (localStorage — pas lié à l'URL)
   useEffect(() => {
     const dark = localStorage.getItem('tle_dark') === '1';
     setDarkMode(dark);
     if (dark) document.documentElement.setAttribute('data-dark', '');
+    const savedSport = localStorage.getItem('tle_sport') as SportId | null;
+    if (savedSport === 'cycling' || savedSport === 'running') setSport(savedSport);
   }, []);
+
+  const handleSportChange = (s: SportId) => {
+    setSport(s);
+    localStorage.setItem('tle_sport', s);
+    setAnalysisActivity(null);
+    // Sur les pages spécifiques au vélo, retomber sur le feed quand on passe en course.
+    if (s === 'running' && (page === 'planner' || page === 'ftp')) {
+      setPage('feed');
+      window.history.pushState(null, '', '/');
+    }
+  };
 
   const toggleDark = () => {
     const next = !darkMode;
@@ -150,19 +164,24 @@ export function ExplorerApp() {
     );
   }
 
+  // Activités filtrées par le sport courant (le toggle Vélo / Course).
+  const filteredActivities = activities.filter(a => a.type === sport);
+  const filteredStats = stats ? { ...stats, totalActivities: filteredActivities.length } : null;
+
   const pageContent: Record<PageId, React.ReactNode> = {
-    feed:    <FeedPage    activities={activities} stats={stats!} onSelect={openActivity} />,
-    planner: <PlannerPage activities={activities} />,
-    map:     <MapPage     activities={activities} selectedActivity={selectedActivityForMap} />,
-    stats:   <StatsPage   activities={activities} stats={stats!} />,
-    ftp:     <FtpPage     activities={activities} />,
-    photos:  <PhotosPage  activities={activities} />,
+    feed:    <FeedPage    activities={filteredActivities} stats={filteredStats!} onSelect={openActivity} />,
+    planner: <PlannerPage activities={filteredActivities} />,
+    map:     <MapPage     activities={filteredActivities} selectedActivity={selectedActivityForMap} />,
+    stats:   <StatsPage   activities={filteredActivities} stats={filteredStats!} />,
+    ftp:     <FtpPage     activities={filteredActivities} />,
+    photos:  <PhotosPage  activities={filteredActivities} />,
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: '100dvh', overflow: 'hidden' }}>
       {!isMobile && (
-        <Sidebar activePage={page} onNav={handleNav} stats={stats} darkMode={darkMode} onToggleDark={toggleDark} />
+        <Sidebar activePage={page} onNav={handleNav} stats={stats} darkMode={darkMode} onToggleDark={toggleDark}
+                 sport={sport} onSportChange={handleSportChange} />
       )}
       <main style={{ flex: 1, display: 'flex', overflow: 'hidden', background: tokens.cream, minHeight: 0 }}>
         {analysisActivity
@@ -171,7 +190,8 @@ export function ExplorerApp() {
         }
       </main>
       {isMobile && (
-        <Sidebar activePage={page} onNav={handleNav} stats={stats} darkMode={darkMode} onToggleDark={toggleDark} mobile />
+        <Sidebar activePage={page} onNav={handleNav} stats={stats} darkMode={darkMode} onToggleDark={toggleDark} mobile
+                 sport={sport} onSportChange={handleSportChange} />
       )}
     </div>
   );

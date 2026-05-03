@@ -66,17 +66,21 @@ export function StatBar({ label, value, max, unit, color }: {
   );
 }
 
-export function TypeBadge({ type }: { type: 'cycling' | 'hiking' }) {
-  const isHike = type === 'hiking';
+export function TypeBadge({ type }: { type: 'cycling' | 'running' | 'hiking' }) {
+  const config = {
+    cycling: { bg: tokens.terraLight, fg: tokens.terra, label: '◎ VÉLO' },
+    running: { bg: tokens.greenLight, fg: tokens.green, label: '⌒ COURSE' },
+    hiking:  { bg: tokens.greenLight, fg: tokens.green, label: '▲ RANDO' },
+  } as const;
+  const c = config[type] ?? config.cycling;
   return (
     <span style={{
       display: 'inline-block', padding: '3px 10px',
-      background: isHike ? tokens.greenLight : tokens.terraLight,
-      color: isHike ? tokens.green : tokens.terra,
+      background: c.bg, color: c.fg,
       fontFamily: "'Space Grotesk'", fontSize: 9, fontWeight: 600,
       letterSpacing: '0.12em', textTransform: 'uppercase', borderRadius: 2,
     }}>
-      {isHike ? '▲ RANDO' : '◎ VÉLO'}
+      {c.label}
     </span>
   );
 }
