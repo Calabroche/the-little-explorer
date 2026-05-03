@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Activity, GlobalStats, deriveStats, tokens } from './tokens';
 import { Sidebar, PageId, SportId } from './Sidebar';
+import { useT } from '@/i18n';
 import { useIsMobile } from './ui';
 import { FeedPage } from './pages/FeedPage';
 import { MapPage } from './pages/MapPage';
@@ -63,6 +64,7 @@ export function ExplorerApp() {
   const [darkMode, setDarkMode] = useState(false);
   const [sport, setSport] = useState<SportId>('cycling');
   const isMobile = useIsMobile();
+  const { t } = useT();
 
   // Dark mode + sport persistence (localStorage — pas lié à l'URL)
   useEffect(() => {
@@ -159,7 +161,7 @@ export function ExplorerApp() {
   if (loading) {
     return (
       <div style={{ display: 'flex', height: '100dvh', alignItems: 'center', justifyContent: 'center', background: tokens.cream }}>
-        <p style={{ fontFamily: "'Space Grotesk'", color: tokens.inkLight, letterSpacing: 2 }}>CHARGEMENT…</p>
+        <p style={{ fontFamily: "'Space Grotesk'", color: tokens.inkLight, letterSpacing: 2 }}>{t('common.loading')}</p>
       </div>
     );
   }

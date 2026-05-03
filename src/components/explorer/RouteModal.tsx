@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { tokens } from './tokens';
 import { Label, useIsMobile } from './ui';
+import { useT } from '@/i18n';
 
 const RouteModalMap = dynamic(
   () => import('./RouteModalMap').then(m => m.RouteModalMap),
@@ -70,6 +71,7 @@ export function RouteModal({
   const [loading, setLoading] = useState(true);
   const [osrmDist, setOsrmDist] = useState<number | null>(null);
   const isMobile = useIsMobile();
+  const { t } = useT();
 
   const start: [number, number] = HOME;
 
@@ -138,7 +140,7 @@ export function RouteModal({
                 background: tokens.creamDark,
                 fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.inkLight, letterSpacing: '0.1em',
               }}>
-                CALCUL DU TRACÉ…
+                {t('routeModal.computing')}
               </div>
             )}
             <RouteModalMap positions={route} color={proposal.color} center={start} />
@@ -154,7 +156,7 @@ export function RouteModal({
           }}>
             {/* Track selector */}
             <div style={{ padding: '16px 16px 0', flexShrink: 0 }}>
-              <Label style={{ display: 'block', marginBottom: 10 }}>{proposal.tracks.length} TRACÉS PROPOSÉS</Label>
+              <Label style={{ display: 'block', marginBottom: 10 }}>{proposal.tracks.length} {t('routeModal.tracksProposed')}</Label>
               {proposal.tracks.map((t, i) => (
                 <button key={i} onClick={() => setSelectedIdx(i)} style={{
                   display: 'flex', alignItems: 'center', gap: 10, width: '100%',
@@ -179,14 +181,14 @@ export function RouteModal({
 
             {/* Stats */}
             <div style={{ padding: '16px', borderTop: `1px solid ${tokens.creamBorder}`, marginTop: 10 }}>
-              <Label style={{ display: 'block', marginBottom: 10 }}>CE TRACÉ</Label>
+              <Label style={{ display: 'block', marginBottom: 10 }}>{t('routeModal.thisRoute')}</Label>
               {(() => {
-                const t = proposal.tracks[selectedIdx];
-                const dist = osrmDist ?? t.dist;
+                const tk = proposal.tracks[selectedIdx];
+                const dist = osrmDist ?? tk.dist;
                 return [
-                  { label: 'Distance', value: dist,   unit: 'km', color: tokens.ink },
-                  { label: 'D+',       value: t.elev,  unit: 'm',  color: tokens.ink },
-                  { label: 'TSS',      value: t.tss,   unit: '',   color: proposal.color },
+                  { label: t('routeModal.distance'), value: dist,    unit: 'km', color: tokens.ink },
+                  { label: t('routeModal.elev'),     value: tk.elev, unit: 'm',  color: tokens.ink },
+                  { label: t('routeModal.tss'),      value: tk.tss,  unit: '',   color: proposal.color },
                 ].map(({ label, value, unit, color }) => (
                   <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: `1px solid ${tokens.creamBorder}` }}>
                     <Label>{label}</Label>
@@ -200,7 +202,7 @@ export function RouteModal({
 
             {/* Cues */}
             <div style={{ padding: '0 16px 16px' }}>
-              <Label style={{ display: 'block', marginBottom: 8 }}>CONSEILS</Label>
+              <Label style={{ display: 'block', marginBottom: 8 }}>{t('routeModal.tips')}</Label>
               <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
                 {proposal.cues.map((c, i) => (
                   <li key={i} style={{ display: 'flex', gap: 6, fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight, lineHeight: 1.8 }}>
@@ -211,7 +213,7 @@ export function RouteModal({
             </div>
 
             <div style={{ marginTop: 'auto', padding: '10px 16px', borderTop: `1px solid ${tokens.creamBorder}`, fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight, lineHeight: 1.7 }}>
-              Départ &amp; arrivée : Chemin du Manoir, Dardilly · Tracé OSRM
+              {t('routeModal.footer')}
             </div>
           </div>
         </div>

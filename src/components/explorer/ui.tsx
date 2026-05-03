@@ -66,11 +66,14 @@ export function StatBar({ label, value, max, unit, color }: {
   );
 }
 
+import { useT } from '@/i18n';
+
 export function TypeBadge({ type }: { type: 'cycling' | 'running' | 'hiking' }) {
+  const { t } = useT();
   const config = {
-    cycling: { bg: tokens.terraLight, fg: tokens.terra, label: '◎ VÉLO' },
-    running: { bg: tokens.greenLight, fg: tokens.green, label: '⌒ COURSE' },
-    hiking:  { bg: tokens.greenLight, fg: tokens.green, label: '▲ RANDO' },
+    cycling: { bg: tokens.terraLight, fg: tokens.terra, key: 'type.cycling' },
+    running: { bg: tokens.greenLight, fg: tokens.green, key: 'type.running' },
+    hiking:  { bg: tokens.greenLight, fg: tokens.green, key: 'type.hiking' },
   } as const;
   const c = config[type] ?? config.cycling;
   return (
@@ -80,7 +83,7 @@ export function TypeBadge({ type }: { type: 'cycling' | 'running' | 'hiking' }) 
       fontFamily: "'Space Grotesk'", fontSize: 9, fontWeight: 600,
       letterSpacing: '0.12em', textTransform: 'uppercase', borderRadius: 2,
     }}>
-      {c.label}
+      {t(c.key)}
     </span>
   );
 }

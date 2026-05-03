@@ -2,6 +2,8 @@
 
 import { tokens, GlobalStats } from './tokens';
 import { Label } from './ui';
+import { useT } from '@/i18n';
+import type { Lang } from '@/i18n';
 
 export type PageId = 'feed' | 'planner' | 'map' | 'stats' | 'photos' | 'ftp';
 export type SportId = 'cycling' | 'running';
@@ -25,9 +27,10 @@ interface Props {
 }
 
 function SportToggle({ sport, onChange, compact }: { sport: SportId; onChange: (s: SportId) => void; compact?: boolean }) {
+  const { t } = useT();
   const opts: { id: SportId; label: string; icon: string }[] = [
-    { id: 'cycling', label: 'Vélo',   icon: '◎' },
-    { id: 'running', label: 'Course', icon: '⌒' },
+    { id: 'cycling', label: t('common.cycling'), icon: '◎' },
+    { id: 'running', label: t('common.running'), icon: '⌒' },
   ];
   return (
     <div style={{
@@ -56,7 +59,49 @@ function SportToggle({ sport, onChange, compact }: { sport: SportId; onChange: (
   );
 }
 
+function LangToggle({ lang, onChange, compact }: { lang: Lang; onChange: (l: Lang) => void; compact?: boolean }) {
+  const opts: { id: Lang; label: string }[] = [
+    { id: 'fr', label: 'FR' },
+    { id: 'en', label: 'EN' },
+  ];
+  return (
+    <div style={{
+      display: 'flex', gap: 4, padding: 3,
+      background: tokens.creamDark, borderRadius: 4,
+      border: `1px solid ${tokens.creamBorder}`,
+    }}>
+      {opts.map(o => {
+        const active = lang === o.id;
+        return (
+          <button key={o.id} onClick={() => onChange(o.id)} style={{
+            flex: 1,
+            padding: compact ? '4px 6px' : '6px 8px',
+            border: 'none', cursor: 'pointer', borderRadius: 3,
+            background: active ? tokens.terra : 'transparent',
+            color: active ? '#fff' : tokens.inkMid,
+            fontFamily: "'Space Grotesk'", fontSize: compact ? 10 : 11,
+            fontWeight: active ? 700 : 500, letterSpacing: '0.1em',
+            transition: 'all 0.12s',
+          }}>
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+const NAV_LABEL_KEY: Record<PageId, string> = {
+  feed:    'nav.activities',
+  planner: 'nav.planner',
+  map:     'nav.map',
+  stats:   'nav.stats',
+  ftp:     'nav.ftp',
+  photos:  'nav.photos',
+};
+
 export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobile, sport, onSportChange }: Props) {
+  const { t, lang, setLang } = useT();
   const navItems = ALL_NAV_ITEMS.filter(n => n.sports.includes(sport));
   if (mobile) {
     return (
@@ -67,8 +112,9 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
         flexShrink: 0,
         paddingBottom: 'env(safe-area-inset-bottom)',
       }}>
-      <div style={{ padding: '6px 8px', borderBottom: `1px solid ${tokens.creamBorder}` }}>
-        <SportToggle sport={sport} onChange={onSportChange} compact />
+      <div style={{ padding: '6px 8px', borderBottom: `1px solid ${tokens.creamBorder}`, display: 'flex', gap: 6 }}>
+        <div style={{ flex: 2 }}><SportToggle sport={sport} onChange={onSportChange} compact /></div>
+        <div style={{ flex: 1 }}><LangToggle lang={lang} onChange={setLang} compact /></div>
       </div>
       <div style={{ height: 60, display: 'flex' }}>
         {navItems.map(item => {
@@ -81,7 +127,7 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
             }}>
               <span style={{ fontSize: 18 }}>{item.icon}</span>
               <span style={{ fontFamily: "'Space Grotesk'", fontSize: 9, fontWeight: active ? 600 : 400, letterSpacing: '0.05em' }}>
-                {item.label}
+                {t(NAV_LABEL_KEY[item.id])}
               </span>
             </div>
           );
@@ -92,7 +138,7 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
           borderLeft: `1px solid ${tokens.creamBorder}`,
         }}>
           <span style={{ fontSize: 18 }}>{darkMode ? '◑' : '◐'}</span>
-          <span style={{ fontFamily: "'Space Grotesk'", fontSize: 9, letterSpacing: '0.05em' }}>Mode</span>
+          <span style={{ fontFamily: "'Space Grotesk'", fontSize: 9, letterSpacing: '0.05em' }}>{t('common.darkMode')}</span>
         </div>
       </div>
       </div>
@@ -127,8 +173,13 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
       </div>
 
       <div style={{ padding: '14px 12px 4px' }}>
-        <Label style={{ display: 'block', marginBottom: 6 }}>SPORT</Label>
+        <Label style={{ display: 'block', marginBottom: 6 }}>{t('common.sport')}</Label>
         <SportToggle sport={sport} onChange={onSportChange} />
+      </div>
+
+      <div style={{ padding: '10px 12px 4px' }}>
+        <Label style={{ display: 'block', marginBottom: 6 }}>{t('common.language')}</Label>
+        <LangToggle lang={lang} onChange={setLang} />
       </div>
 
       <nav style={{ padding: '12px 12px', flex: 1 }}>
@@ -147,7 +198,7 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
             >
               <span style={{ fontSize: 13, width: 16, textAlign: 'center' }}>{item.icon}</span>
               <span style={{ fontFamily: "'Space Grotesk'", fontSize: 13, fontWeight: active ? 600 : 400, letterSpacing: '0.02em' }}>
-                {item.label}
+                {t(NAV_LABEL_KEY[item.id])}
               </span>
             </div>
           );
@@ -156,13 +207,13 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
 
       {stats && (
         <div style={{ margin: '0 12px', padding: 16, background: tokens.creamDark, borderRadius: 4 }}>
-          <Label style={{ display: 'block', marginBottom: 12 }}>En un coup d&apos;œil</Label>
+          <Label style={{ display: 'block', marginBottom: 12 }}>{t('common.atGlance')}</Label>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             {[
-              { v: stats.totalActivities,              u: 'sorties' },
-              { v: stats.totalDistance + ' km',        u: 'distance' },
-              { v: stats.totalElevation + ' m',        u: 'D+' },
-              { v: stats.totalHours + 'h',             u: 'total' },
+              { v: stats.totalActivities,              u: t('common.activities') },
+              { v: stats.totalDistance + ' km',        u: t('common.distance') },
+              { v: stats.totalElevation + ' m',        u: t('common.elev') },
+              { v: stats.totalHours + 'h',             u: t('common.total') },
             ].map((s, i) => (
               <div key={i}>
                 <div style={{ fontFamily: "'Playfair Display'", fontSize: 18, fontWeight: 700, color: tokens.ink }}>{s.v}</div>

@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { tokens, Activity } from './tokens';
 import { Label, useIsMobile } from './ui';
 import { RouteModal, Proposal } from './RouteModal';
+import { useT } from '@/i18n';
 
 // ── Bibliothèque de boucles ─────────────────────────────────────────────────
 // Toutes au départ et arrivée de Chemin du Manoir, Dardilly (HOME = [45.8183, 4.7521]).
@@ -203,6 +204,7 @@ function scoreRoute(r: LibraryRoute, inp: BuilderInputs): number {
 
 export function RouteBuilder({ activities }: { activities: Activity[] }) {
   const isMobile = useIsMobile();
+  const { t } = useT();
 
   const sorted = [...activities].sort((a, b) => new Date(b.rawDate).getTime() - new Date(a.rawDate).getTime());
   const last5  = sorted.slice(0, 5);
@@ -253,15 +255,15 @@ export function RouteBuilder({ activities }: { activities: Activity[] }) {
       ? '#c4602a'
       : (r.hilly ? (r.dist >= 40 ? '#5a7a9e' : '#c4602a') : (r.dist >= 30 ? '#9b6fb5' : tokens.terra));
     return {
-      tag: approximate ? 'APPROXIMATION' : 'PARCOURS GÉNÉRÉ', color,
+      tag: approximate ? t('planner.approximation') : t('planner.generated'), color,
       title: r.name,
       dist: r.dist, elev: r.elev, tss,
       tracks: [{ name: r.name, dist: r.dist, elev: r.elev, tss, waypoints: r.waypoints }],
-      desc: `${r.dist} km · ${r.elev} m D+ · direction ${r.direction}${r.hilly ? ' · vallonné' : ' · plat à moyen'}`,
+      desc: `${r.dist} km · ${r.elev} m D+ · ${r.direction}${r.hilly ? ' · ' + t('planner.terrainHilly') : ' · ' + t('planner.terrainFlat')}`,
       cues: [
-        `Départ Chemin du Manoir, Dardilly`,
-        r.hilly ? 'Gérer l\'effort sur les montées' : 'Rythme constant en Z2',
-        `TSS estimé ~${tss}`,
+        t('planner.cardCue1'),
+        r.hilly ? t('planner.cardCueHilly') : t('planner.cardCueFlat'),
+        t('planner.cardCueTss', { tss }),
       ],
     };
   };
@@ -295,14 +297,14 @@ export function RouteBuilder({ activities }: { activities: Activity[] }) {
       {selected && <RouteModal proposal={selected} onClose={() => setSelected(null)} />}
       <div style={CARD}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
-          <Label style={{ color: tokens.terra }}>§ PLANIFICATEUR</Label>
+          <Label style={{ color: tokens.terra }}>{t('planner.tag')}</Label>
           <div style={{ width: 24, height: 1, background: tokens.creamBorder }} />
-          <Label>CRÉE TON PROCHAIN PARCOURS</Label>
+          <Label>{t('planner.label')}</Label>
         </div>
         <div style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight, marginBottom: 20 }}>
-          Toutes les boucles partent &amp; arrivent à Chemin du Manoir, Dardilly. Distance respectée à
-          <strong style={{ color: tokens.terra }}> ±5 km </strong>
-          (toujours), D+ à <strong style={{ color: tokens.terra }}>±10%</strong> en mode strict.
+          {t('planner.intro')}{' '}
+          <strong style={{ color: tokens.terra }}>{t('planner.introBold')}</strong>{' '}
+          {t('planner.introEnd')} <strong style={{ color: tokens.terra }}>{t('planner.introEndBold')}</strong> {t('planner.introEndEnd')}
         </div>
 
         {/* Form */}
@@ -315,7 +317,7 @@ export function RouteBuilder({ activities }: { activities: Activity[] }) {
           {/* Distance */}
           <div style={FIELD}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <Label>DISTANCE</Label>
+              <Label>{t('planner.distance')}</Label>
               <span style={{ fontFamily: "'Playfair Display'", fontSize: 22, fontWeight: 700, color: tokens.ink }}>
                 {targetDist}<span style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight, marginLeft: 3 }}>km</span>
               </span>
@@ -330,7 +332,7 @@ export function RouteBuilder({ activities }: { activities: Activity[] }) {
           {/* D+ */}
           <div style={FIELD}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <Label>DÉNIVELÉ POSITIF</Label>
+              <Label>{t('planner.elev')}</Label>
               <span style={{ fontFamily: "'Playfair Display'", fontSize: 22, fontWeight: 700, color: tokens.ink }}>
                 {targetElev}<span style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight, marginLeft: 3 }}>m</span>
               </span>
@@ -344,12 +346,12 @@ export function RouteBuilder({ activities }: { activities: Activity[] }) {
 
           {/* Terrain */}
           <div style={FIELD}>
-            <Label>TYPE DE TERRAIN</Label>
+            <Label>{t('planner.terrain')}</Label>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {([
-                { val: 'any',   lbl: 'Indifférent' },
-                { val: 'flat',  lbl: 'Plat / roulant' },
-                { val: 'hilly', lbl: 'Vallonné / cols' },
+                { val: 'any',   lbl: t('planner.terrainAny') },
+                { val: 'flat',  lbl: t('planner.terrainFlat') },
+                { val: 'hilly', lbl: t('planner.terrainHilly') },
               ] as const).map(o => (
                 <button key={o.val} onClick={() => setTerrain(o.val)} style={PILL(terrain === o.val)}>
                   {o.lbl}
@@ -360,11 +362,11 @@ export function RouteBuilder({ activities }: { activities: Activity[] }) {
 
           {/* Direction */}
           <div style={FIELD}>
-            <Label>DIRECTION DEPUIS DARDILLY</Label>
+            <Label>{t('planner.direction')}</Label>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {(['any','N','NE','E','SE','S','SW','W','NW'] as const).map(d => (
                 <button key={d} onClick={() => setDirection(d)} style={PILL(direction === d)}>
-                  {d === 'any' ? 'Surprise' : d}
+                  {d === 'any' ? t('planner.dirAny') : d}
                 </button>
               ))}
             </div>
@@ -386,7 +388,7 @@ export function RouteBuilder({ activities }: { activities: Activity[] }) {
             letterSpacing: '0.15em',
           }}
         >
-          GÉNÉRER MES PARCOURS →
+          {t('planner.generate')}
         </button>
 
         {/* Results */}
@@ -394,11 +396,11 @@ export function RouteBuilder({ activities }: { activities: Activity[] }) {
           <div style={{ marginTop: 24 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
               <Label style={{ color: approximate ? tokens.terra : tokens.green }}>
-                § {matches.length} {approximate ? 'APPROXIMATIONS' : 'RÉSULTATS'}
+                § {matches.length} {approximate ? t('planner.approxResults') : t('planner.results')}
               </Label>
               <div style={{ flex: 1, height: 1, background: tokens.creamBorder }} />
               <span style={{ fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight }}>
-                triés par adéquation
+                {t('planner.sortedBy')}
               </span>
             </div>
 
@@ -408,9 +410,9 @@ export function RouteBuilder({ activities }: { activities: Activity[] }) {
                 padding: '12px 16px', background: tokens.creamDark, borderRadius: 4,
                 borderLeft: `3px solid ${tokens.terra}`, lineHeight: 1.6, marginBottom: 14,
               }}>
-                <strong style={{ color: tokens.ink }}>D+ ou direction/terrain hors tolérance.</strong> Distance toujours respectée
-                à <strong style={{ color: tokens.terra }}>±5 km</strong> ({targetDist - 5}–{targetDist + 5} km). Voici les
-                {' '}{matches.length} parcours les plus proches sur ce critère, regarde le delta D+.
+                <strong style={{ color: tokens.ink }}>{t('planner.approxBanner1')}</strong>{' '}
+                {t('planner.approxBanner2')} <strong style={{ color: tokens.terra }}>±5 km</strong> ({targetDist - 5}–{targetDist + 5} km).{' '}
+                {t('planner.approxBanner3', { n: matches.length })}
               </div>
             )}
 
@@ -420,9 +422,8 @@ export function RouteBuilder({ activities }: { activities: Activity[] }) {
                 padding: 18, background: tokens.creamDark, borderRadius: 4,
                 borderLeft: `3px solid ${tokens.terra}`, lineHeight: 1.7,
               }}>
-                <strong style={{ color: tokens.ink }}>Aucun parcours dans la fenêtre {targetDist - 5}–{targetDist + 5} km.</strong><br />
-                La bibliothèque ne couvre pas cette plage. Ajuste la distance pour rester proche d&apos;un palier connu
-                (la lib va de 13 à 110 km).
+                <strong style={{ color: tokens.ink }}>{t('planner.noneTitle', { min: targetDist - 5, max: targetDist + 5 })}</strong><br />
+                {t('planner.noneBody')}
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: 12 }}>
