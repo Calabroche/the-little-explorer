@@ -3,8 +3,11 @@
 import { useEffect } from 'react';
 import { Activity, tokens } from './tokens';
 import { TypeBadge, Label, StatChip } from './ui';
+import { useT, formatDateLocale } from '@/i18n';
 
 export function ActivityDetail({ activity, onClose }: { activity: Activity; onClose: () => void }) {
+  const { t, lang } = useT();
+  const localizedDate = formatDateLocale(activity.rawDate, lang);
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', h);
@@ -25,27 +28,27 @@ export function ActivityDetail({ activity, onClose }: { activity: Activity; onCl
           position: 'absolute', top: 20, right: 20, background: 'none', border: 'none',
           cursor: 'pointer', fontFamily: "'Space Grotesk'", fontSize: 11, letterSpacing: '0.1em',
           color: tokens.inkLight, textTransform: 'uppercase',
-        }}>ESC · FERMER</button>
+        }}>ESC · {lang === 'en' ? 'CLOSE' : 'FERMER'}</button>
 
         <TypeBadge type={activity.type} />
         <h2 style={{ fontFamily: "'Playfair Display'", fontSize: 32, fontWeight: 900, color: tokens.ink, marginTop: 10, marginBottom: 4 }}>
           {activity.title}
         </h2>
-        <Label style={{ display: 'block', marginBottom: 28 }}>{activity.date} · {activity.location}</Label>
+        <Label style={{ display: 'block', marginBottom: 28 }}>{localizedDate} · {activity.location}</Label>
 
         <div style={{
           display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 0,
           borderTop: `1px solid ${tokens.creamBorder}`, borderBottom: `1px solid ${tokens.creamBorder}`,
           padding: '20px 0', marginBottom: 28,
         }}>
-          <StatChip label="Durée" value={activity.duration} unit="" />
-          <StatChip label="Distance" value={activity.distance} unit="km" />
-          <StatChip label="Montée" value={activity.elevation} unit="m" />
-          <StatChip label="Descente" value={activity.descent} unit="m" />
+          <StatChip label={t('card.duration')} value={activity.duration} unit="" />
+          <StatChip label={t('card.distance')} value={activity.distance} unit="km" />
+          <StatChip label={t('card.elev')}     value={activity.elevation} unit="m" />
+          <StatChip label={lang === 'en' ? 'Descent' : 'Descente'} value={activity.descent} unit="m" />
         </div>
 
         <div style={{ marginBottom: 28 }}>
-          <Label style={{ display: 'block', marginBottom: 12 }}>PROFIL D&apos;ÉLÉVATION</Label>
+          <Label style={{ display: 'block', marginBottom: 12 }}>{t('analysis.sectionElev')}</Label>
           <div style={{
             height: 80, background: 'white', border: `1px solid ${tokens.creamBorder}`,
             borderRadius: 4, padding: '8px 16px', display: 'flex', alignItems: 'flex-end', overflow: 'hidden',
