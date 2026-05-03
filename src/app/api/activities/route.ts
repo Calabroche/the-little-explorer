@@ -231,9 +231,27 @@ async function getWeather(id: number, lat: number, lng: number, isoDate: string)
   } catch { return null; }
 }
 
+// ── Sport mapping ────────────────────────────────────────────────────────────
+const CYCLING_TYPES = new Set(['Ride', 'VirtualRide', 'EBikeRide', 'MountainBikeRide', 'GravelRide']);
+const RUNNING_TYPES = new Set(['Run', 'TrailRun', 'VirtualRun']);
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function sportFromRaw(raw: any): 'cycling' | 'running' | 'hiking' {
+  if (CYCLING_TYPES.has(raw.type)) return 'cycling';
+  if (RUNNING_TYPES.has(raw.type)) return 'running';
+  if (raw.type === 'Hike')         return 'hiking';
+  return 'cycling'; // fallback
+}
+
 // ── Pré-calcul streams & bests (sert à dériver la FTP avant transform) ───────
+// On ne calcule la puissance que pour le vélo : le modèle physique n'a aucun
+// sens pour la course (pas de Crr/CdA pertinents, le coût énergétique n'est
+// pas le même).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function computeStreamsAndBests(raw: any) {
+  if (sportFromRaw(raw) !== 'cycling') {
+    return { powerStream: [] as number[], bestEfforts: null };
+  }
   const speed_kmh: number[]  = raw.speed_kmh  ?? [];
   const altitude:  number[]  = raw.altitude   ?? [];
   const distance_m: number[] = raw.distance_m ?? [];
@@ -295,11 +313,19 @@ function transform(
   const aed   = (powerStream.length > 120 && hasHR) ? computeAeD(powerStream, heartrate) : null;
   const vam   = altitude.length > 60 ? computeVAM(altitude, distance_m, duration_s) : null;
 
+  const sport = sportFromRaw(raw);
+
+  // Pace en min/km — pour la course (et utile en cyclisme aussi mais on garde la vitesse côté UI).
+  const pace_s_per_km = raw.distance_km && raw.distance_km > 0
+    ? Math.round(((raw.duration_min ?? 0) * 60) / raw.distance_km)
+    : null;
+
   return {
     id:          raw.id,
-    type:        'cycling' as const,
+    type:        sport,
     original_type: raw.type as string,
     title:       raw.name,
+    pace_s_per_km,
     date:        formatDate(raw.date),
     rawDate:     raw.date,
     location:    'France',

@@ -4,12 +4,13 @@ import { tokens, GlobalStats } from './tokens';
 import { Label } from './ui';
 
 export type PageId = 'feed' | 'planner' | 'map' | 'stats' | 'photos' | 'ftp';
+export type SportId = 'cycling' | 'running';
 
-const navItems: { id: PageId; icon: string; label: string }[] = [
-  { id: 'feed',    icon: '◎', label: 'Activités' },
-  { id: 'planner', icon: '✦', label: 'Planificateur' },
-  { id: 'stats',   icon: '▬', label: 'Stats' },
-  { id: 'ftp',     icon: '⚡', label: 'FTP' },
+const ALL_NAV_ITEMS: { id: PageId; icon: string; label: string; sports: SportId[] }[] = [
+  { id: 'feed',    icon: '◎', label: 'Activités',     sports: ['cycling', 'running'] },
+  { id: 'planner', icon: '✦', label: 'Planificateur', sports: ['cycling'] },
+  { id: 'stats',   icon: '▬', label: 'Stats',         sports: ['cycling', 'running'] },
+  { id: 'ftp',     icon: '⚡', label: 'FTP',           sports: ['cycling'] },
 ];
 
 interface Props {
@@ -19,22 +20,57 @@ interface Props {
   darkMode: boolean;
   onToggleDark: () => void;
   mobile?: boolean;
+  sport: SportId;
+  onSportChange: (s: SportId) => void;
 }
 
-export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobile }: Props) {
+function SportToggle({ sport, onChange, compact }: { sport: SportId; onChange: (s: SportId) => void; compact?: boolean }) {
+  const opts: { id: SportId; label: string; icon: string }[] = [
+    { id: 'cycling', label: 'Vélo',   icon: '◎' },
+    { id: 'running', label: 'Course', icon: '⌒' },
+  ];
+  return (
+    <div style={{
+      display: 'flex', gap: 4, padding: 3,
+      background: tokens.creamDark, borderRadius: 4,
+      border: `1px solid ${tokens.creamBorder}`,
+    }}>
+      {opts.map(o => {
+        const active = sport === o.id;
+        return (
+          <button key={o.id} onClick={() => onChange(o.id)} style={{
+            flex: 1,
+            padding: compact ? '4px 6px' : '6px 8px',
+            border: 'none', cursor: 'pointer', borderRadius: 3,
+            background: active ? tokens.terra : 'transparent',
+            color: active ? '#fff' : tokens.inkMid,
+            fontFamily: "'Space Grotesk'", fontSize: compact ? 10 : 11,
+            fontWeight: active ? 700 : 500, letterSpacing: '0.05em',
+            transition: 'all 0.12s',
+          }}>
+            <span style={{ marginRight: 5 }}>{o.icon}</span>{o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobile, sport, onSportChange }: Props) {
+  const navItems = ALL_NAV_ITEMS.filter(n => n.sports.includes(sport));
   if (mobile) {
     return (
       <div style={{
         background: tokens.surface,
         borderTop: `1px solid ${tokens.creamBorder}`,
-        display: 'flex',
+        display: 'flex', flexDirection: 'column',
         flexShrink: 0,
-        // Safe-area iOS : laisser de la place pour la barre URL Safari et le
-        // home indicator. La hauteur de base reste 60 (icônes), à laquelle
-        // s'ajoute le inset.
-        height: `calc(60px + env(safe-area-inset-bottom))`,
         paddingBottom: 'env(safe-area-inset-bottom)',
       }}>
+      <div style={{ padding: '6px 8px', borderBottom: `1px solid ${tokens.creamBorder}` }}>
+        <SportToggle sport={sport} onChange={onSportChange} compact />
+      </div>
+      <div style={{ height: 60, display: 'flex' }}>
         {navItems.map(item => {
           const active = activePage === item.id;
           return (
@@ -58,6 +94,7 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
           <span style={{ fontSize: 18 }}>{darkMode ? '◑' : '◐'}</span>
           <span style={{ fontFamily: "'Space Grotesk'", fontSize: 9, letterSpacing: '0.05em' }}>Mode</span>
         </div>
+      </div>
       </div>
     );
   }
@@ -89,7 +126,12 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
         <Label style={{ marginTop: 6, display: 'block' }}>Florian Calabrese</Label>
       </div>
 
-      <nav style={{ padding: '16px 12px', flex: 1 }}>
+      <div style={{ padding: '14px 12px 4px' }}>
+        <Label style={{ display: 'block', marginBottom: 6 }}>SPORT</Label>
+        <SportToggle sport={sport} onChange={onSportChange} />
+      </div>
+
+      <nav style={{ padding: '12px 12px', flex: 1 }}>
         {navItems.map(item => {
           const active = activePage === item.id;
           return (

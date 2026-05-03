@@ -15,7 +15,8 @@ export const tokens = {
 
 export interface Activity {
   id: number;
-  type: 'cycling' | 'hiking';
+  type: 'cycling' | 'running' | 'hiking';
+  pace_s_per_km?: number | null;
   title: string;
   date: string;
   rawDate: string;
@@ -77,11 +78,13 @@ export interface GlobalStats {
   totalElevation: number;
   totalHours: number;
   cycling: number;
+  running: number;
   hiking: number;
 }
 
 export function deriveStats(activities: Activity[]): GlobalStats {
   const cycling = activities.filter(a => a.type === 'cycling');
+  const running = activities.filter(a => a.type === 'running');
   const hiking  = activities.filter(a => a.type === 'hiking');
   return {
     totalActivities: activities.length,
@@ -92,6 +95,7 @@ export function deriveStats(activities: Activity[]): GlobalStats {
       return s + h + m / 60;
     }, 0).toFixed(0),
     cycling: cycling.length,
+    running: running.length,
     hiking:  hiking.length,
   };
 }
