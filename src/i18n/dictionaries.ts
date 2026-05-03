@@ -259,11 +259,72 @@ export const dict = {
 
     // ── Activity card ────────────────────────────────────────────────────────
     card: {
-      duration:      'durée',
-      distance:      'distance',
-      elev:          'D+',
-      avgSpeed:      'moy',
-      pace:          'allure',
+      duration:      'Durée',
+      distance:      'Distance',
+      elev:          'Montée',
+      avgSpeed:      'Moy',
+      maxSpeed:      'Max',
+      hr:            'FC moy',
+      maxHr:         'FC max',
+      cal:           'Calories',
+      pace:          'Allure',
+    },
+
+    // ── Metrics (NP, TSS, IF, etc.) ─────────────────────────────────────────
+    metric: {
+      // Labels
+      npLabel:       'NP',
+      apLabel:       'AP',
+      tssLabel:      'TSS',
+      ifLabel:       'IF',
+      viLabel:       'VI',
+      wkgLabel:      'W/kg',
+      trimpLabel:    'TRIMP',
+      efLabel:       'EF',
+      aedLabel:      'AeD',
+      hrAvgLabel:    'FC moy',
+      hrMaxLabel:    'FC max',
+      vamLabel:      'VAM',
+      slopeMaxLabel: 'Pente max',
+      slopeMinLabel: 'Pente min',
+      maxLabel:      'Max',
+      totalWork:     'Travail total',
+      // Tips (hover)
+      npTip:         'Puissance normalisée (survole →)',
+      apTip:         'Puissance moyenne brute (survole →)',
+      tssTip:        'Charge totale de la sortie (survole →)',
+      ifTip:         'Intensité relative au FTP (survole →)',
+      viTip:         'Régularité de l\'effort (survole →)',
+      wkgTip:        'Puissance par kg (survole →)',
+      trimpTip:      'Charge cardiaque totale (survole →)',
+      efTip:         'Efficacité aérobie (survole →)',
+      aedTip:        'Dérive cardiaque (survole →)',
+      hrAvgTip:      'Fréquence cardiaque moyenne',
+      hrMaxTip:      'Fréquence cardiaque maximale mesurée',
+      vamTip:        'Vitesse ascensionnelle (survole →)',
+      slopeMaxTip:   'Inclinaison maximale mesurée',
+      slopeMinTip:   'Descente maximale mesurée',
+    },
+
+    // ── Charts ──────────────────────────────────────────────────────────────
+    charts: {
+      hrSlope:       'FRÉQUENCE CARDIAQUE · INCLINAISON',
+      speed:         'VITESSE (km/h)',
+      power:         'PUISSANCE ESTIMÉE (W)',
+      elevProfile:   "PROFIL D'ALTITUDE",
+      powerEstHeader:'PUISSANCE ESTIMÉE',
+      windHumid:     'Vent {wind} km/h · Humidité {hum}%',
+    },
+
+    // ── Weather ─────────────────────────────────────────────────────────────
+    weather: {
+      sunny:    'Ensoleillé',
+      cloudy:   'Nuageux',
+      fog:      'Brouillard',
+      rain:     'Pluie',
+      snow:     'Neige',
+      showers:  'Averses',
+      storm:    'Orage',
     },
   },
 
@@ -521,11 +582,70 @@ export const dict = {
 
     // ── Activity card ────────────────────────────────────────────────────────
     card: {
-      duration:      'duration',
-      distance:      'distance',
-      elev:          'elev',
-      avgSpeed:      'avg',
-      pace:          'pace',
+      duration:      'Duration',
+      distance:      'Distance',
+      elev:          'Climb',
+      avgSpeed:      'Avg',
+      maxSpeed:      'Max',
+      hr:            'Avg HR',
+      maxHr:         'Max HR',
+      cal:           'Calories',
+      pace:          'Pace',
+    },
+
+    // ── Metrics ─────────────────────────────────────────────────────────────
+    metric: {
+      npLabel:       'NP',
+      apLabel:       'AP',
+      tssLabel:      'TSS',
+      ifLabel:       'IF',
+      viLabel:       'VI',
+      wkgLabel:      'W/kg',
+      trimpLabel:    'TRIMP',
+      efLabel:       'EF',
+      aedLabel:      'AeD',
+      hrAvgLabel:    'Avg HR',
+      hrMaxLabel:    'Max HR',
+      vamLabel:      'VAM',
+      slopeMaxLabel: 'Max grade',
+      slopeMinLabel: 'Min grade',
+      maxLabel:      'Max',
+      totalWork:     'Total work',
+      npTip:         'Normalized Power (hover →)',
+      apTip:         'Raw average power (hover →)',
+      tssTip:        'Total ride load (hover →)',
+      ifTip:         'Intensity relative to FTP (hover →)',
+      viTip:         'Effort smoothness (hover →)',
+      wkgTip:        'Power per kg (hover →)',
+      trimpTip:      'Total cardiac load (hover →)',
+      efTip:         'Aerobic efficiency (hover →)',
+      aedTip:        'Heart rate decoupling (hover →)',
+      hrAvgTip:      'Average heart rate',
+      hrMaxTip:      'Maximum heart rate measured',
+      vamTip:        'Vertical ascent rate (hover →)',
+      slopeMaxTip:   'Maximum grade measured',
+      slopeMinTip:   'Maximum descent measured',
+    },
+
+    // ── Charts ──────────────────────────────────────────────────────────────
+    charts: {
+      hrSlope:       'HEART RATE · GRADE',
+      speed:         'SPEED (km/h)',
+      power:         'ESTIMATED POWER (W)',
+      elevProfile:   'ELEVATION PROFILE',
+      powerEstHeader:'ESTIMATED POWER',
+      windHumid:     'Wind {wind} km/h · Humidity {hum}%',
+    },
+
+    // ── Weather ─────────────────────────────────────────────────────────────
+    weather: {
+      sunny:    'Sunny',
+      cloudy:   'Cloudy',
+      fog:      'Fog',
+      rain:     'Rain',
+      snow:     'Snow',
+      showers:  'Showers',
+      storm:    'Storm',
     },
   },
 } as const;

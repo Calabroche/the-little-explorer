@@ -8,12 +8,22 @@ import {
 } from 'recharts';
 import { Activity, tokens } from './tokens';
 import { Label, TypeBadge, StatChip, useIsMobile } from './ui';
-import { useT } from '@/i18n';
+import { useT, formatDateLocale } from '@/i18n';
 
 const ActivityRouteMap = dynamic(
   () => import('./ActivityRouteMap').then(m => m.ActivityRouteMap),
   { ssr: false }
 );
+
+// ── Weather translation helper ───────────────────────────────────────────────
+const WEATHER_KEY_MAP: Record<string, string> = {
+  'Ensoleillé': 'sunny', 'Nuageux': 'cloudy', 'Brouillard': 'fog',
+  'Pluie': 'rain', 'Neige': 'snow', 'Averses': 'showers', 'Orage': 'storm',
+};
+function translateWeather(desc: string, t: (k: string) => string): string {
+  const k = WEATHER_KEY_MAP[desc];
+  return k ? t(`weather.${k}`) : desc;
+}
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -129,20 +139,21 @@ function VO2MaxCard({ activity }: { activity: Activity }) {
 }
 
 function PowerCard({ activity, data }: { activity: Activity; data: ReturnType<typeof buildChartData> }) {
+  const { t } = useT();
   const avgPower  = data.length ? Math.round(data.reduce((s, d) => s + (d.power || 0), 0) / data.length) : 0;
   const maxPower  = data.length ? Math.max(...data.map(d => d.power || 0)) : 0;
   const totalWork = avgPower * (activity.duration_min ?? 0) * 60 / 1000;
 
   return (
     <div style={{ ...CARD_STYLE, flex: 1 }}>
-      <Label style={{ display: 'block', marginBottom: 14 }}>PUISSANCE ESTIMÉE</Label>
+      <Label style={{ display: 'block', marginBottom: 14 }}>{t('charts.powerEstHeader')}</Label>
       <div style={{ fontFamily: "'Playfair Display'", fontSize: 48, fontWeight: 900, color: tokens.ink, lineHeight: 1 }}>
         {avgPower}
       </div>
       <div style={{ fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.inkLight, marginBottom: 18 }}>watts moyens</div>
       <div style={{ display: 'flex', gap: 0, borderTop: `1px solid ${tokens.creamBorder}`, paddingTop: 14 }}>
-        <StatChip label="Max" value={maxPower} unit="W" />
-        <StatChip label="Travail total" value={Math.round(totalWork)} unit="kJ" />
+        <StatChip label={t('metric.maxLabel')} value={maxPower} unit="W" />
+        <StatChip label={t('metric.totalWork')} value={Math.round(totalWork)} unit="kJ" />
       </div>
       <div style={{ marginTop: 14, fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight, lineHeight: 1.8 }}>
         <strong style={{ color: tokens.ink }}>Formule :</strong> P = (F_gravité + F_roulement + F_aéro) × v<br />
@@ -234,7 +245,8 @@ function MetricList({ rows, accentColor }: { rows: MetricRow[]; accentColor: str
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack: () => void }) {
-  const { t } = useT();
+  const { t, lang } = useT();
+  const localizedDate = formatDateLocale(activity.rawDate, lang);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const isMobile = useIsMobile();
@@ -247,7 +259,7 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
   const chartHeight = isMobile ? 260 : 300;
 
   const hrGradChart = hasHR && mounted && (
-    <ChartCard title="FRÉQUENCE CARDIAQUE · INCLINAISON">
+    <ChartCard title={t("charts.hrSlope")}>
       <ResponsiveContainer width="100%" height={chartHeight}>
         <ComposedChart syncId="ride" data={data} margin={{ top: 4, right: 2, left: -10, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={tokens.creamBorder} />
@@ -269,7 +281,7 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
   );
 
   const speedChart = mounted && (
-    <ChartCard title="VITESSE (km/h)">
+    <ChartCard title={t("charts.speed")}>
       <ResponsiveContainer width="100%" height={chartHeight}>
         <AreaChart syncId="ride" data={data} margin={{ top: 4, right: 2, left: -10, bottom: 0 }}>
           <defs>
@@ -289,7 +301,7 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
   );
 
   const powerChart = hasPow && mounted && (
-    <ChartCard title="PUISSANCE ESTIMÉE (W)">
+    <ChartCard title={t("charts.power")}>
       <ResponsiveContainer width="100%" height={chartHeight}>
         <AreaChart syncId="ride" data={data} margin={{ top: 4, right: 2, left: -10, bottom: 0 }}>
           <defs>
@@ -312,7 +324,7 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
   );
 
   const altChart = mounted && (
-    <ChartCard title="PROFIL D'ALTITUDE">
+    <ChartCard title={t("charts.elevProfile")}>
       <ResponsiveContainer width="100%" height={chartHeight}>
         <AreaChart syncId="ride" data={data} margin={{ top: 4, right: 2, left: -10, bottom: 0 }}>
           <defs>
@@ -344,7 +356,7 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
         <TypeBadge type={activity.type} />
-        <Label>{activity.date} · {activity.location}</Label>
+        <Label>{localizedDate} · {activity.location}</Label>
       </div>
       <h1 style={{ fontFamily: "'Playfair Display'", fontSize: isMobile ? 24 : 36, fontWeight: 900, color: tokens.ink, marginBottom: 24, lineHeight: 1.1 }}>
         {activity.title}
@@ -390,7 +402,7 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
             <div>
               <Label style={{ display: 'block', marginBottom: 12, color: tokens.terra }}>{t('analysis.power')}</Label>
               <MetricList accentColor={tokens.terra} rows={[
-                { k: 'NP', v: activity.np, u: 'W', tip: 'Puissance normalisée (survole →)',
+                { k: 'NP', v: activity.np, u: 'W', tip: t('metric.npTip'),
                   formula: [
                     '<strong>NP</strong> = (moyenne(P_lissée_30s <sup>4</sup>)) <sup>1/4</sup>',
                     '1. Fenêtre glissante 30s sur le flux de puissance',
@@ -398,34 +410,34 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
                     '3. Faire la moyenne, puis prendre la racine 4ème',
                     `→ Représente la puissance physiologiquement ressentie = <strong>${activity.np}W</strong>`,
                   ]},
-                { k: 'AP', v: activity.avg_power, u: 'W', tip: 'Puissance moyenne brute (survole →)',
+                { k: 'AP', v: activity.avg_power, u: 'W', tip: t('metric.apTip'),
                   formula: [
                     '<strong>AP</strong> = Σ(P_i) / n',
                     'Simple moyenne arithmétique de toutes les valeurs de puissance',
                     `→ <strong>${activity.avg_power}W</strong> en moyenne sur la sortie`,
                   ]},
-                { k: 'TSS', v: activity.tss, u: '', tip: 'Charge totale de la sortie (survole →)',
+                { k: 'TSS', v: activity.tss, u: '', tip: t('metric.tssTip'),
                   formula: [
                     '<strong>TSS</strong> = (durée_s × NP × IF) / (FTP × 3600) × 100',
                     `= (${(activity.duration_min ?? 0) * 60}s × ${activity.np}W × ${activity.if_factor}) / (${activity.ftp ?? FTP_FALLBACK} × 3600) × 100`,
                     `= <strong>${activity.tss}</strong>`,
                     `FTP = ${activity.ftp ?? FTP_FALLBACK}W (best 20 min × 0.95) · <50 = récupération · 50–75 = modéré · 75–100 = difficile · >100 = très exigeant`,
                   ]},
-                { k: 'IF', v: activity.if_factor, u: '', tip: 'Intensité relative au FTP (survole →)',
+                { k: 'IF', v: activity.if_factor, u: '', tip: t('metric.ifTip'),
                   formula: [
                     '<strong>IF</strong> = NP / FTP',
                     `= ${activity.np} / ${activity.ftp ?? FTP_FALLBACK}`,
                     `= <strong>${activity.if_factor}</strong>`,
                     '0.75 = endurance · 0.85 = tempo · >0.95 = seuil/VO₂max',
                   ]},
-                { k: 'VI', v: activity.vi, u: '', tip: 'Régularité de l\'effort (survole →)',
+                { k: 'VI', v: activity.vi, u: '', tip: t('metric.viTip'),
                   formula: [
                     '<strong>VI</strong> = NP / AP',
                     `= ${activity.np} / ${activity.avg_power}`,
                     `= <strong>${activity.vi}</strong>`,
                     'Proche de 1.0 = effort régulier · >1.05 = effort en accordéon',
                   ]},
-                { k: 'W/kg', v: activity.wkg, u: 'W/kg', tip: 'Puissance par kg (survole →)',
+                { k: 'W/kg', v: activity.wkg, u: 'W/kg', tip: t('metric.wkgTip'),
                   formula: [
                     '<strong>W/kg</strong> = NP / poids_coureur',
                     `= ${activity.np} / 66 kg`,
@@ -439,7 +451,7 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
             <div>
               <Label style={{ display: 'block', marginBottom: 12, color: tokens.blue }}>{t('analysis.cardio')}</Label>
               <MetricList accentColor={tokens.blue} rows={[
-                { k: 'TRIMP', v: activity.trimp, u: '', tip: 'Charge cardiaque totale (survole →)',
+                { k: 'TRIMP', v: activity.trimp, u: '', tip: t('metric.trimpTip'),
                   formula: [
                     '<strong>TRIMP</strong> = Σ(Δt_min × r × 0.64 × e^(1.92×r))',
                     'r = (FC - FC_repos) / (FC_max - FC_repos)',
@@ -447,22 +459,22 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
                     'Pondère chaque minute selon l\'intensité cardiaque',
                     `→ <strong>${activity.trimp}</strong> — plus sensible que la durée seule`,
                   ]},
-                { k: 'EF', v: activity.ef, u: 'W/bpm', tip: 'Efficacité aérobie (survole →)',
+                { k: 'EF', v: activity.ef, u: 'W/bpm', tip: t('metric.efTip'),
                   formula: [
                     '<strong>EF</strong> = NP / FC_moyenne',
                     `= ${activity.np} / ${activity.avg_hr}`,
                     `= <strong>${activity.ef} W/bpm</strong>`,
                     'Plus EF est élevé, plus tu produis de puissance pour un même effort cardiaque',
                   ]},
-                { k: 'AeD', v: activity.aed != null ? `${activity.aed}%` : null, u: '', tip: 'Dérive cardiaque (survole →)',
+                { k: 'AeD', v: activity.aed != null ? `${activity.aed}%` : null, u: '', tip: t('metric.aedTip'),
                   formula: [
                     '<strong>AeD</strong> = (EF₁ − EF₂) / EF₁ × 100',
                     'EF₁ = EF sur la 1ère moitié · EF₂ = EF sur la 2ème',
                     `= <strong>${activity.aed}%</strong>`,
                     '< 5% = bonne forme aérobie · > 10% = fatigue ou sous-entraînement',
                   ]},
-                { k: 'FC moy', v: activity.avg_hr, u: 'bpm', tip: 'Fréquence cardiaque moyenne', formula: [] },
-                { k: 'FC max', v: activity.max_hr, u: 'bpm', tip: 'Fréquence cardiaque maximale mesurée', formula: [] },
+                { k: t('metric.hrAvgLabel'), v: activity.avg_hr, u: 'bpm', tip: t('metric.hrAvgTip'), formula: [] },
+                { k: t('metric.hrMaxLabel'), v: activity.max_hr, u: 'bpm', tip: t('metric.hrMaxTip'), formula: [] },
               ]} />
             </div>
 
@@ -470,20 +482,20 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
             <div>
               <Label style={{ display: 'block', marginBottom: 12, color: tokens.green }}>{t('analysis.mech')}</Label>
               <MetricList accentColor={tokens.green} rows={[
-                { k: 'VAM', v: activity.vam, u: 'm/h', tip: 'Vitesse ascensionnelle (survole →)',
+                { k: 'VAM', v: activity.vam, u: 'm/h', tip: t('metric.vamTip'),
                   formula: [
                     '<strong>VAM</strong> = D+_montées(m) / t_montées(s) × 3600',
                     'Calculé uniquement sur les segments >2% de pente',
                     `→ <strong>${activity.vam} m/h</strong>`,
                     '<800 = randonneur · 800–1200 = cycliste amateur · >1500 = élite',
                   ]},
-                { k: 'Pente max', v: activity.max_incline != null ? `+${activity.max_incline}` : null, u: '%', tip: 'Inclinaison maximale mesurée',
+                { k: t('metric.slopeMaxLabel'), v: activity.max_incline != null ? `+${activity.max_incline}` : null, u: '%', tip: t('metric.slopeMaxTip'),
                   formula: [
                     'gradient = ΔAltitude / ΔDistance × 100',
                     'Calculé par fenêtre de 40 points GPS pour lisser le bruit',
                     `→ pic à <strong>+${activity.max_incline}%</strong>`,
                   ]},
-                { k: 'Pente min', v: activity.min_incline, u: '%', tip: 'Descente maximale mesurée',
+                { k: t('metric.slopeMinLabel'), v: activity.min_incline, u: '%', tip: t('metric.slopeMinTip'),
                   formula: [
                     'Même méthode que pente max, côté négatif',
                     `→ descente max <strong>${activity.min_incline}%</strong>`,
@@ -493,8 +505,8 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
                 <div style={{ marginTop: 12, padding: 12, background: tokens.creamDark, borderRadius: 4 }}>
                   <Label style={{ display: 'block', marginBottom: 8 }}>{t('analysis.weather')}</Label>
                   <div style={{ fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.inkMid, lineHeight: 2 }}>
-                    <div>{activity.weather.description} · {activity.weather.temp}°C</div>
-                    <div>Vent {activity.weather.windspeed} km/h · Humidité {activity.weather.humidity}%</div>
+                    <div>{translateWeather(activity.weather.description, t)} · {activity.weather.temp}°C</div>
+                    <div>{t('charts.windHumid', { wind: activity.weather.windspeed, hum: activity.weather.humidity })}</div>
                   </div>
                 </div>
               )}

@@ -3,22 +3,31 @@
 import dynamic from 'next/dynamic';
 import { Activity, tokens } from './tokens';
 import { TypeBadge, Label, StatChip, useIsMobile } from './ui';
+import { useT, formatDateLocale } from '@/i18n';
 
 const CardMap = dynamic(() => import('./CardMap').then(m => m.CardMap), { ssr: false });
 
+const WEATHER_ICON: Record<string, string> = {
+  'Ensoleillé': '☀', 'Nuageux': '☁', 'Brouillard': '≋', 'Pluie': '⛆', 'Neige': '❄', 'Averses': '⛆', 'Orage': '↯',
+  'Sunny': '☀', 'Cloudy': '☁', 'Fog': '≋', 'Rain': '⛆', 'Snow': '❄', 'Showers': '⛆', 'Storm': '↯',
+};
+const WEATHER_KEY: Record<string, string> = {
+  'Ensoleillé': 'sunny', 'Nuageux': 'cloudy', 'Brouillard': 'fog',
+  'Pluie': 'rain', 'Neige': 'snow', 'Averses': 'showers', 'Orage': 'storm',
+};
+
 function WeatherBadge({ w }: { w: NonNullable<Activity['weather']> }) {
-  const icons: Record<string, string> = {
-    'Ensoleillé': '☀', 'Nuageux': '☁', 'Brouillard': '≋',
-    'Pluie': '⛆', 'Neige': '❄', 'Averses': '⛆', 'Orage': '↯',
-  };
-  const icon = icons[w.description] ?? '~';
+  const { t } = useT();
+  const icon = WEATHER_ICON[w.description] ?? '~';
+  const key = WEATHER_KEY[w.description];
+  const desc = key ? t(`weather.${key}`) : w.description;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight }}>
       <span style={{ fontSize: 13 }}>{icon}</span>
       <span>{w.temp}°C</span>
       <span>{w.windspeed} km/h</span>
       <span>{w.humidity}% hum.</span>
-      <span style={{ color: tokens.inkMid }}>{w.description}</span>
+      <span style={{ color: tokens.inkMid }}>{desc}</span>
     </div>
   );
 }
@@ -26,6 +35,8 @@ function WeatherBadge({ w }: { w: NonNullable<Activity['weather']> }) {
 export function ActivityCard({ activity, onClick }: { activity: Activity; onClick: (a: Activity) => void }) {
   const traceColor = activity.type === 'cycling' ? tokens.terra : tokens.green;
   const isMobile = useIsMobile();
+  const { t, lang } = useT();
+  const localizedDate = formatDateLocale(activity.rawDate, lang);
 
   return (
     <div
@@ -44,7 +55,7 @@ export function ActivityCard({ activity, onClick }: { activity: Activity; onClic
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, flexWrap: 'wrap', gap: 6 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <TypeBadge type={activity.type} />
-              <Label>{activity.date} · {activity.location}</Label>
+              <Label>{localizedDate} · {activity.location}</Label>
             </div>
             {activity.weather && !isMobile && <WeatherBadge w={activity.weather} />}
           </div>
@@ -60,14 +71,14 @@ export function ActivityCard({ activity, onClick }: { activity: Activity; onClic
             gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
             gap: '12px 0', borderTop: `1px solid ${tokens.creamBorder}`, paddingTop: 14, marginBottom: 12,
           }}>
-            <StatChip label="Durée"    value={activity.duration}  unit="" />
-            <StatChip label="Distance" value={activity.distance}  unit="km" />
-            {activity.speed     != null && <StatChip label="Moy"    value={activity.speed}      unit="km/h" />}
-            {activity.max_speed != null && <StatChip label="Max"    value={activity.max_speed}  unit="km/h" />}
-            <StatChip label="Montée"   value={activity.elevation} unit="m" />
-            {activity.max_incline != null && <StatChip label="Pente ▲" value={`+${activity.max_incline}`} unit="%" />}
-            {activity.min_incline != null && <StatChip label="Pente ▼" value={activity.min_incline}       unit="%" />}
-            {activity.avg_hr     != null && <StatChip label="FC moy" value={activity.avg_hr}    unit="bpm" />}
+            <StatChip label={t('card.duration')} value={activity.duration}  unit="" />
+            <StatChip label={t('card.distance')} value={activity.distance}  unit="km" />
+            {activity.speed     != null && <StatChip label={t('card.avgSpeed')} value={activity.speed}     unit="km/h" />}
+            {activity.max_speed != null && <StatChip label={t('card.maxSpeed')} value={activity.max_speed} unit="km/h" />}
+            <StatChip label={t('card.elev')}     value={activity.elevation} unit="m" />
+            {activity.max_incline != null && <StatChip label={'▲ ' + t('metric.slopeMaxLabel')} value={`+${activity.max_incline}`} unit="%" />}
+            {activity.min_incline != null && <StatChip label={'▼ ' + t('metric.slopeMinLabel')} value={activity.min_incline}       unit="%" />}
+            {activity.avg_hr     != null && <StatChip label={t('card.hr')} value={activity.avg_hr}    unit="bpm" />}
           </div>
 
           {/* Training metrics row */}
