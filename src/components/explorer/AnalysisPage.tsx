@@ -8,6 +8,7 @@ import {
 } from 'recharts';
 import { Activity, tokens } from './tokens';
 import { Label, TypeBadge, StatChip, useIsMobile } from './ui';
+import { useT } from '@/i18n';
 
 const ActivityRouteMap = dynamic(
   () => import('./ActivityRouteMap').then(m => m.ActivityRouteMap),
@@ -233,6 +234,7 @@ function MetricList({ rows, accentColor }: { rows: MetricRow[]; accentColor: str
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack: () => void }) {
+  const { t } = useT();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const isMobile = useIsMobile();
@@ -337,7 +339,7 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
         fontFamily: "'Space Grotesk'", fontSize: 11, letterSpacing: '0.1em',
         color: tokens.inkLight, textTransform: 'uppercase', marginBottom: 20, padding: 0,
       }}>
-        ← RETOUR AUX ACTIVITÉS
+        {t('common.back')}
       </button>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
@@ -350,14 +352,14 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
 
       {/* Key stats */}
       <div style={{ ...CARD_STYLE, display: 'flex', flexWrap: 'wrap', marginBottom: 20 }}>
-        <StatChip label="Durée"    value={activity.duration}  unit="" />
-        <StatChip label="Distance" value={activity.distance}  unit="km" />
-        {activity.speed     != null && <StatChip label="Moy"      value={activity.speed}      unit="km/h" />}
-        {activity.max_speed != null && <StatChip label="Max"      value={activity.max_speed}  unit="km/h" />}
-        <StatChip label="Montée"   value={activity.elevation} unit="m" />
-        {activity.avg_hr    != null && <StatChip label="FC moy"   value={activity.avg_hr}     unit="bpm" />}
-        {activity.max_hr    != null && <StatChip label="FC max"   value={activity.max_hr}     unit="bpm" />}
-        {activity.calories  != null && <StatChip label="Calories" value={activity.calories}   unit="kcal" />}
+        <StatChip label={t('analysis.duration')} value={activity.duration}  unit="" />
+        <StatChip label={t('analysis.distance')} value={activity.distance}  unit="km" />
+        {activity.speed     != null && <StatChip label={t('analysis.avgSpeed')} value={activity.speed}      unit="km/h" />}
+        {activity.max_speed != null && <StatChip label={t('analysis.maxSpeed')} value={activity.max_speed}  unit="km/h" />}
+        <StatChip label={t('analysis.climb')}    value={activity.elevation} unit="m" />
+        {activity.avg_hr    != null && <StatChip label={t('analysis.hrAvg')} value={activity.avg_hr}     unit="bpm" />}
+        {activity.max_hr    != null && <StatChip label={t('analysis.hrMax')} value={activity.max_hr}     unit="bpm" />}
+        {activity.calories  != null && <StatChip label={t('analysis.cal')}  value={activity.calories}   unit="kcal" />}
       </div>
 
       {/* FTP banner */}
@@ -382,11 +384,11 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
       {/* Advanced metrics */}
       {(activity.np || activity.tss || activity.trimp) && (
         <div style={{ ...CARD_STYLE, marginBottom: 20 }}>
-          <Label style={{ display: 'block', marginBottom: 16 }}>EFFORT & ÉNERGIE</Label>
+          <Label style={{ display: 'block', marginBottom: 16 }}>{t('analysis.effort')}</Label>
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 20, marginBottom: activity.hrZones ? 24 : 0 }}>
             {/* Effort */}
             <div>
-              <Label style={{ display: 'block', marginBottom: 12, color: tokens.terra }}>PUISSANCE</Label>
+              <Label style={{ display: 'block', marginBottom: 12, color: tokens.terra }}>{t('analysis.power')}</Label>
               <MetricList accentColor={tokens.terra} rows={[
                 { k: 'NP', v: activity.np, u: 'W', tip: 'Puissance normalisée (survole →)',
                   formula: [
@@ -435,7 +437,7 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
 
             {/* Cardio */}
             <div>
-              <Label style={{ display: 'block', marginBottom: 12, color: tokens.blue }}>CARDIO</Label>
+              <Label style={{ display: 'block', marginBottom: 12, color: tokens.blue }}>{t('analysis.cardio')}</Label>
               <MetricList accentColor={tokens.blue} rows={[
                 { k: 'TRIMP', v: activity.trimp, u: '', tip: 'Charge cardiaque totale (survole →)',
                   formula: [
@@ -466,7 +468,7 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
 
             {/* Mechanical / weather */}
             <div>
-              <Label style={{ display: 'block', marginBottom: 12, color: tokens.green }}>MÉCANIQUE & MÉTÉO</Label>
+              <Label style={{ display: 'block', marginBottom: 12, color: tokens.green }}>{t('analysis.mech')}</Label>
               <MetricList accentColor={tokens.green} rows={[
                 { k: 'VAM', v: activity.vam, u: 'm/h', tip: 'Vitesse ascensionnelle (survole →)',
                   formula: [
@@ -489,7 +491,7 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
               ]} />
               {activity.weather && (
                 <div style={{ marginTop: 12, padding: 12, background: tokens.creamDark, borderRadius: 4 }}>
-                  <Label style={{ display: 'block', marginBottom: 8 }}>MÉTÉO DU JOUR</Label>
+                  <Label style={{ display: 'block', marginBottom: 8 }}>{t('analysis.weather')}</Label>
                   <div style={{ fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.inkMid, lineHeight: 2 }}>
                     <div>{activity.weather.description} · {activity.weather.temp}°C</div>
                     <div>Vent {activity.weather.windspeed} km/h · Humidité {activity.weather.humidity}%</div>

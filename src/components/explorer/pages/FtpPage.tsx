@@ -6,6 +6,7 @@ import {
 } from 'recharts';
 import { tokens, Activity } from '../tokens';
 import { SectionTag, Label, useIsMobile } from '../ui';
+import { useT } from '@/i18n';
 
 const RIDER_KG = 66;
 const DEFAULT_FTP_W = 291;
@@ -68,6 +69,7 @@ function PdcTooltip({ active, payload }: any) {
 
 export function FtpPage({ activities }: { activities: Activity[] }) {
   const isMobile = useIsMobile();
+  const { t } = useT();
 
   // Exclure les sorties avec assistance électrique : le modèle physique
   // surestime la puissance car il interprète la vitesse comme produite par
@@ -93,9 +95,9 @@ export function FtpPage({ activities }: { activities: Activity[] }) {
   const estimatedFtp = apiFtp ?? (best20 != null ? Math.round(best20 * 0.95) : null);
 
   const effectiveFtp = estimatedFtp ?? DEFAULT_FTP_W;
-  const effectiveSource = apiFtp ? 'utilisée par toute l\'app · best 20 min × 0.95'
-    : estimatedFtp ? 'estimé (best 20 min × 0.95)'
-    : 'défaut (66 kg × 2.205 × 2)';
+  const effectiveSource = apiFtp ? t('ftp.sourceEstimate')
+    : estimatedFtp ? t('ftp.sourceEstimate')
+    : t('ftp.sourceFallback');
   const wkg = +(effectiveFtp / RIDER_KG).toFixed(2);
 
   const hasData = efforts.some(e => e.power != null);
@@ -107,26 +109,26 @@ export function FtpPage({ activities }: { activities: Activity[] }) {
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '20px 16px' : '32px 40px' }}>
-      <SectionTag num={5} title="FTP & PUISSANCE" />
+      <SectionTag num={5} title={t('ftp.sectionTag')} />
       <h1 style={{
         fontFamily: "'Playfair Display'", fontSize: isMobile ? 28 : 40, fontWeight: 900,
         color: tokens.ink, lineHeight: 1.1, marginBottom: isMobile ? 20 : 32,
       }}>
-        Ta puissance.<br />
-        <em style={{ color: tokens.terra, fontStyle: 'italic', fontWeight: 700 }}>Mesurée par les données.</em>
+        {t('ftp.headline')}<br />
+        <em style={{ color: tokens.terra, fontStyle: 'italic', fontWeight: 700 }}>{t('ftp.headlineEm')}</em>
       </h1>
 
       {/* FTP card */}
       <div style={CARD}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-          <Label style={{ color: tokens.terra }}>§ FTP</Label>
+          <Label style={{ color: tokens.terra }}>{t('ftp.cardTag')}</Label>
           <div style={{ width: 24, height: 1, background: tokens.creamBorder }} />
-          <Label>SEUIL FONCTIONNEL DE PUISSANCE</Label>
+          <Label>{t('ftp.cardLabel')}</Label>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 24, marginBottom: 20 }}>
           <div>
-            <Label style={{ display: 'block', marginBottom: 6 }}>FTP ESTIMÉ</Label>
+            <Label style={{ display: 'block', marginBottom: 6 }}>{t('ftp.ftpLabel')}</Label>
             <div style={{ fontFamily: "'Playfair Display'", fontSize: 56, fontWeight: 900, color: tokens.terra, lineHeight: 1 }}>
               {effectiveFtp}<span style={{ fontFamily: "'Space Grotesk'", fontSize: 14, color: tokens.inkLight, marginLeft: 6 }}>W</span>
             </div>
@@ -136,33 +138,30 @@ export function FtpPage({ activities }: { activities: Activity[] }) {
           </div>
 
           <div>
-            <Label style={{ display: 'block', marginBottom: 6 }}>FORMULE</Label>
+            <Label style={{ display: 'block', marginBottom: 6 }}>{t('ftp.formula')}</Label>
             <div style={{ fontFamily: "'Space Grotesk'", fontSize: 13, color: tokens.inkMid, lineHeight: 1.7 }}>
-              best 20 min × 0.95 (Coggan){best20 != null && <> — best 20 min : <strong style={{ color: tokens.ink }}>{best20} W</strong></>}
-              {excludedCount > 0 && <><br /><span style={{ color: tokens.inkLight }}>{excludedCount} sortie{excludedCount > 1 ? 's' : ''} avec assistance électrique exclue{excludedCount > 1 ? 's' : ''} (EBikeRide ou titre mentionnant « électrique »)</span></>}
+              {t('ftp.formulaText')}{best20 != null && <> {t('ftp.best20', { w: best20 })}</>}
+              {excludedCount > 0 && <><br /><span style={{ color: tokens.inkLight }}>{t('ftp.excluded', { n: excludedCount, s: excludedCount > 1 ? 's' : '' })}</span></>}
             </div>
           </div>
         </div>
 
         <div style={{ padding: '12px 14px', background: tokens.creamDark, borderRadius: 4, fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight, lineHeight: 1.7 }}>
-          <strong style={{ color: tokens.ink }}>Comment c&apos;est calculé ?</strong> La puissance affichée n&apos;est <em>pas mesurée</em> :
-          elle est dérivée d&apos;un modèle physique (vitesse + pente + masse + Crr + CdA). C&apos;est utile en relatif (suivre la
-          progression) mais l&apos;absolu dépend de la qualité des constantes. Pour avoir un chiffre fiable, un capteur de puissance
-          (pédales / manivelle / home-trainer) reste la seule solution.
+          <strong style={{ color: tokens.ink }}>{t('ftp.howTitle')}</strong> {t('ftp.howBody')}
         </div>
       </div>
 
       {/* Power-Duration Curve */}
       <div style={CARD}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-          <Label style={{ color: tokens.green }}>§ COURBE</Label>
+          <Label style={{ color: tokens.green }}>{t('ftp.pdcTag')}</Label>
           <div style={{ width: 24, height: 1, background: tokens.creamBorder }} />
-          <Label>PUISSANCE — DURÉE (BEST EFFORTS)</Label>
+          <Label>{t('ftp.pdcLabel')}</Label>
         </div>
 
         {!hasData ? (
           <div style={{ fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.inkLight, padding: 20 }}>
-            Pas assez de données : il faut au moins une sortie avec un stream de puissance &gt; 60 s.
+            {t('ftp.pdcEmpty')}
           </div>
         ) : (
           <>
@@ -235,26 +234,22 @@ export function FtpPage({ activities }: { activities: Activity[] }) {
       {/* Methodology */}
       <div style={CARD}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-          <Label style={{ color: tokens.blue }}>§ MÉTHODOLOGIE</Label>
+          <Label style={{ color: tokens.blue }}>{t('ftp.methTag')}</Label>
           <div style={{ width: 24, height: 1, background: tokens.creamBorder }} />
-          <Label>POUR UN VRAI TEST FTP</Label>
+          <Label>{t('ftp.methLabel')}</Label>
         </div>
         <div style={{ fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.inkMid, lineHeight: 1.8 }}>
           <p style={{ marginBottom: 12 }}>
-            <strong style={{ color: tokens.ink }}>Test 20 min Coggan</strong> — 20 min en pleine charge sur du plat / faux-plat constant,
-            après 15-20 min d&apos;échauffement progressif. FTP = puissance moyenne × 0.95.
+            <strong style={{ color: tokens.ink }}>{t('ftp.meth20Title')}</strong> — {t('ftp.meth20Body')}
           </p>
           <p style={{ marginBottom: 12 }}>
-            <strong style={{ color: tokens.ink }}>Test 8 min × 2</strong> — Friel : deux efforts de 8 min séparés de 10 min de récup.
-            FTP = moyenne des deux × 0.90.
+            <strong style={{ color: tokens.ink }}>{t('ftp.meth8Title')}</strong> — {t('ftp.meth8Body')}
           </p>
           <p style={{ marginBottom: 12 }}>
-            <strong style={{ color: tokens.ink }}>Ramp test</strong> — paliers de 1 min (+25 W chacun) jusqu&apos;à l&apos;abandon.
-            FTP = puissance maximale moyenne sur la dernière minute × 0.75.
+            <strong style={{ color: tokens.ink }}>{t('ftp.methRampTitle')}</strong> — {t('ftp.methRampBody')}
           </p>
           <p style={{ color: tokens.inkLight }}>
-            Pour mesurer (et pas seulement estimer) : pédales à puissance Favero Assioma (~600 €), Stages, 4iiii ou home-trainer
-            connecté Wahoo / Tacx.
+            {t('ftp.methHardware')}
           </p>
         </div>
       </div>
