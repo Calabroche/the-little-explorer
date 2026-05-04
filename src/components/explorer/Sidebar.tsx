@@ -5,12 +5,13 @@ import { Label } from './ui';
 import { useT } from '@/i18n';
 import type { Lang } from '@/i18n';
 
-export type PageId = 'feed' | 'planner' | 'map' | 'stats' | 'photos' | 'ftp';
+export type PageId = 'feed' | 'planner' | 'map' | 'stats' | 'photos' | 'ftp' | 'compare';
 export type SportId = 'cycling' | 'running';
 
 const ALL_NAV_ITEMS: { id: PageId; icon: string; label: string; sports: SportId[] }[] = [
   { id: 'feed',    icon: '◎', label: 'Activités',     sports: ['cycling', 'running'] },
   { id: 'planner', icon: '✦', label: 'Planificateur', sports: ['cycling'] },
+  { id: 'compare', icon: '⇄', label: 'Comparer',      sports: ['cycling', 'running'] },
   { id: 'stats',   icon: '▬', label: 'Stats',         sports: ['cycling', 'running'] },
   { id: 'ftp',     icon: '⚡', label: 'FTP',           sports: ['cycling'] },
 ];
@@ -94,6 +95,7 @@ function LangToggle({ lang, onChange, compact }: { lang: Lang; onChange: (l: Lan
 const NAV_LABEL_KEY: Record<PageId, string> = {
   feed:    'nav.activities',
   planner: 'nav.planner',
+  compare: 'nav.compare',
   map:     'nav.map',
   stats:   'nav.stats',
   ftp:     'nav.ftp',

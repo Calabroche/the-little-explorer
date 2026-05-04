@@ -6,6 +6,7 @@ import {
 import { tokens, Activity, GlobalStats } from '../tokens';
 import { SectionTag, Label, useIsMobile } from '../ui';
 import { ActivityCard } from '../ActivityCard';
+import { ActivityCalendar } from '../ActivityCalendar';
 import { useT } from '@/i18n';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -395,6 +396,7 @@ export function FeedPage({ activities, stats, onSelect }: Props) {
         <em style={{ color: tokens.terra, fontStyle: 'italic', fontWeight: 700 }}>{t('feed.headlineEm')}</em>
       </h1>
 
+      <ActivityCalendar activities={activities} />
       <TrainingProgram activities={activities} />
       <Last5Stats activities={activities} />
 

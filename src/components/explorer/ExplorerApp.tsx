@@ -11,6 +11,7 @@ import { StatsPage } from './pages/StatsPage';
 import { PhotosPage } from './pages/PhotosPage';
 import { PlannerPage } from './pages/PlannerPage';
 import { FtpPage } from './pages/FtpPage';
+import { ComparePage } from './pages/ComparePage';
 import { AnalysisPage } from './AnalysisPage';
 
 // ── URL <-> state helpers ────────────────────────────────────────────────────
@@ -18,6 +19,7 @@ import { AnalysisPage } from './AnalysisPage';
 const PAGE_PATHS: Record<PageId, string> = {
   feed:    '/',
   planner: '/planificateur',
+  compare: '/comparer',
   map:     '/carte',
   stats:   '/stats',
   ftp:     '/ftp',
@@ -26,6 +28,7 @@ const PAGE_PATHS: Record<PageId, string> = {
 
 function pathToPage(pathname: string): PageId {
   if (pathname.startsWith('/planificateur')) return 'planner';
+  if (pathname.startsWith('/comparer'))      return 'compare';
   if (pathname.startsWith('/carte'))         return 'map';
   if (pathname.startsWith('/stats'))         return 'stats';
   if (pathname.startsWith('/ftp'))           return 'ftp';
@@ -173,6 +176,7 @@ export function ExplorerApp() {
   const pageContent: Record<PageId, React.ReactNode> = {
     feed:    <FeedPage    activities={filteredActivities} stats={filteredStats!} onSelect={openActivity} />,
     planner: <PlannerPage activities={filteredActivities} />,
+    compare: <ComparePage activities={filteredActivities} />,
     map:     <MapPage     activities={filteredActivities} selectedActivity={selectedActivityForMap} />,
     stats:   <StatsPage   activities={filteredActivities} stats={filteredStats!} />,
     ftp:     <FtpPage     activities={filteredActivities} />,

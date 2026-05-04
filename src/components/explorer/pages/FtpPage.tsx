@@ -7,6 +7,7 @@ import {
 import { tokens, Activity } from '../tokens';
 import { SectionTag, Label, useIsMobile } from '../ui';
 import { useT } from '@/i18n';
+import { FtpEvolution } from '../FtpEvolution';
 
 const RIDER_KG = 66;
 const DEFAULT_FTP_W = 291;
@@ -150,6 +151,9 @@ export function FtpPage({ activities }: { activities: Activity[] }) {
           <strong style={{ color: tokens.ink }}>{t('ftp.howTitle')}</strong> {t('ftp.howBody')}
         </div>
       </div>
+
+      {/* FTP evolution over time */}
+      <FtpEvolution activities={ftpActivities} />
 
       {/* Power-Duration Curve */}
       <div style={CARD}>
