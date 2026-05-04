@@ -7,6 +7,7 @@ import type { Lang } from '@/i18n';
 
 export type PageId = 'feed' | 'planner' | 'map' | 'stats' | 'photos' | 'ftp' | 'compare';
 export type SportId = 'cycling' | 'running';
+export type UserId  = 'florian' | 'helena';
 
 const ALL_NAV_ITEMS: { id: PageId; icon: string; label: string; sports: SportId[] }[] = [
   { id: 'feed',    icon: '◎', label: 'Activités',     sports: ['cycling', 'running'] },
@@ -25,6 +26,40 @@ interface Props {
   mobile?: boolean;
   sport: SportId;
   onSportChange: (s: SportId) => void;
+  user: UserId;
+  onUserChange: (u: UserId) => void;
+}
+
+function UserToggle({ user, onChange, compact }: { user: UserId; onChange: (u: UserId) => void; compact?: boolean }) {
+  const opts: { id: UserId; label: string }[] = [
+    { id: 'florian', label: 'Florian' },
+    { id: 'helena',  label: 'Helena'  },
+  ];
+  return (
+    <div style={{
+      display: 'flex', gap: 4, padding: 3,
+      background: tokens.creamDark, borderRadius: 4,
+      border: `1px solid ${tokens.creamBorder}`,
+    }}>
+      {opts.map(o => {
+        const active = user === o.id;
+        return (
+          <button key={o.id} onClick={() => onChange(o.id)} style={{
+            flex: 1,
+            padding: compact ? '4px 6px' : '6px 8px',
+            border: 'none', cursor: 'pointer', borderRadius: 3,
+            background: active ? tokens.terra : 'transparent',
+            color: active ? '#fff' : tokens.inkMid,
+            fontFamily: "'Space Grotesk'", fontSize: compact ? 10 : 11,
+            fontWeight: active ? 700 : 500, letterSpacing: '0.05em',
+            transition: 'all 0.12s',
+          }}>
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 function SportToggle({ sport, onChange, compact }: { sport: SportId; onChange: (s: SportId) => void; compact?: boolean }) {
@@ -102,7 +137,7 @@ const NAV_LABEL_KEY: Record<PageId, string> = {
   photos:  'nav.photos',
 };
 
-export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobile, sport, onSportChange }: Props) {
+export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobile, sport, onSportChange, user, onUserChange }: Props) {
   const { t, lang, setLang } = useT();
   const navItems = ALL_NAV_ITEMS.filter(n => n.sports.includes(sport));
   if (mobile) {
@@ -115,8 +150,9 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
         paddingBottom: 'env(safe-area-inset-bottom)',
       }}>
       <div style={{ padding: '6px 8px', borderBottom: `1px solid ${tokens.creamBorder}`, display: 'flex', gap: 6 }}>
+        <div style={{ flex: 2 }}><UserToggle  user={user}   onChange={onUserChange}  compact /></div>
         <div style={{ flex: 2 }}><SportToggle sport={sport} onChange={onSportChange} compact /></div>
-        <div style={{ flex: 1 }}><LangToggle lang={lang} onChange={setLang} compact /></div>
+        <div style={{ flex: 1 }}><LangToggle  lang={lang}   onChange={setLang}       compact /></div>
       </div>
       <div style={{ height: 60, display: 'flex' }}>
         {navItems.map(item => {
@@ -171,10 +207,15 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
             {darkMode ? '◑' : '◐'}
           </button>
         </div>
-        <Label style={{ marginTop: 6, display: 'block' }}>Florian Calabrese</Label>
+        <Label style={{ marginTop: 6, display: 'block' }}>{user === 'helena' ? 'Helena' : 'Florian Calabrese'}</Label>
       </div>
 
       <div style={{ padding: '14px 12px 4px' }}>
+        <Label style={{ display: 'block', marginBottom: 6 }}>PROFIL</Label>
+        <UserToggle user={user} onChange={onUserChange} />
+      </div>
+
+      <div style={{ padding: '10px 12px 4px' }}>
         <Label style={{ display: 'block', marginBottom: 6 }}>{t('common.sport')}</Label>
         <SportToggle sport={sport} onChange={onSportChange} />
       </div>

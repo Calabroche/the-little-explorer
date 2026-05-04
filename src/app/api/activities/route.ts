@@ -1,13 +1,14 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 
-// Force dynamic rendering : la route lit `data/activities/` à chaque requête
-// (sinon Next.js 13 app-router la rend statique au build et le CDN sert un
-// résultat figé même après ajout de nouveaux fichiers).
+// Force dynamic rendering : la route lit `data/users/<user>/activities/` à
+// chaque requête (sinon Next.js 13 app-router la rend statique au build et le
+// CDN sert un résultat figé même après ajout de nouveaux fichiers).
 export const dynamic = 'force-dynamic';
 
-const DATA_DIR      = path.join(process.cwd(), 'data', 'activities');
+const DATA_BASE     = path.join(process.cwd(), 'data', 'users');
+const VALID_USERS   = new Set(['florian', 'helena']);
 const WEATHER_CACHE = path.join(process.cwd(), 'data', 'weather_cache.json'); // read-only on serverless
 
 // ── Physics & training constants ──────────────────────────────────────────────
@@ -353,13 +354,22 @@ function transform(
 }
 
 // ── API handler ───────────────────────────────────────────────────────────────
-export async function GET() {
-  if (!fs.existsSync(DATA_DIR)) return NextResponse.json([]);
+export async function GET(req: NextRequest) {
+  const userParam = req.nextUrl.searchParams.get('user') ?? 'florian';
+  const user = VALID_USERS.has(userParam) ? userParam : 'florian';
+  const dataDir = path.join(DATA_BASE, user, 'activities');
+  if (!fs.existsSync(dataDir)) return NextResponse.json([], {
+    headers: {
+      'Cache-Control': 'no-store, must-revalidate',
+      'CDN-Cache-Control': 'no-store',
+      'Vercel-CDN-Cache-Control': 'no-store',
+    },
+  });
 
   const raws = fs
-    .readdirSync(DATA_DIR)
+    .readdirSync(dataDir)
     .filter(f => f.endsWith('.json'))
-    .map(f => JSON.parse(fs.readFileSync(path.join(DATA_DIR, f), 'utf8')));
+    .map(f => JSON.parse(fs.readFileSync(path.join(dataDir, f), 'utf8')));
 
   raws.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
