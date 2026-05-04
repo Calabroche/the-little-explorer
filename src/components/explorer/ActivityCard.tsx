@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import { Activity, tokens } from './tokens';
 import { TypeBadge, Label, StatChip, useIsMobile } from './ui';
 import { useT, formatDateLocale } from '@/i18n';
+import { formatPace } from '@/utils/format';
 
 const CardMap = dynamic(() => import('./CardMap').then(m => m.CardMap), { ssr: false });
 
@@ -73,8 +74,10 @@ export function ActivityCard({ activity, onClick }: { activity: Activity; onClic
           }}>
             <StatChip label={t('card.duration')} value={activity.duration}  unit="" />
             <StatChip label={t('card.distance')} value={activity.distance}  unit="km" />
-            {activity.speed     != null && <StatChip label={t('card.avgSpeed')} value={activity.speed}     unit="km/h" />}
-            {activity.max_speed != null && <StatChip label={t('card.maxSpeed')} value={activity.max_speed} unit="km/h" />}
+            {activity.type === 'running' && activity.pace_s_per_km != null
+              ? <StatChip label={t('card.pace')} value={formatPace(activity.pace_s_per_km)} unit="/km" />
+              : activity.speed     != null && <StatChip label={t('card.avgSpeed')} value={activity.speed}     unit="km/h" />}
+            {activity.type !== 'running' && activity.max_speed != null && <StatChip label={t('card.maxSpeed')} value={activity.max_speed} unit="km/h" />}
             <StatChip label={t('card.elev')}     value={activity.elevation} unit="m" />
             {activity.max_incline != null && <StatChip label={'▲ ' + t('metric.slopeMaxLabel')} value={`+${activity.max_incline}`} unit="%" />}
             {activity.min_incline != null && <StatChip label={'▼ ' + t('metric.slopeMinLabel')} value={activity.min_incline}       unit="%" />}

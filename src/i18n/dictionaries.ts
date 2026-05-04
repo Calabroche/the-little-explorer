@@ -39,6 +39,7 @@ export const dict = {
     nav: {
       activities: 'Activités',
       planner:    'Planificateur',
+      compare:    'Comparer',
       map:        'Carte',
       stats:      'Stats',
       ftp:        'FTP',
@@ -326,6 +327,41 @@ export const dict = {
       showers:  'Averses',
       storm:    'Orage',
     },
+
+    // ── New features ────────────────────────────────────────────────────────
+    gpx: {
+      download: 'TÉLÉCHARGER GPX',
+      tooltip:  'Télécharger le tracé en GPX (Garmin, Wahoo, Strava)',
+    },
+    calendar: {
+      tag:      '§ CALENDRIER',
+      label:    '12 DERNIÈRES SEMAINES',
+      legend:   'Moins',
+      legendHi: 'Plus',
+      tooltipNone: 'Aucune sortie',
+      tooltipOne:  '1 sortie · {km} km · TSS {tss}',
+      tooltipMany: '{n} sorties · {km} km · TSS {tss}',
+      monShort: ['L', 'M', 'M', 'J', 'V', 'S', 'D'],
+    },
+    ftpEvol: {
+      tag:      '§ ÉVOLUTION',
+      label:    'PROGRESSION FTP DANS LE TEMPS',
+      empty:    'Pas assez de données pour tracer une courbe (il faut plusieurs sorties avec un best 20 min).',
+      newPr:    'Nouveau record',
+    },
+    compare: {
+      sectionTag: 'COMPARER 2 SORTIES',
+      headline:   'Comparer.',
+      headlineEm: 'Côte à côte.',
+      pickFirst:  'Sortie A',
+      pickSecond: 'Sortie B',
+      pickPlaceholder: '— choisis une sortie —',
+      noPick:     'Sélectionne deux sorties pour démarrer la comparaison.',
+      diff:       'Δ',
+      stats:      'STATISTIQUES',
+      hrChart:    'FRÉQUENCE CARDIAQUE — overlay',
+      pwrChart:   'PUISSANCE — overlay',
+    },
   },
 
   en: {
@@ -362,6 +398,7 @@ export const dict = {
     nav: {
       activities: 'Activities',
       planner:    'Planner',
+      compare:    'Compare',
       map:        'Map',
       stats:      'Stats',
       ftp:        'FTP',
@@ -646,6 +683,41 @@ export const dict = {
       snow:     'Snow',
       showers:  'Showers',
       storm:    'Storm',
+    },
+
+    // ── New features ────────────────────────────────────────────────────────
+    gpx: {
+      download: 'DOWNLOAD GPX',
+      tooltip:  'Download the route as GPX (Garmin, Wahoo, Strava)',
+    },
+    calendar: {
+      tag:      '§ CALENDAR',
+      label:    'LAST 12 WEEKS',
+      legend:   'Less',
+      legendHi: 'More',
+      tooltipNone: 'No activity',
+      tooltipOne:  '1 activity · {km} km · TSS {tss}',
+      tooltipMany: '{n} activities · {km} km · TSS {tss}',
+      monShort: ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
+    },
+    ftpEvol: {
+      tag:      '§ TREND',
+      label:    'FTP PROGRESSION OVER TIME',
+      empty:    'Not enough data to plot a curve (multiple rides with a best 20 min are needed).',
+      newPr:    'New PR',
+    },
+    compare: {
+      sectionTag: 'COMPARE 2 RIDES',
+      headline:   'Compare.',
+      headlineEm: 'Side by side.',
+      pickFirst:  'Ride A',
+      pickSecond: 'Ride B',
+      pickPlaceholder: '— pick a ride —',
+      noPick:     'Pick two rides to start comparing.',
+      diff:       'Δ',
+      stats:      'STATS',
+      hrChart:    'HEART RATE — overlay',
+      pwrChart:   'POWER — overlay',
     },
   },
 } as const;

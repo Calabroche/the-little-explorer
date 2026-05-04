@@ -9,6 +9,7 @@ import {
 import { Activity, tokens } from './tokens';
 import { Label, TypeBadge, StatChip, useIsMobile } from './ui';
 import { useT, formatDateLocale } from '@/i18n';
+import { formatPace } from '@/utils/format';
 
 const ActivityRouteMap = dynamic(
   () => import('./ActivityRouteMap').then(m => m.ActivityRouteMap),
@@ -366,8 +367,10 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
       <div style={{ ...CARD_STYLE, display: 'flex', flexWrap: 'wrap', marginBottom: 20 }}>
         <StatChip label={t('analysis.duration')} value={activity.duration}  unit="" />
         <StatChip label={t('analysis.distance')} value={activity.distance}  unit="km" />
-        {activity.speed     != null && <StatChip label={t('analysis.avgSpeed')} value={activity.speed}      unit="km/h" />}
-        {activity.max_speed != null && <StatChip label={t('analysis.maxSpeed')} value={activity.max_speed}  unit="km/h" />}
+        {activity.type === 'running' && activity.pace_s_per_km != null
+          ? <StatChip label={t('analysis.pace')} value={formatPace(activity.pace_s_per_km)} unit="/km" />
+          : activity.speed != null && <StatChip label={t('analysis.avgSpeed')} value={activity.speed}      unit="km/h" />}
+        {activity.type !== 'running' && activity.max_speed != null && <StatChip label={t('analysis.maxSpeed')} value={activity.max_speed}  unit="km/h" />}
         <StatChip label={t('analysis.climb')}    value={activity.elevation} unit="m" />
         {activity.avg_hr    != null && <StatChip label={t('analysis.hrAvg')} value={activity.avg_hr}     unit="bpm" />}
         {activity.max_hr    != null && <StatChip label={t('analysis.hrMax')} value={activity.max_hr}     unit="bpm" />}

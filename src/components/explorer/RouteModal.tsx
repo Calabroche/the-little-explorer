@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { tokens } from './tokens';
 import { Label, useIsMobile } from './ui';
 import { useT } from '@/i18n';
+import { downloadGpx } from '@/utils/gpx';
 
 const RouteModalMap = dynamic(
   () => import('./RouteModalMap').then(m => m.RouteModalMap),
@@ -124,10 +125,23 @@ export function RouteModal({
               </span>
             )}
           </div>
-          <button onClick={onClose} style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            fontFamily: "'Space Grotesk'", fontSize: 18, color: tokens.inkLight, lineHeight: 1,
-          }}>✕</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            <button
+              onClick={() => downloadGpx(route, `${proposal.title} — ${proposal.tracks[selectedIdx].name}`)}
+              disabled={loading || route.length === 0}
+              title={t('gpx.tooltip')}
+              style={{
+                background: proposal.color, border: 'none', cursor: loading || route.length === 0 ? 'not-allowed' : 'pointer',
+                color: 'white', padding: '7px 12px', borderRadius: 3,
+                fontFamily: "'Space Grotesk'", fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
+                opacity: loading || route.length === 0 ? 0.4 : 1,
+              }}
+            >↓ {isMobile ? 'GPX' : t('gpx.download')}</button>
+            <button onClick={onClose} style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              fontFamily: "'Space Grotesk'", fontSize: 18, color: tokens.inkLight, lineHeight: 1,
+            }}>✕</button>
+          </div>
         </div>
 
         <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', flex: 1, overflow: isMobile ? 'auto' : 'hidden' }}>
