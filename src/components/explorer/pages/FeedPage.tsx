@@ -7,6 +7,10 @@ import { tokens, Activity, GlobalStats } from '../tokens';
 import { SectionTag, Label, useIsMobile } from '../ui';
 import { ActivityCard } from '../ActivityCard';
 import { ActivityCalendar } from '../ActivityCalendar';
+import { Goals } from '../Goals';
+import { PersonalRecords } from '../PersonalRecords';
+import { RunPaceZones } from '../RunPaceZones';
+import type { SportId } from '../Sidebar';
 import { useT } from '@/i18n';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -382,10 +386,11 @@ function Last5Stats({ activities }: { activities: Activity[] }) {
 interface Props {
   activities: Activity[];
   stats: GlobalStats;
+  sport: SportId;
   onSelect: (a: Activity) => void;
 }
 
-export function FeedPage({ activities, stats, onSelect }: Props) {
+export function FeedPage({ activities, stats, sport, onSelect }: Props) {
   const isMobile = useIsMobile();
   const { t } = useT();
   return (
@@ -405,10 +410,13 @@ export function FeedPage({ activities, stats, onSelect }: Props) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <TrainingProgram activities={activities} />
         </div>
-        <div style={{ flexShrink: 0, alignSelf: isMobile ? 'auto' : 'flex-start' }}>
+        <div style={{ flexShrink: 0, alignSelf: isMobile ? 'auto' : 'flex-start', display: 'flex', flexDirection: 'column' }}>
           <ActivityCalendar activities={activities} />
+          <Goals activities={activities} />
         </div>
       </div>
+      <PersonalRecords activities={activities} sport={sport} />
+      {sport === 'running' && <RunPaceZones activities={activities} />}
       <Last5Stats activities={activities} />
 
       {activities.map(a => <ActivityCard key={a.id} activity={a} onClick={onSelect} />)}

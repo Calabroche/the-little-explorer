@@ -174,7 +174,7 @@ export function ExplorerApp() {
   const filteredStats = stats ? { ...stats, totalActivities: filteredActivities.length } : null;
 
   const pageContent: Record<PageId, React.ReactNode> = {
-    feed:    <FeedPage    activities={filteredActivities} stats={filteredStats!} onSelect={openActivity} />,
+    feed:    <FeedPage    activities={filteredActivities} stats={filteredStats!} sport={sport} onSelect={openActivity} />,
     planner: <PlannerPage activities={filteredActivities} />,
     compare: <ComparePage activities={filteredActivities} />,
     map:     <MapPage     activities={filteredActivities} selectedActivity={selectedActivityForMap} />,
