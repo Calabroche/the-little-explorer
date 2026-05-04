@@ -1,0 +1,43 @@
+name: Sync Strava activities
+
+on:
+  schedule:
+    # Every 15 minutes. GitHub Actions cron runs in UTC. Note: cron schedules
+    # on Hobby repos can be delayed during peak hours, so the real cadence is
+    # closer to "20-30 minutes most of the time".
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run sync
+        env:
+          STRAVA_CLIENT_ID:     ${{ secrets.STRAVA_CLIENT_ID }}
+          STRAVA_CLIENT_SECRET: ${{ secrets.STRAVA_CLIENT_SECRET }}
+          STRAVA_REFRESH_TOKEN: ${{ secrets.STRAVA_REFRESH_TOKEN }}
+        run: node scripts/sync-strava.mjs
+
+      - name: Commit & push if changes
+        run: |
+          if [[ -n "$(git status --porcelain data/activities)" ]]; then
+            git config user.name  'strava-sync[bot]'
+            git config user.email 'strava-sync@users.noreply.github.com'
+            git add data/activities
+            git commit -m "chore: auto-sync Strava activities"
+            git push
+          else
+            echo "No new activities."
+          fi
