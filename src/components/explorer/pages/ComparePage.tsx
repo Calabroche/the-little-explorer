@@ -11,46 +11,103 @@ import { formatPace } from '@/utils/format';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-function decimate<T>(arr: T[], maxPoints: number): T[] {
-  if (arr.length <= maxPoints) return arr;
-  const step = arr.length / maxPoints;
-  const out: T[] = [];
-  for (let i = 0; i < maxPoints; i++) out.push(arr[Math.floor(i * step)]);
+// Constants for client-side power estimation (mirrors src/app/api/activities/route.ts)
+const MASS = 74.18, G = 9.81, CRR = 0.004, CDA = 0.3, RHO = 1.225;
+const Fr = MASS * G * CRR;
+
+function powerAt(speedKmh: number, gradient: number): number {
+  const v  = speedKmh / 3.6;
+  const Fg = MASS * G * gradient;
+  const Fa = 0.5 * RHO * CDA * v * v;
+  return Math.max(0, Math.round((Fg + Fr + Fa) * v));
+}
+
+interface DistPoint {
+  km:     number;
+  hrA:    number | null; hrB:    number | null;
+  speedA: number | null; speedB: number | null;
+  altA:   number | null; altB:   number | null;
+  pwrA:   number | null; pwrB:   number | null;
+  paceA:  number | null; paceB:  number | null; // sec/km, instantaneous
+}
+
+// Sample a 1-Hz stream at fixed-distance buckets (every STEP_KM along the
+// ride). Returns one value per bucket — null when the ride didn't reach that
+// distance, or when the stream is missing entirely.
+function sampleByDistance(
+  stream: number[],
+  dist: number[],
+  N: number,
+  stepKm: number,
+): (number | null)[] {
+  if (stream.length === 0 || dist.length === 0) return new Array(N).fill(null);
+  const out: (number | null)[] = new Array(N).fill(null);
+  let idx = 0;
+  for (let i = 0; i < N; i++) {
+    const targetM = i * stepKm * 1000;
+    while (idx < dist.length - 1 && dist[idx] < targetM) idx++;
+    out[i] = idx < stream.length ? stream[idx] : null;
+  }
   return out;
 }
 
-interface ChartPoint {
-  pct:  number;       // 0..100, % of ride distance
-  hrA:  number | null;
-  hrB:  number | null;
-  pwrA: number | null;
-  pwrB: number | null;
+function buildOverlay(a: Activity | null, b: Activity | null): DistPoint[] {
+  if (!a || !b) return [];
+  const maxKm = Math.max(a.distance, b.distance);
+  // Cap to ~200 buckets so the chart stays performant on long rides.
+  const stepKm = Math.max(0.1, +(maxKm / 200).toFixed(2));
+  const N = Math.ceil(maxKm / stepKm) + 1;
+
+  const sampleAct = (act: Activity) => {
+    const dist = act.distance_m ?? [];
+    return {
+      hr:    sampleByDistance(act.heartrate ?? [], dist, N, stepKm),
+      speed: sampleByDistance(act.speed_kmh ?? [], dist, N, stepKm),
+      alt:   sampleByDistance(act.altitude  ?? [], dist, N, stepKm),
+      // Compute gradient at each bucket so we can derive power for cycling
+      // and a smoothed pace for running.
+      grad:  computeGradient(act.altitude ?? [], dist, N, stepKm),
+    };
+  };
+  const A = sampleAct(a);
+  const B = sampleAct(b);
+
+  const isRunningPair = a.type === 'running' || b.type === 'running';
+
+  const out: DistPoint[] = [];
+  for (let i = 0; i < N; i++) {
+    const km = +(i * stepKm).toFixed(2);
+    const stillA = km <= a.distance + 0.01;
+    const stillB = km <= b.distance + 0.01;
+    const hrA    = stillA ? (A.hr[i]    as number | null) : null;
+    const hrB    = stillB ? (B.hr[i]    as number | null) : null;
+    const spA    = stillA ? (A.speed[i] as number | null) : null;
+    const spB    = stillB ? (B.speed[i] as number | null) : null;
+    const altA   = stillA ? (A.alt[i]   as number | null) : null;
+    const altB   = stillB ? (B.alt[i]   as number | null) : null;
+    const pwrA = (!isRunningPair && stillA && spA != null) ? powerAt(spA, A.grad[i] / 100) : null;
+    const pwrB = (!isRunningPair && stillB && spB != null) ? powerAt(spB, B.grad[i] / 100) : null;
+    // Pace s/km from instantaneous speed (km/h). Skip zero/very low speeds.
+    const paceA = (isRunningPair && stillA && spA != null && spA > 1) ? Math.round(3600 / spA) : null;
+    const paceB = (isRunningPair && stillB && spB != null && spB > 1) ? Math.round(3600 / spB) : null;
+    out.push({ km, hrA, hrB, speedA: spA, speedB: spB, altA, altB, pwrA, pwrB, paceA, paceB });
+  }
+  return out;
 }
 
-function buildOverlay(a: Activity | null, b: Activity | null): ChartPoint[] {
-  if (!a || !b) return [];
-  const N = 180;
-  const sample = (act: Activity, key: 'heartrate' | 'speed_kmh') => {
-    const arr = act[key] ?? [];
-    if (arr.length === 0) return new Array<number | null>(N).fill(null);
-    return decimate(arr, N);
-  };
-  // Power proxy : on n'a pas de stream de puissance dans l'API public → on
-  // utilise speed_kmh comme proxy (pour la course, ça donne une "intensité").
-  // Pour la vélo, le NP/AP servent mieux mais ils sont scalaires.
-  const hrA  = sample(a, 'heartrate');
-  const hrB  = sample(b, 'heartrate');
-  const spA  = sample(a, 'speed_kmh');
-  const spB  = sample(b, 'speed_kmh');
-  const out: ChartPoint[] = [];
+function computeGradient(altitude: number[], dist: number[], N: number, stepKm: number): number[] {
+  const out = new Array(N).fill(0);
+  if (altitude.length < 5 || dist.length < 5) return out;
+  let idx = 0;
   for (let i = 0; i < N; i++) {
-    out.push({
-      pct: +((i / (N - 1)) * 100).toFixed(1),
-      hrA:  (hrA[i] as number | null) ?? null,
-      hrB:  (hrB[i] as number | null) ?? null,
-      pwrA: (spA[i] as number | null) ?? null,
-      pwrB: (spB[i] as number | null) ?? null,
-    });
+    const targetM = i * stepKm * 1000;
+    while (idx < dist.length - 1 && dist[idx] < targetM) idx++;
+    // 60-sample window (about 60s) to smooth out altitude noise.
+    const lo = Math.max(0, idx - 30);
+    const hi = Math.min(altitude.length - 1, idx + 30);
+    const dAlt  = altitude[hi] - altitude[lo];
+    const dDist = (dist[hi] ?? 0) - (dist[lo] ?? 0);
+    out[i] = dDist > 5 ? Math.max(-25, Math.min(25, +((dAlt / dDist) * 100).toFixed(1))) : 0;
   }
   return out;
 }
@@ -81,18 +138,86 @@ function StatRow({ label, va, vb, unit, color }: {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function CompareTooltip({ active, payload, label }: any) {
+function CompareTooltip({ active, payload, label, unit, format }: any) {
   if (!active || !payload?.length) return null;
+  const fmt = format ?? ((v: number) => Math.round(v));
   return (
     <div style={{
       background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
       borderRadius: 4, padding: '8px 10px',
       fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.ink,
     }}>
-      <div style={{ fontWeight: 700 }}>{label}% of ride</div>
+      <div style={{ fontWeight: 700 }}>km {label}</div>
       {payload.map((p: { name: string; value: number; color: string }, i: number) => (
-        <div key={i} style={{ color: p.color }}>{p.name} : <strong>{Math.round(p.value)}</strong></div>
+        p.value == null ? null :
+        <div key={i} style={{ color: p.color }}>
+          {p.name} : <strong>{fmt(p.value)}{unit ?? ''}</strong>
+        </div>
       ))}
+    </div>
+  );
+}
+
+interface OverlayChartProps {
+  title:    string;
+  data:     DistPoint[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  keyA:     keyof DistPoint;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  keyB:     keyof DistPoint;
+  nameA:    string;
+  nameB:    string;
+  unit:     string;
+  // For pace : higher = slower. We invert the Y axis so faster (smaller s/km)
+  // appears at the top, matching how runners read it.
+  reversed?: boolean;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  format?:   (v: number) => string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  yTickFormatter?: (v: any) => string;
+}
+
+function OverlayChart({ title, data, keyA, keyB, nameA, nameB, unit, reversed, format, yTickFormatter }: OverlayChartProps) {
+  const CARD: React.CSSProperties = {
+    background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
+    borderRadius: 4, padding: 24, marginBottom: 16,
+  };
+  // Skip the chart entirely when neither ride has any data for this metric.
+  const hasData = data.some(d => d[keyA] != null || d[keyB] != null);
+  return (
+    <div style={CARD}>
+      <Label style={{ display: 'block', marginBottom: 12 }}>{title}</Label>
+      {!hasData ? (
+        <div style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight, padding: 8 }}>
+          Pas de données pour cette métrique.
+        </div>
+      ) : (
+        <div style={{ width: '100%', height: 220 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={data} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={tokens.creamBorder} />
+              <XAxis dataKey="km" type="number" domain={[0, 'dataMax']}
+                tick={{ fontFamily: "'Space Grotesk'", fontSize: 10, fill: tokens.inkLight }}
+                tickFormatter={v => `${v} km`}
+                tickLine={false}
+              />
+              <YAxis width={48}
+                tick={{ fontFamily: "'Space Grotesk'", fontSize: 10, fill: tokens.inkLight }}
+                tickLine={false} axisLine={false}
+                domain={['auto', 'auto']}
+                reversed={reversed}
+                tickFormatter={yTickFormatter ?? (v => `${v}`)}
+              />
+              <Tooltip content={<CompareTooltip unit={unit} format={format} />} />
+              <Legend wrapperStyle={{ fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight }} />
+              {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+              <Line type="monotone" dataKey={keyA as any} name={nameA} stroke={tokens.terra} strokeWidth={2} dot={false} connectNulls={false} />
+              {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+              <Line type="monotone" dataKey={keyB as any} name={nameB} stroke={tokens.green} strokeWidth={2} dot={false} connectNulls={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
     </div>
   );
 }
@@ -183,59 +308,44 @@ export function ComparePage({ activities }: { activities: Activity[] }) {
             {(a.calories  != null || b.calories  != null) && <StatRow label={t('analysis.cal')}    va={a.calories}  vb={b.calories}  unit="kcal" />}
           </div>
 
-          {/* HR overlay */}
-          <div style={CARD}>
-            <Label style={{ display: 'block', marginBottom: 14 }}>{t('compare.hrChart')}</Label>
-            <div style={{ width: '100%', height: 240 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={data} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={tokens.creamBorder} />
-                  <XAxis dataKey="pct" type="number" domain={[0, 100]}
-                    tick={{ fontFamily: "'Space Grotesk'", fontSize: 10, fill: tokens.inkLight }}
-                    tickFormatter={v => `${v}%`}
-                    tickLine={false}
+          {(() => {
+            const isRunning = a.type === 'running' || b.type === 'running';
+            const titleA = a.title.slice(0, 30);
+            const titleB = b.title.slice(0, 30);
+            return (
+              <>
+                <OverlayChart
+                  title="FRÉQUENCE CARDIAQUE (bpm)"
+                  data={data} keyA="hrA" keyB="hrB" nameA={titleA} nameB={titleB} unit=" bpm"
+                />
+                {isRunning ? (
+                  <OverlayChart
+                    title="ALLURE (min:ss / km)"
+                    data={data} keyA="paceA" keyB="paceB" nameA={titleA} nameB={titleB} unit="/km"
+                    reversed
+                    format={formatPace}
+                    yTickFormatter={(v: number) => formatPace(v)}
                   />
-                  <YAxis width={40}
-                    tick={{ fontFamily: "'Space Grotesk'", fontSize: 10, fill: tokens.inkLight }}
-                    tickLine={false} axisLine={false}
-                    domain={['auto', 'auto']}
-                    tickFormatter={v => `${v}`}
+                ) : (
+                  <OverlayChart
+                    title="VITESSE (km/h)"
+                    data={data} keyA="speedA" keyB="speedB" nameA={titleA} nameB={titleB} unit=" km/h"
+                    format={(v: number) => v.toFixed(1)}
                   />
-                  <Tooltip content={<CompareTooltip />} />
-                  <Legend wrapperStyle={{ fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight }} />
-                  <Line type="monotone" dataKey="hrA" name={a.title.slice(0, 30)} stroke={tokens.terra} strokeWidth={2} dot={false} connectNulls />
-                  <Line type="monotone" dataKey="hrB" name={b.title.slice(0, 30)} stroke={tokens.green} strokeWidth={2} dot={false} connectNulls />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* Speed overlay (proxy for power since the API doesn't ship the power stream) */}
-          <div style={CARD}>
-            <Label style={{ display: 'block', marginBottom: 14 }}>{t('compare.pwrChart')}</Label>
-            <div style={{ width: '100%', height: 240 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={data} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={tokens.creamBorder} />
-                  <XAxis dataKey="pct" type="number" domain={[0, 100]}
-                    tick={{ fontFamily: "'Space Grotesk'", fontSize: 10, fill: tokens.inkLight }}
-                    tickFormatter={v => `${v}%`}
-                    tickLine={false}
+                )}
+                <OverlayChart
+                  title="ALTITUDE (m)"
+                  data={data} keyA="altA" keyB="altB" nameA={titleA} nameB={titleB} unit=" m"
+                />
+                {!isRunning && (
+                  <OverlayChart
+                    title="PUISSANCE ESTIMÉE (W)"
+                    data={data} keyA="pwrA" keyB="pwrB" nameA={titleA} nameB={titleB} unit=" W"
                   />
-                  <YAxis width={40}
-                    tick={{ fontFamily: "'Space Grotesk'", fontSize: 10, fill: tokens.inkLight }}
-                    tickLine={false} axisLine={false}
-                    domain={['auto', 'auto']}
-                    tickFormatter={v => `${v}`}
-                  />
-                  <Tooltip content={<CompareTooltip />} />
-                  <Legend wrapperStyle={{ fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight }} />
-                  <Line type="monotone" dataKey="pwrA" name={a.title.slice(0, 30)} stroke={tokens.terra} strokeWidth={2} dot={false} connectNulls />
-                  <Line type="monotone" dataKey="pwrB" name={b.title.slice(0, 30)} stroke={tokens.green} strokeWidth={2} dot={false} connectNulls />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+                )}
+              </>
+            );
+          })()}
         </>
       )}
     </div>
