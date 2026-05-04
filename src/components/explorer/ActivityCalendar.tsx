@@ -110,46 +110,52 @@ export function ActivityCalendar({ activities }: { activities: Activity[] }) {
     return col[0]?.date.toLocaleDateString(lang === 'en' ? 'en-US' : 'fr-FR', { month: 'short' }).replace('.', '');
   });
 
+  // Tailles fixes — un poil plus grosses que la heatmap GitHub (≈11px) mais
+  // beaucoup plus petites que le rendu pleine largeur d'avant.
+  const CELL = 14;
+  const GAP  = 3;
+  const LABEL_W = 14;
+
   const CARD: React.CSSProperties = {
     background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
-    borderRadius: 4, padding: 24, marginBottom: 32,
+    borderRadius: 4, padding: '14px 16px', marginBottom: 24,
   };
 
   return (
     <div style={CARD}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10, justifyContent: 'space-between', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Label style={{ color: tokens.terra }}>{t('calendar.tag')}</Label>
-          <div style={{ width: 24, height: 1, background: tokens.creamBorder }} />
+          <div style={{ width: 16, height: 1, background: tokens.creamBorder }} />
           <Label>{t('calendar.label')}</Label>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: "'Space Grotesk'", fontSize: 9, color: tokens.inkLight }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: "'Space Grotesk'", fontSize: 9, color: tokens.inkLight }}>
           <span>{t('calendar.legend')}</span>
           {LEGEND_COLORS.map((c, i) => (
-            <span key={i} style={{ display: 'inline-block', width: 10, height: 10, background: c, border: `1px solid ${tokens.creamBorder}`, borderRadius: 2 }} />
+            <span key={i} style={{ display: 'inline-block', width: 9, height: 9, background: c, border: `1px solid ${tokens.creamBorder}`, borderRadius: 2 }} />
           ))}
           <span>{t('calendar.legendHi')}</span>
         </div>
       </div>
 
-      <div style={{ position: 'relative' }}>
+      <div style={{ position: 'relative', display: 'inline-block' }}>
         {/* Month row */}
         <div style={{
-          display: 'grid', gridTemplateColumns: `20px repeat(${WEEKS}, 1fr)`, gap: 4,
+          display: 'grid', gridTemplateColumns: `${LABEL_W}px repeat(${WEEKS}, ${CELL}px)`, gap: GAP,
           fontFamily: "'Space Grotesk'", fontSize: 9, color: tokens.inkLight,
-          marginBottom: 4, textTransform: 'capitalize',
+          marginBottom: 3, textTransform: 'capitalize',
         }}>
           <span></span>
-          {monthLabels.map((m, i) => <span key={i}>{m}</span>)}
+          {monthLabels.map((m, i) => <span key={i} style={{ overflow: 'visible', whiteSpace: 'nowrap' }}>{m}</span>)}
         </div>
 
-        {/* 7 rows of cells, with day labels on the left. */}
+        {/* 7 rows of cells */}
         {[0, 1, 2, 3, 4, 5, 6].map(row => (
           <div key={row} style={{
-            display: 'grid', gridTemplateColumns: `20px repeat(${WEEKS}, 1fr)`, gap: 4, marginBottom: 4,
+            display: 'grid', gridTemplateColumns: `${LABEL_W}px repeat(${WEEKS}, ${CELL}px)`, gap: GAP, marginBottom: GAP,
             alignItems: 'center',
           }}>
-            <span style={{ fontFamily: "'Space Grotesk'", fontSize: 9, color: tokens.inkLight, textAlign: 'center' }}>
+            <span style={{ fontFamily: "'Space Grotesk'", fontSize: 9, color: tokens.inkLight, textAlign: 'center', lineHeight: `${CELL}px` }}>
               {row % 2 === 0 ? dayShort[row] : ''}
             </span>
             {cols.map((col, w) => {
@@ -161,25 +167,26 @@ export function ActivityCalendar({ activities }: { activities: Activity[] }) {
                   onMouseEnter={() => setHover(c)}
                   onMouseLeave={() => setHover(null)}
                   style={{
-                    aspectRatio: '1', background: c.inFuture ? 'transparent' : bg,
+                    width: CELL, height: CELL,
+                    background: c.inFuture ? 'transparent' : bg,
                     border: `1px solid ${c.inFuture ? 'transparent' : tokens.creamBorder}`,
                     borderRadius: 2, cursor: c.activities.length > 0 ? 'pointer' : 'default',
-                    transition: 'transform 0.1s', minHeight: 12,
                   }}
                 />
               );
             })}
           </div>
         ))}
-
-        {/* Tooltip */}
-        {tooltipText && (
-          <div style={{
-            marginTop: 10, padding: '6px 10px', background: tokens.creamDark,
-            borderRadius: 3, fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkMid,
-          }}>{tooltipText}</div>
-        )}
       </div>
+
+      {/* Tooltip — line below the grid, full-width */}
+      {tooltipText && (
+        <div style={{
+          marginTop: 8, padding: '5px 9px', background: tokens.creamDark,
+          borderRadius: 3, fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkMid,
+          display: 'inline-block',
+        }}>{tooltipText}</div>
+      )}
     </div>
   );
 }
