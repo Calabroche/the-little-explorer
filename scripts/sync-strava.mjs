@@ -34,13 +34,16 @@ if (!VALID.includes(USER)) {
 }
 const DATA_DIR  = path.join(ROOT, 'data', 'users', USER, 'activities');
 
-const CLIENT_ID     = process.env.STRAVA_CLIENT_ID;
-const CLIENT_SECRET = process.env.STRAVA_CLIENT_SECRET;
-const REFRESH_TOKEN = process.env[`STRAVA_REFRESH_TOKEN_${USER.toUpperCase()}`]
-                   || process.env.STRAVA_REFRESH_TOKEN; // backward compat
+// Per-user app credentials with fallback to shared ones. This lets Florian
+// and Helena use either the same Strava app (one set of CLIENT_ID/SECRET +
+// per-user refresh tokens) or two distinct apps (full per-user creds).
+const U = USER.toUpperCase();
+const CLIENT_ID     = process.env[`STRAVA_CLIENT_ID_${U}`]     || process.env.STRAVA_CLIENT_ID;
+const CLIENT_SECRET = process.env[`STRAVA_CLIENT_SECRET_${U}`] || process.env.STRAVA_CLIENT_SECRET;
+const REFRESH_TOKEN = process.env[`STRAVA_REFRESH_TOKEN_${U}`] || process.env.STRAVA_REFRESH_TOKEN;
 
 if (!CLIENT_ID || !CLIENT_SECRET || !REFRESH_TOKEN) {
-  console.error(`Missing env for user ${USER}: STRAVA_CLIENT_ID / STRAVA_CLIENT_SECRET / STRAVA_REFRESH_TOKEN_${USER.toUpperCase()}`);
+  console.error(`Missing env for user ${USER}. Need STRAVA_CLIENT_ID(_${U}) / STRAVA_CLIENT_SECRET(_${U}) / STRAVA_REFRESH_TOKEN_${U}`);
   process.exit(1);
 }
 
