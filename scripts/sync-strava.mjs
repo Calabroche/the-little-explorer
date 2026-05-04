@@ -1,11 +1,22 @@
 #!/usr/bin/env node
 // scripts/sync-strava.mjs
-// Sync new bike rides from Strava into data/activities/.
+// Sync new activities from Strava into data/users/<USER>/activities/.
 //
 // Used by .github/workflows/strava-sync.yml (cron every 15 min) and locally
-// via `npm run sync`. Refreshes the access token, lists athlete activities,
-// imports the ones we don't already have, and writes the same JSON shape the
-// app expects.
+// via `npm run sync -- --user=florian`. Refreshes the access token, lists
+// athlete activities, imports the ones we don't already have, and writes the
+// same JSON shape the app expects.
+//
+// Per-user env vars (works for both shells and GitHub Action):
+//   STRAVA_CLIENT_ID
+//   STRAVA_CLIENT_SECRET           (Florian's app — shared, both users
+//                                  authorise against the same Strava app)
+//   STRAVA_REFRESH_TOKEN_FLORIAN
+//   STRAVA_REFRESH_TOKEN_HELENA
+//
+// Usage:
+//   USER=florian node scripts/sync-strava.mjs
+//   node scripts/sync-strava.mjs --user=helena
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -13,16 +24,27 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT      = path.resolve(__dirname, '..');
-const DATA_DIR  = path.join(ROOT, 'data', 'activities');
+
+const argUser   = (process.argv.find(a => a.startsWith('--user=')) || '').replace('--user=', '');
+const USER      = (argUser || process.env.USER_ID || process.env.USER || 'florian').toLowerCase();
+const VALID     = ['florian', 'helena'];
+if (!VALID.includes(USER)) {
+  console.error(`Unknown user "${USER}". Valid: ${VALID.join(', ')}`);
+  process.exit(1);
+}
+const DATA_DIR  = path.join(ROOT, 'data', 'users', USER, 'activities');
 
 const CLIENT_ID     = process.env.STRAVA_CLIENT_ID;
 const CLIENT_SECRET = process.env.STRAVA_CLIENT_SECRET;
-const REFRESH_TOKEN = process.env.STRAVA_REFRESH_TOKEN;
+const REFRESH_TOKEN = process.env[`STRAVA_REFRESH_TOKEN_${USER.toUpperCase()}`]
+                   || process.env.STRAVA_REFRESH_TOKEN; // backward compat
 
 if (!CLIENT_ID || !CLIENT_SECRET || !REFRESH_TOKEN) {
-  console.error('Missing env: STRAVA_CLIENT_ID / STRAVA_CLIENT_SECRET / STRAVA_REFRESH_TOKEN');
+  console.error(`Missing env for user ${USER}: STRAVA_CLIENT_ID / STRAVA_CLIENT_SECRET / STRAVA_REFRESH_TOKEN_${USER.toUpperCase()}`);
   process.exit(1);
 }
+
+console.log(`▶ Syncing for user "${USER}" → ${DATA_DIR}`);
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 

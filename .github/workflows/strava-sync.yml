@@ -14,30 +14,50 @@ permissions:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    strategy:
+      # Sync each user in series so the eventual `git push` doesn't race.
+      max-parallel: 1
+      matrix:
+        user: [florian, helena]
     steps:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          # The matrix runs sequentially so each iteration must pull the
+          # latest commits from the previous user's push.
+          fetch-depth: 0
+
+      - name: Pull latest (sequential matrix)
+        run: git pull --ff-only origin master
 
       - uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Run sync
+      - name: Sync ${{ matrix.user }}
         env:
-          STRAVA_CLIENT_ID:     ${{ secrets.STRAVA_CLIENT_ID }}
-          STRAVA_CLIENT_SECRET: ${{ secrets.STRAVA_CLIENT_SECRET }}
-          STRAVA_REFRESH_TOKEN: ${{ secrets.STRAVA_REFRESH_TOKEN }}
-        run: node scripts/sync-strava.mjs
+          STRAVA_CLIENT_ID:             ${{ secrets.STRAVA_CLIENT_ID }}
+          STRAVA_CLIENT_SECRET:         ${{ secrets.STRAVA_CLIENT_SECRET }}
+          STRAVA_REFRESH_TOKEN_FLORIAN: ${{ secrets.STRAVA_REFRESH_TOKEN_FLORIAN }}
+          STRAVA_REFRESH_TOKEN_HELENA:  ${{ secrets.STRAVA_REFRESH_TOKEN_HELENA }}
+        run: |
+          # Skip silently if this user's refresh token isn't configured yet.
+          tok_var="STRAVA_REFRESH_TOKEN_${{ matrix.user }}"
+          tok_var_upper=$(echo "$tok_var" | tr '[:lower:]' '[:upper:]')
+          if [[ -z "${!tok_var_upper}" ]]; then
+            echo "No refresh token for ${{ matrix.user }} — skipping."
+            exit 0
+          fi
+          node scripts/sync-strava.mjs --user=${{ matrix.user }}
 
       - name: Commit & push if changes
         run: |
-          if [[ -n "$(git status --porcelain data/activities)" ]]; then
+          if [[ -n "$(git status --porcelain data/users)" ]]; then
             git config user.name  'strava-sync[bot]'
             git config user.email 'strava-sync@users.noreply.github.com'
-            git add data/activities
-            git commit -m "chore: auto-sync Strava activities"
+            git add data/users
+            git commit -m "chore: auto-sync ${{ matrix.user }} activities"
             git push
           else
-            echo "No new activities."
+            echo "No new activities for ${{ matrix.user }}."
           fi

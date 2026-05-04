@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Activity, GlobalStats, deriveStats, tokens } from './tokens';
-import { Sidebar, PageId, SportId } from './Sidebar';
+import { Sidebar, PageId, SportId, UserId } from './Sidebar';
 import { useT } from '@/i18n';
 import { useIsMobile } from './ui';
 import { FeedPage } from './pages/FeedPage';
@@ -66,16 +66,19 @@ export function ExplorerApp() {
   const [loading, setLoading] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
   const [sport, setSport] = useState<SportId>('cycling');
+  const [user, setUser]   = useState<UserId>('florian');
   const isMobile = useIsMobile();
   const { t } = useT();
 
-  // Dark mode + sport persistence (localStorage — pas lié à l'URL)
+  // Dark mode + sport + user persistence (localStorage — pas lié à l'URL)
   useEffect(() => {
     const dark = localStorage.getItem('tle_dark') === '1';
     setDarkMode(dark);
     if (dark) document.documentElement.setAttribute('data-dark', '');
     const savedSport = localStorage.getItem('tle_sport') as SportId | null;
     if (savedSport === 'cycling' || savedSport === 'running') setSport(savedSport);
+    const savedUser = localStorage.getItem('tle_user') as UserId | null;
+    if (savedUser === 'florian' || savedUser === 'helena') setUser(savedUser);
   }, []);
 
   const handleSportChange = (s: SportId) => {
@@ -89,6 +92,14 @@ export function ExplorerApp() {
     }
   };
 
+  const handleUserChange = (u: UserId) => {
+    setUser(u);
+    localStorage.setItem('tle_user', u);
+    setAnalysisActivity(null);
+    setLoading(true);
+    setActivities([]);
+  };
+
   const toggleDark = () => {
     const next = !darkMode;
     setDarkMode(next);
@@ -97,16 +108,20 @@ export function ExplorerApp() {
     localStorage.setItem('tle_dark', next ? '1' : '0');
   };
 
-  // Charge les activités une fois.
+  // Recharge les activités quand l'utilisateur change.
   useEffect(() => {
-    fetch('/api/activities')
+    let cancelled = false;
+    setLoading(true);
+    fetch(`/api/activities?user=${user}`)
       .then(r => r.json())
       .then((data: Activity[]) => {
+        if (cancelled) return;
         setActivities(data);
         setStats(deriveStats(data));
       })
-      .finally(() => setLoading(false));
-  }, []);
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [user]);
 
   // Synchronise state ← URL (au mount, à la navigation back/forward, et dès
   // que les activités sont chargées pour résoudre les deep links /activites/:id).
@@ -187,7 +202,7 @@ export function ExplorerApp() {
     <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: '100dvh', overflow: 'hidden' }}>
       {!isMobile && (
         <Sidebar activePage={page} onNav={handleNav} stats={stats} darkMode={darkMode} onToggleDark={toggleDark}
-                 sport={sport} onSportChange={handleSportChange} />
+                 sport={sport} onSportChange={handleSportChange} user={user} onUserChange={handleUserChange} />
       )}
       <main style={{ flex: 1, display: 'flex', overflow: 'hidden', background: tokens.cream, minHeight: 0 }}>
         {analysisActivity
@@ -197,7 +212,7 @@ export function ExplorerApp() {
       </main>
       {isMobile && (
         <Sidebar activePage={page} onNav={handleNav} stats={stats} darkMode={darkMode} onToggleDark={toggleDark} mobile
-                 sport={sport} onSportChange={handleSportChange} />
+                 sport={sport} onSportChange={handleSportChange} user={user} onUserChange={handleUserChange} />
       )}
     </div>
   );
