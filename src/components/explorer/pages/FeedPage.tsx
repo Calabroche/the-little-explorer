@@ -396,8 +396,19 @@ export function FeedPage({ activities, stats, onSelect }: Props) {
         <em style={{ color: tokens.terra, fontStyle: 'italic', fontWeight: 700 }}>{t('feed.headlineEm')}</em>
       </h1>
 
-      <ActivityCalendar activities={activities} />
-      <TrainingProgram activities={activities} />
+      <div style={{
+        display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
+        alignItems: 'stretch',
+        gap: 16,
+      }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <TrainingProgram activities={activities} />
+        </div>
+        <div style={{ flexShrink: 0, alignSelf: isMobile ? 'auto' : 'flex-start' }}>
+          <ActivityCalendar activities={activities} />
+        </div>
+      </div>
       <Last5Stats activities={activities} />
 
       {activities.map(a => <ActivityCard key={a.id} activity={a} onClick={onSelect} />)}
