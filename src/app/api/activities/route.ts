@@ -12,12 +12,16 @@ const VALID_USERS   = new Set(['florian', 'helena']);
 const WEATHER_CACHE = path.join(process.cwd(), 'data', 'weather_cache.json'); // read-only on serverless
 
 // ── Physics & training constants ──────────────────────────────────────────────
-const MASS = 74.18, G = 9.81, CRR = 0.004, CDA = 0.3, RHO = 1.225;
-// FTP fallback si aucune donnée exploitable (rule of thumb 66 kg × 2.205 × 2).
-// La FTP utilisée pour TSS/IF est en fait calculée dynamiquement depuis les
-// best 20 min réels (cf. deriveFtpFromBests) sur les sorties non assistées.
+// Profil par utilisateur : poids du coureur + poids du vélo. Tout le reste
+// (gravité, Crr, CdA, densité de l'air) est partagé — pas d'estimation
+// mesurée de la CdA d'Helena, on garde la valeur générique.
+const G = 9.81, CRR = 0.004, CDA = 0.3, RHO = 1.225;
+const PROFILES: Record<string, { riderKg: number; bikeKg: number; mass: number }> = {
+  florian: { riderKg: 66, bikeKg: 8.18, mass: 74.18 },
+  helena:  { riderKg: 63, bikeKg: 16,   mass: 79 },
+};
+// FTP fallback si aucune donnée exploitable (rule of thumb poids × 2.205 × 2).
 const FTP_FALLBACK = 291;
-const RIDER_KG  = 66;   // rider weight (kg)
 const HR_REST   = 60;   // resting heart rate (bpm)
 
 // ── Formatting helpers ────────────────────────────────────────────────────────
@@ -65,7 +69,7 @@ function calcInclines(altitude: number[], distance_m: number[]) {
 }
 
 // ── Power stream ──────────────────────────────────────────────────────────────
-function computePowerStream(speed_kmh: number[], altitude: number[], distance_m: number[]): number[] {
+function computePowerStream(speed_kmh: number[], altitude: number[], distance_m: number[], mass: number): number[] {
   const n = Math.min(speed_kmh.length, altitude.length, distance_m.length);
   const power = new Array(n).fill(0);
   const W = 30;
@@ -77,7 +81,7 @@ function computePowerStream(speed_kmh: number[], altitude: number[], distance_m:
       const dDist = distance_m[i + W] - distance_m[i - W];
       if (dDist >= 10) grad = Math.max(-0.3, Math.min(0.3, dAlt / dDist));
     }
-    const F = MASS * G * grad + MASS * G * CRR + 0.5 * RHO * CDA * v * v;
+    const F = mass * G * grad + mass * G * CRR + 0.5 * RHO * CDA * v * v;
     power[i] = Math.max(0, F * v);
   }
   return power;
@@ -249,7 +253,7 @@ function sportFromRaw(raw: any): 'cycling' | 'running' | 'hiking' {
 // sens pour la course (pas de Crr/CdA pertinents, le coût énergétique n'est
 // pas le même).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function computeStreamsAndBests(raw: any) {
+function computeStreamsAndBests(raw: any, mass: number) {
   if (sportFromRaw(raw) !== 'cycling') {
     return { powerStream: [] as number[], bestEfforts: null };
   }
@@ -257,7 +261,7 @@ function computeStreamsAndBests(raw: any) {
   const altitude:  number[]  = raw.altitude   ?? [];
   const distance_m: number[] = raw.distance_m ?? [];
   const n = Math.min(speed_kmh.length, altitude.length, distance_m.length);
-  const powerStream = n > 60 ? computePowerStream(speed_kmh, altitude, distance_m) : [];
+  const powerStream = n > 60 ? computePowerStream(speed_kmh, altitude, distance_m, mass) : [];
   const bestEfforts = powerStream.length > 60 ? computeBestEfforts(powerStream) : null;
   return { powerStream, bestEfforts };
 }
@@ -290,6 +294,8 @@ function transform(
   ftp: number,
   powerStream: number[],
   bestEfforts: ReturnType<typeof computeBestEfforts> | null,
+  riderKg: number,
+  totalMass: number,
 ) {
   const { max_incline, min_incline } = calcInclines(raw.altitude, raw.distance_m);
   const speed_kmh: number[]  = raw.speed_kmh  ?? [];
@@ -303,7 +309,7 @@ function transform(
   const ifFactor = np ? +(np / ftp).toFixed(2) : null;
   const tss      = (np && ifFactor && duration_s) ? Math.round((duration_s * np * ifFactor) / (ftp * 3600) * 100) : null;
   const vi       = (np && avgPower) ? +(np / avgPower).toFixed(2) : null;
-  const wkg      = np ? +(np / RIDER_KG).toFixed(2) : null;
+  const wkg      = np ? +(np / riderKg).toFixed(2) : null;
 
   const hasHR = heartrate.length > 60;
   const hrMax = (raw.max_hr as number) || 190;
@@ -349,7 +355,9 @@ function transform(
     // Advanced metrics
     np, avg_power: avgPower, tss, if_factor: ifFactor, vi, wkg, ef, trimp, hrZones, aed, vam,
     bestEfforts,
-    ftp, // FTP utilisée pour calculer tss/if (dynamique, dérivée des bests).
+    ftp,         // FTP utilisée pour calculer tss/if (dynamique, dérivée des bests).
+    rider_kg:    riderKg,
+    total_mass:  totalMass,
   };
 }
 
@@ -357,6 +365,7 @@ function transform(
 export async function GET(req: NextRequest) {
   const userParam = req.nextUrl.searchParams.get('user') ?? 'florian';
   const user = VALID_USERS.has(userParam) ? userParam : 'florian';
+  const profile = PROFILES[user] ?? PROFILES.florian;
   const dataDir = path.join(DATA_BASE, user, 'activities');
   if (!fs.existsSync(dataDir)) return NextResponse.json([], {
     headers: {
@@ -373,16 +382,17 @@ export async function GET(req: NextRequest) {
 
   raws.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  // Pass 1 : calculer les power streams + bestEfforts pour chaque sortie.
-  const enriched = raws.map(raw => ({ raw, ...computeStreamsAndBests(raw) }));
+  // Pass 1 : calculer les power streams + bestEfforts pour chaque sortie,
+  // en utilisant la masse spécifique à l'utilisateur (rider + vélo).
+  const enriched = raws.map(raw => ({ raw, ...computeStreamsAndBests(raw, profile.mass) }));
 
   // Pass 2 : dériver la FTP à partir des best 20 min sur sorties non assistées.
   const ftp = deriveFtpFromBests(enriched);
 
-  // Pass 3 : transformer chaque sortie en passant la FTP dynamique.
+  // Pass 3 : transformer chaque sortie en passant la FTP dynamique + le profil.
   const activities = await Promise.all(
     enriched.map(async ({ raw, powerStream, bestEfforts }) => {
-      const act    = transform(raw, ftp, powerStream, bestEfforts);
+      const act    = transform(raw, ftp, powerStream, bestEfforts, profile.riderKg, profile.mass);
       const lat    = raw.gps?.[0]?.[0] ?? 0;
       const lng    = raw.gps?.[0]?.[1] ?? 0;
       const weather = (lat && lng) ? await getWeather(raw.id, lat, lng, raw.date) : null;

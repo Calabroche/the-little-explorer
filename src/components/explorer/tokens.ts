@@ -62,6 +62,8 @@ export interface Activity {
   } | null;
   original_type?: string;
   ftp?: number;
+  rider_kg?: number;
+  total_mass?: number;
   // Weather
   weather?: {
     temp: number;
