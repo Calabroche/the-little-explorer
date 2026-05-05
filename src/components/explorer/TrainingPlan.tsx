@@ -55,6 +55,10 @@ function buildRatios(totalWeeks: number, targetPeak: number): {
   tooSteep: boolean;
   peak: number;
 } {
+  // Special case: only the race week itself fits in the window.
+  if (totalWeeks <= 1) {
+    return { steps: [{ ratio: 0.40, phase: 'race' }], tooSteep: true, peak: 0.40 };
+  }
   const taperWeeks = totalWeeks >= 3 ? 2 : Math.max(0, totalWeeks - 1);
   const racePresent = totalWeeks >= 2;
   const trainingWeeks = totalWeeks - taperWeeks - (racePresent ? 1 : 0);
@@ -116,8 +120,9 @@ function buildPlan(
 ): { weeks: WeekPlan[]; tooSteep: boolean; peak: number; totalWeeks: number } {
   const start = startOfMonday(startDate);
   const targetMonday = startOfMonday(targetDate);
-  const span = Math.round((targetMonday.getTime() - start.getTime()) / (7 * 86400000)) + 1;
-  const totalWeeks = Math.min(24, Math.max(2, span));
+  // Span in calendar weeks (inclusive). Even a single calendar day → 1 week.
+  const rawSpan = Math.ceil((targetMonday.getTime() - start.getTime()) / (7 * 86400000)) + 1;
+  const totalWeeks = Math.min(24, Math.max(1, rawSpan));
   const targetPeak = Math.max(1.05, peakWeeklyTss / Math.max(baselineTss, 1));
   const { steps, tooSteep, peak } = buildRatios(totalWeeks, targetPeak);
 
@@ -190,8 +195,9 @@ export function TrainingPlan({ activities }: { activities: Activity[] }) {
     const start  = new Date(startDate);
     const target = new Date(targetDate);
     if (isNaN(start.getTime()) || isNaN(target.getTime())) return t('plan.invalidDate');
-    const diffWeeks = (target.getTime() - start.getTime()) / (7 * 86400000);
-    if (diffWeeks < 2) return t('plan.invalidDate');
+    const diffDays = (target.getTime() - start.getTime()) / 86400000;
+    // Below 4 days the plan is meaningless (no time even for a taper).
+    if (diffDays < 4) return t('plan.invalidDate');
     return null;
   }, [generated, startDate, targetDate, t]);
 
@@ -287,7 +293,7 @@ export function TrainingPlan({ activities }: { activities: Activity[] }) {
         <div>
           <Label style={{ display: 'block', marginBottom: 6 }}>{t('plan.targetDate')}</Label>
           <input type="date" value={targetDate}
-            min={new Date(new Date(startDate).getTime() + 14 * 86400e3).toISOString().slice(0, 10)}
+            min={new Date(new Date(startDate).getTime() + 4 * 86400e3).toISOString().slice(0, 10)}
             onChange={e => setTargetDate(e.target.value)} style={INPUT} />
         </div>
       </div>
