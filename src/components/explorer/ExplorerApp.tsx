@@ -100,6 +100,23 @@ export function ExplorerApp() {
     setActivities([]);
   };
 
+  // Click on the logo (top-left) → reset to default landing: Florian + cycling
+  // + Activités feed at /. Refetches Florian's data if the user toggle was on
+  // Helena.
+  const handleHome = () => {
+    if (user !== 'florian') {
+      setUser('florian');
+      localStorage.setItem('tle_user', 'florian');
+    }
+    if (sport !== 'cycling') {
+      setSport('cycling');
+      localStorage.setItem('tle_sport', 'cycling');
+    }
+    setAnalysisActivity(null);
+    setPage('feed');
+    if (typeof window !== 'undefined') window.history.pushState(null, '', '/');
+  };
+
   const toggleDark = () => {
     const next = !darkMode;
     setDarkMode(next);
@@ -204,7 +221,7 @@ export function ExplorerApp() {
     <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: '100dvh', overflow: 'hidden' }}>
       {!isMobile && (
         <Sidebar activePage={page} onNav={handleNav} stats={filteredStats} darkMode={darkMode} onToggleDark={toggleDark}
-                 sport={sport} onSportChange={handleSportChange} user={user} onUserChange={handleUserChange} />
+                 sport={sport} onSportChange={handleSportChange} user={user} onUserChange={handleUserChange} onHome={handleHome} />
       )}
       <main style={{ flex: 1, display: 'flex', overflow: 'hidden', background: tokens.cream, minHeight: 0 }}>
         {analysisActivity
@@ -214,7 +231,7 @@ export function ExplorerApp() {
       </main>
       {isMobile && (
         <Sidebar activePage={page} onNav={handleNav} stats={filteredStats} darkMode={darkMode} onToggleDark={toggleDark} mobile
-                 sport={sport} onSportChange={handleSportChange} user={user} onUserChange={handleUserChange} />
+                 sport={sport} onSportChange={handleSportChange} user={user} onUserChange={handleUserChange} onHome={handleHome} />
       )}
     </div>
   );

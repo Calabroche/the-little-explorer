@@ -28,6 +28,7 @@ interface Props {
   onSportChange: (s: SportId) => void;
   user: UserId;
   onUserChange: (u: UserId) => void;
+  onHome: () => void;
 }
 
 function UserToggle({ user, onChange, compact }: { user: UserId; onChange: (u: UserId) => void; compact?: boolean }) {
@@ -137,7 +138,7 @@ const NAV_LABEL_KEY: Record<PageId, string> = {
   photos:  'nav.photos',
 };
 
-export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobile, sport, onSportChange, user, onUserChange }: Props) {
+export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobile, sport, onSportChange, user, onUserChange, onHome }: Props) {
   const { t, lang, setLang } = useT();
   const navItems = ALL_NAV_ITEMS.filter(n => n.sports.includes(sport));
   if (mobile) {
@@ -190,10 +191,18 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
     }}>
       <div style={{ padding: '28px 24px 24px', borderBottom: `1px solid ${tokens.creamBorder}` }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-          <div style={{ fontFamily: "'Playfair Display'", fontSize: 18, fontWeight: 900, color: tokens.ink, lineHeight: 1 }}>
+          <button
+            onClick={onHome}
+            title="Retour à l'accueil"
+            style={{
+              fontFamily: "'Playfair Display'", fontSize: 18, fontWeight: 900,
+              color: tokens.ink, lineHeight: 1, textAlign: 'left',
+              background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+            }}
+          >
             The Little<br />
             <em style={{ color: tokens.terra }}>Explorer</em>
-          </div>
+          </button>
           <button
             onClick={onToggleDark}
             title={darkMode ? 'Mode clair' : 'Mode sombre'}
