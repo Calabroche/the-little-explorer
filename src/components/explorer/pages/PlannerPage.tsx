@@ -4,6 +4,7 @@ import { tokens, Activity } from '../tokens';
 import { SectionTag, useIsMobile } from '../ui';
 import { RouteBuilder } from '../RouteBuilder';
 import { RouteProposals } from '../RouteProposals';
+import { TrainingPlan } from '../TrainingPlan';
 import { useT } from '@/i18n';
 
 export function PlannerPage({ activities }: { activities: Activity[] }) {
@@ -21,6 +22,7 @@ export function PlannerPage({ activities }: { activities: Activity[] }) {
           {t('planner.headlineEm')}
         </em>
       </h1>
+      <TrainingPlan activities={activities} />
       <RouteBuilder activities={activities} />
       <RouteProposals activities={activities} />
     </div>
