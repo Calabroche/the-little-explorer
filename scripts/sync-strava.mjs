@@ -51,9 +51,24 @@ console.log(`▶ Syncing for user "${USER}" → ${DATA_DIR}`);
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-const BIKE_TYPES = new Set(['Ride', 'VirtualRide', 'EBikeRide', 'MountainBikeRide', 'GravelRide', 'Velomobile']);
-const RUN_TYPES  = new Set(['Run', 'TrailRun', 'VirtualRun']);
-const SUPPORTED  = new Set([...BIKE_TYPES, ...RUN_TYPES]);
+// Strava activity types we care about, grouped by internal sport. Anything
+// not listed (Workout, WeightTraining, Yoga, Crossfit…) gets ignored.
+const SUPPORTED  = new Set([
+  // cycling
+  'Ride', 'VirtualRide', 'EBikeRide', 'MountainBikeRide', 'GravelRide', 'Velomobile', 'Handcycle',
+  // running
+  'Run', 'TrailRun', 'VirtualRun',
+  // hiking
+  'Hike',
+  // skiing
+  'AlpineSki', 'BackcountrySki', 'NordicSki', 'RollerSki',
+  // snowshoeing
+  'Snowshoe',
+  // walking
+  'Walk',
+  // swimming
+  'Swim',
+]);
 
 async function refreshToken() {
   const res = await fetch('https://www.strava.com/api/v3/oauth/token', {
@@ -116,15 +131,20 @@ async function main() {
 
   // Walk recent pages until we find activities we already have.
   const have = existingIds();
+  const fullSync = process.env.FULL_SYNC === '1';
   const newOnes = [];
+  // Cron mode walks 5 pages and stops at the first already-synced ride;
+  // FULL_SYNC mode walks the whole athlete history (up to 20 pages = 1000
+  // activities) skipping existing IDs along the way. Use FULL_SYNC=1 once
+  // to backfill new activity types after expanding SUPPORTED.
+  const maxPages = fullSync ? 20 : 5;
   let page = 1;
-  outer: while (page <= 5) {
+  outer: while (page <= maxPages) {
     const list = await getJson(`https://www.strava.com/api/v3/athlete/activities?per_page=50&page=${page}`, token);
     if (!list.length) break;
     for (const a of list) {
       if (have.has(a.id)) {
-        // Once we hit the wall of already-synced rides, we can stop walking.
-        // (Strava returns newest first.)
+        if (fullSync) continue; // keep walking past already-synced rides
         break outer;
       }
       if (SUPPORTED.has(a.type)) newOnes.push(a);
