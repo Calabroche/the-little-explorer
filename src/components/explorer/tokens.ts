@@ -15,7 +15,7 @@ export const tokens = {
 
 export interface Activity {
   id: number;
-  type: 'cycling' | 'running' | 'hiking';
+  type: 'cycling' | 'running' | 'hiking' | 'ski' | 'snowshoe' | 'walking' | 'swim';
   pace_s_per_km?: number | null;
   title: string;
   date: string;

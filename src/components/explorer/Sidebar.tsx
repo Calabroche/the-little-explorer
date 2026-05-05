@@ -6,14 +6,18 @@ import { useT } from '@/i18n';
 import type { Lang } from '@/i18n';
 
 export type PageId = 'feed' | 'planner' | 'map' | 'stats' | 'photos' | 'ftp' | 'compare';
-export type SportId = 'cycling' | 'running';
+export type SportId = 'cycling' | 'running' | 'hiking' | 'ski' | 'snowshoe' | 'walking' | 'swim';
 export type UserId  = 'florian' | 'helena';
 
+// Pages available for each sport. Only Planner / FTP are cycling-specific
+// (they rely on power computations); everything else makes sense for any
+// outdoor activity.
+const ALL_SPORTS: SportId[] = ['cycling', 'running', 'hiking', 'ski', 'snowshoe', 'walking', 'swim'];
 const ALL_NAV_ITEMS: { id: PageId; icon: string; label: string; sports: SportId[] }[] = [
-  { id: 'feed',    icon: '◎', label: 'Activités',     sports: ['cycling', 'running'] },
+  { id: 'feed',    icon: '◎', label: 'Activités',     sports: ALL_SPORTS },
   { id: 'planner', icon: '✦', label: 'Planificateur', sports: ['cycling'] },
-  { id: 'compare', icon: '⇄', label: 'Comparer',      sports: ['cycling', 'running'] },
-  { id: 'stats',   icon: '▬', label: 'Stats',         sports: ['cycling', 'running'] },
+  { id: 'compare', icon: '⇄', label: 'Comparer',      sports: ALL_SPORTS },
+  { id: 'stats',   icon: '▬', label: 'Stats',         sports: ALL_SPORTS },
   { id: 'ftp',     icon: '⚡', label: 'FTP',           sports: ['cycling'] },
 ];
 
@@ -26,6 +30,7 @@ interface Props {
   mobile?: boolean;
   sport: SportId;
   onSportChange: (s: SportId) => void;
+  availableSports: SportId[];
   user: UserId;
   onUserChange: (u: UserId) => void;
   onHome: () => void;
@@ -63,32 +68,50 @@ function UserToggle({ user, onChange, compact }: { user: UserId; onChange: (u: U
   );
 }
 
-function SportToggle({ sport, onChange, compact }: { sport: SportId; onChange: (s: SportId) => void; compact?: boolean }) {
+// All known sports + their UI metadata. The sidebar only renders the ones
+// that are actually present in the active user's data (passed via
+// `availableSports`), so each profile sees exactly what it has and nothing
+// else.
+const SPORT_META: Record<SportId, { icon: string; labelKey: string }> = {
+  cycling:  { icon: '◎', labelKey: 'common.cycling'  },
+  running:  { icon: '⌒', labelKey: 'common.running'  },
+  hiking:   { icon: '▲', labelKey: 'common.hiking'   },
+  ski:      { icon: '⛷', labelKey: 'common.ski'      },
+  snowshoe: { icon: '❄', labelKey: 'common.snowshoe' },
+  walking:  { icon: '⋯', labelKey: 'common.walking'  },
+  swim:     { icon: '≈', labelKey: 'common.swim'     },
+};
+
+function SportToggle({ sport, onChange, available, compact }: {
+  sport: SportId;
+  onChange: (s: SportId) => void;
+  available: SportId[];
+  compact?: boolean;
+}) {
   const { t } = useT();
-  const opts: { id: SportId; label: string; icon: string }[] = [
-    { id: 'cycling', label: t('common.cycling'), icon: '◎' },
-    { id: 'running', label: t('common.running'), icon: '⌒' },
-  ];
+  if (available.length === 0) return null;
   return (
     <div style={{
-      display: 'flex', gap: 4, padding: 3,
+      display: 'flex', flexWrap: 'wrap', gap: 4, padding: 3,
       background: tokens.creamDark, borderRadius: 4,
       border: `1px solid ${tokens.creamBorder}`,
     }}>
-      {opts.map(o => {
-        const active = sport === o.id;
+      {available.map(id => {
+        const meta = SPORT_META[id];
+        const active = sport === id;
         return (
-          <button key={o.id} onClick={() => onChange(o.id)} style={{
-            flex: 1,
+          <button key={id} onClick={() => onChange(id)} style={{
+            flex: compact ? '1 1 auto' : '1 1 30%',
+            minWidth: compact ? 0 : 60,
             padding: compact ? '4px 6px' : '6px 8px',
             border: 'none', cursor: 'pointer', borderRadius: 3,
             background: active ? tokens.terra : 'transparent',
             color: active ? '#fff' : tokens.inkMid,
-            fontFamily: "'Space Grotesk'", fontSize: compact ? 10 : 11,
-            fontWeight: active ? 700 : 500, letterSpacing: '0.05em',
-            transition: 'all 0.12s',
+            fontFamily: "'Space Grotesk'", fontSize: compact ? 9 : 11,
+            fontWeight: active ? 700 : 500, letterSpacing: '0.04em',
+            transition: 'all 0.12s', whiteSpace: 'nowrap',
           }}>
-            <span style={{ marginRight: 5 }}>{o.icon}</span>{o.label}
+            <span style={{ marginRight: 4 }}>{meta.icon}</span>{t(meta.labelKey)}
           </button>
         );
       })}
@@ -138,7 +161,7 @@ const NAV_LABEL_KEY: Record<PageId, string> = {
   photos:  'nav.photos',
 };
 
-export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobile, sport, onSportChange, user, onUserChange, onHome }: Props) {
+export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobile, sport, onSportChange, availableSports, user, onUserChange, onHome }: Props) {
   const { t, lang, setLang } = useT();
   const navItems = ALL_NAV_ITEMS.filter(n => n.sports.includes(sport));
   if (mobile) {
@@ -152,7 +175,7 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
       }}>
       <div style={{ padding: '6px 8px', borderBottom: `1px solid ${tokens.creamBorder}`, display: 'flex', gap: 6 }}>
         <div style={{ flex: 2 }}><UserToggle  user={user}   onChange={onUserChange}  compact /></div>
-        <div style={{ flex: 2 }}><SportToggle sport={sport} onChange={onSportChange} compact /></div>
+        <div style={{ flex: 2 }}><SportToggle sport={sport} onChange={onSportChange} available={availableSports} compact /></div>
         <div style={{ flex: 1 }}><LangToggle  lang={lang}   onChange={setLang}       compact /></div>
       </div>
       <div style={{ height: 60, display: 'flex' }}>
@@ -226,7 +249,7 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
 
       <div style={{ padding: '10px 12px 4px' }}>
         <Label style={{ display: 'block', marginBottom: 6 }}>{t('common.sport')}</Label>
-        <SportToggle sport={sport} onChange={onSportChange} />
+        <SportToggle sport={sport} onChange={onSportChange} available={availableSports} />
       </div>
 
       <div style={{ padding: '10px 12px 4px' }}>

@@ -237,14 +237,21 @@ async function getWeather(id: number, lat: number, lng: number, isoDate: string)
 }
 
 // ── Sport mapping ────────────────────────────────────────────────────────────
-const CYCLING_TYPES = new Set(['Ride', 'VirtualRide', 'EBikeRide', 'MountainBikeRide', 'GravelRide']);
-const RUNNING_TYPES = new Set(['Run', 'TrailRun', 'VirtualRun']);
+const CYCLING_TYPES   = new Set(['Ride', 'VirtualRide', 'EBikeRide', 'MountainBikeRide', 'GravelRide', 'Velomobile', 'Handcycle']);
+const RUNNING_TYPES   = new Set(['Run', 'TrailRun', 'VirtualRun']);
+const SKI_TYPES       = new Set(['AlpineSki', 'BackcountrySki', 'NordicSki', 'RollerSki']);
+
+export type Sport = 'cycling' | 'running' | 'hiking' | 'ski' | 'snowshoe' | 'walking' | 'swim';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function sportFromRaw(raw: any): 'cycling' | 'running' | 'hiking' {
-  if (CYCLING_TYPES.has(raw.type)) return 'cycling';
-  if (RUNNING_TYPES.has(raw.type)) return 'running';
-  if (raw.type === 'Hike')         return 'hiking';
+function sportFromRaw(raw: any): Sport {
+  if (CYCLING_TYPES.has(raw.type))  return 'cycling';
+  if (RUNNING_TYPES.has(raw.type))  return 'running';
+  if (SKI_TYPES.has(raw.type))      return 'ski';
+  if (raw.type === 'Hike')          return 'hiking';
+  if (raw.type === 'Snowshoe')      return 'snowshoe';
+  if (raw.type === 'Walk')          return 'walking';
+  if (raw.type === 'Swim')          return 'swim';
   return 'cycling'; // fallback
 }
 

@@ -76,7 +76,8 @@ export function ExplorerApp() {
     setDarkMode(dark);
     if (dark) document.documentElement.setAttribute('data-dark', '');
     const savedSport = localStorage.getItem('tle_sport') as SportId | null;
-    if (savedSport === 'cycling' || savedSport === 'running') setSport(savedSport);
+    const validSports: SportId[] = ['cycling', 'running', 'hiking', 'ski', 'snowshoe', 'walking', 'swim'];
+    if (savedSport && validSports.includes(savedSport)) setSport(savedSport);
     const savedUser = localStorage.getItem('tle_user') as UserId | null;
     if (savedUser === 'florian' || savedUser === 'helena') setUser(savedUser);
   }, []);
@@ -201,7 +202,25 @@ export function ExplorerApp() {
     );
   }
 
-  // Activités filtrées par le sport courant (le toggle Vélo / Course).
+  // Sports actually present in this user's data — drives which buttons appear.
+  // Sorted by activity count desc so the most-practiced sport is leftmost.
+  const SPORT_ORDER: SportId[] = ['cycling', 'running', 'hiking', 'ski', 'snowshoe', 'walking', 'swim'];
+  const sportCounts: Partial<Record<SportId, number>> = {};
+  for (const a of activities) sportCounts[a.type as SportId] = (sportCounts[a.type as SportId] ?? 0) + 1;
+  const availableSports: SportId[] = SPORT_ORDER.filter(s => (sportCounts[s] ?? 0) > 0);
+
+  // If the current sport isn't in the active user's data (e.g. just switched
+  // from Florian-cycling to Helena who has no cycling), bounce to the first
+  // available one — without crashing on an empty page.
+  useEffect(() => {
+    if (availableSports.length > 0 && !availableSports.includes(sport)) {
+      setSport(availableSports[0]);
+      localStorage.setItem('tle_sport', availableSports[0]);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, activities.length]);
+
+  // Activités filtrées par le sport courant.
   // Les stats "En un coup d'œil" sont aussi recalculées sur cet ensemble
   // pour que la sidebar reflète le couple utilisateur + sport sélectionné.
   const filteredActivities = activities.filter(a => a.type === sport);
@@ -221,7 +240,7 @@ export function ExplorerApp() {
     <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: '100dvh', overflow: 'hidden' }}>
       {!isMobile && (
         <Sidebar activePage={page} onNav={handleNav} stats={filteredStats} darkMode={darkMode} onToggleDark={toggleDark}
-                 sport={sport} onSportChange={handleSportChange} user={user} onUserChange={handleUserChange} onHome={handleHome} />
+                 sport={sport} onSportChange={handleSportChange} user={user} onUserChange={handleUserChange} onHome={handleHome} availableSports={availableSports} />
       )}
       <main style={{ flex: 1, display: 'flex', overflow: 'hidden', background: tokens.cream, minHeight: 0 }}>
         {analysisActivity
@@ -231,7 +250,7 @@ export function ExplorerApp() {
       </main>
       {isMobile && (
         <Sidebar activePage={page} onNav={handleNav} stats={filteredStats} darkMode={darkMode} onToggleDark={toggleDark} mobile
-                 sport={sport} onSportChange={handleSportChange} user={user} onUserChange={handleUserChange} onHome={handleHome} />
+                 sport={sport} onSportChange={handleSportChange} user={user} onUserChange={handleUserChange} onHome={handleHome} availableSports={availableSports} />
       )}
     </div>
   );

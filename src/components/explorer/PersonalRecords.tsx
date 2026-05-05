@@ -72,7 +72,7 @@ function pickBestPace(activities: Activity[], targetKm: number): PaceP | null {
 
 export function PersonalRecords({ activities, sport }: {
   activities: Activity[];
-  sport: 'cycling' | 'running';
+  sport: 'cycling' | 'running' | 'hiking' | 'ski' | 'snowshoe' | 'walking' | 'swim';
 }) {
   const { t, lang } = useT();
   const isMobile = useIsMobile();
@@ -81,6 +81,10 @@ export function PersonalRecords({ activities, sport }: {
     background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
     borderRadius: 4, padding: 24, marginBottom: 24,
   };
+
+  // Records only make sense for cycling (power) and running (pace). For other
+  // sports we don't have a comparable benchmark — skip the section entirely.
+  if (sport !== 'cycling' && sport !== 'running') return null;
 
   if (sport === 'cycling') {
     const records = pickBestPower(activities);

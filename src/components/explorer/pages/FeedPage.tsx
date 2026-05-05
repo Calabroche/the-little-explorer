@@ -386,7 +386,7 @@ function Last5Stats({ activities }: { activities: Activity[] }) {
 interface Props {
   activities: Activity[];
   stats: GlobalStats;
-  sport: SportId;
+  sport: SportId;        // can be any of the 7 sports
   onSelect: (a: Activity) => void;
 }
 

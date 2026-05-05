@@ -25,6 +25,11 @@ export const dict = {
       sport:          'SPORT',
       cycling:        'Vélo',
       running:        'Course',
+      hiking:         'Rando',
+      ski:            'Ski',
+      snowshoe:       'Raquette',
+      walking:        'Marche',
+      swim:           'Nage',
       language:       'LANGUE',
       kmUnit:         'km',
       mUnit:          'm',
@@ -48,9 +53,13 @@ export const dict = {
 
     // ── Type badges ──────────────────────────────────────────────────────────
     type: {
-      cycling: '◎ VÉLO',
-      running: '⌒ COURSE',
-      hiking:  '▲ RANDO',
+      cycling:  '◎ VÉLO',
+      running:  '⌒ COURSE',
+      hiking:   '▲ RANDO',
+      ski:      '⛷ SKI',
+      snowshoe: '❄ RAQUETTE',
+      walking:  '⋯ MARCHE',
+      swim:     '≈ NAGE',
     },
 
     // ── Feed page ────────────────────────────────────────────────────────────
@@ -479,6 +488,11 @@ export const dict = {
       sport:          'SPORT',
       cycling:        'Cycling',
       running:        'Running',
+      hiking:         'Hiking',
+      ski:            'Ski',
+      snowshoe:       'Snowshoe',
+      walking:        'Walking',
+      swim:           'Swim',
       language:       'LANGUAGE',
       kmUnit:         'km',
       mUnit:          'm',
@@ -502,9 +516,13 @@ export const dict = {
 
     // ── Type badges ──────────────────────────────────────────────────────────
     type: {
-      cycling: '◎ CYCLING',
-      running: '⌒ RUNNING',
-      hiking:  '▲ HIKING',
+      cycling:  '◎ CYCLING',
+      running:  '⌒ RUNNING',
+      hiking:   '▲ HIKING',
+      ski:      '⛷ SKI',
+      snowshoe: '❄ SNOWSHOE',
+      walking:  '⋯ WALK',
+      swim:     '≈ SWIM',
     },
 
     // ── Feed page ────────────────────────────────────────────────────────────
