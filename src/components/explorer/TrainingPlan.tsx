@@ -117,6 +117,7 @@ function buildPlan(
   peakWeeklyElev: number,
   startDate: Date,
   targetDate: Date,
+  goal: { km: number; elev: number; oneDayTss: number },
 ): { weeks: WeekPlan[]; tooSteep: boolean; peak: number; totalWeeks: number } {
   const start = startOfMonday(startDate);
   const targetMonday = startOfMonday(targetDate);
@@ -131,9 +132,14 @@ function buildPlan(
     weekStart.setDate(start.getDate() + i * 7);
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekStart.getDate() + 6);
-    const totalTss  = Math.round(baselineTss   * ratio);
-    const totalKm   = Math.round(peakWeeklyKm   * (ratio / peak));
-    const totalElev = Math.round(peakWeeklyElev * (ratio / peak));
+    // Race week is sized directly off the goal: it's the goal day + a
+    // short shakeout, NOT a fraction of the peak weekly volume. This
+    // makes ultra-short windows (1-2 weeks) sensible — otherwise a
+    // 100 km goal would suggest a 64 km race week.
+    const isRace = phase === 'race';
+    const totalTss  = isRace ? Math.round(goal.oneDayTss * 1.05) : Math.round(baselineTss   * ratio);
+    const totalKm   = isRace ? Math.round(goal.km        * 1.05) : Math.round(peakWeeklyKm   * (ratio / peak));
+    const totalElev = isRace ? Math.round(goal.elev      * 1.05) : Math.round(peakWeeklyElev * (ratio / peak));
     const sessions: SessionPlan[] = (Object.keys(SESSION_RATIO) as SessionType[]).map(type => ({
       type,
       tss:  Math.round(totalTss  * SESSION_RATIO[type]),
@@ -187,6 +193,7 @@ export function TrainingPlan({ activities }: { activities: Activity[] }) {
   const [startDate,  setStartDate]  = useState(todayIso);
   const [targetDate, setTargetDate] = useState(defaultTarget);
   const [generated,  setGenerated]  = useState(false);
+  const [showInfo,   setShowInfo]   = useState(false);
 
   const { tss: baselineTss, hasData } = useMemo(() => baselineWeeklyTss(activities), [activities]);
 
@@ -196,8 +203,9 @@ export function TrainingPlan({ activities }: { activities: Activity[] }) {
     const target = new Date(targetDate);
     if (isNaN(start.getTime()) || isNaN(target.getTime())) return t('plan.invalidDate');
     const diffDays = (target.getTime() - start.getTime()) / 86400000;
-    // Below 4 days the plan is meaningless (no time even for a taper).
-    if (diffDays < 4) return t('plan.invalidDate');
+    // We allow as little as 2 days (the user has explicitly asked for it).
+    // The 'tooSteep' red banner already warns when no real build is possible.
+    if (diffDays < 2) return t('plan.invalidDate');
     return null;
   }, [generated, startDate, targetDate, t]);
 
@@ -210,7 +218,11 @@ export function TrainingPlan({ activities }: { activities: Activity[] }) {
     const peakWeeklyTss  = Math.round(oneDayTss * 2.4);
     const peakWeeklyKm   = Math.round(targetKm   * 1.6);
     const peakWeeklyElev = Math.round(targetElev * 1.5);
-    return buildPlan(baselineTss, peakWeeklyTss, peakWeeklyKm, peakWeeklyElev, new Date(startDate), new Date(targetDate));
+    return buildPlan(
+      baselineTss, peakWeeklyTss, peakWeeklyKm, peakWeeklyElev,
+      new Date(startDate), new Date(targetDate),
+      { km: targetKm, elev: targetElev, oneDayTss },
+    );
   }, [generated, dateError, baselineTss, targetKm, targetElev, startDate, targetDate]);
 
   const plan = planResult?.weeks ?? [];
@@ -241,7 +253,36 @@ export function TrainingPlan({ activities }: { activities: Activity[] }) {
         <Label style={{ color: tokens.terra }}>{t('plan.tag')}</Label>
         <div style={{ width: 24, height: 1, background: tokens.creamBorder }} />
         <Label>{t('plan.label')}</Label>
+        <button
+          onClick={() => setShowInfo(s => !s)}
+          aria-label={t('plan.howTitle')}
+          style={{
+            width: 20, height: 20, marginLeft: 6,
+            background: showInfo ? tokens.terra : 'transparent',
+            color: showInfo ? '#fff' : tokens.inkLight,
+            border: `1px solid ${showInfo ? tokens.terra : tokens.creamBorder}`,
+            borderRadius: '50%',
+            cursor: 'pointer',
+            fontFamily: "'Playfair Display'", fontSize: 11, fontWeight: 700, fontStyle: 'italic',
+            lineHeight: 1, padding: 0,
+          }}
+        >i</button>
       </div>
+
+      {showInfo && (
+        <div style={{
+          marginTop: 12, marginBottom: 16, padding: 16,
+          background: tokens.creamDark, borderRadius: 4, borderLeft: `3px solid ${tokens.terra}`,
+          fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.inkMid, lineHeight: 1.7,
+        }}>
+          <Label style={{ display: 'block', marginBottom: 12, color: tokens.terra }}>{t('plan.howTitle')}</Label>
+          {([1, 2, 3, 4, 5, 6, 7] as const).map(n => (
+            <div key={n} style={{ marginBottom: 8 }}>
+              <strong style={{ color: tokens.ink }}>{t(`plan.how${n}Title`)}</strong> — {t(`plan.how${n}Body`)}
+            </div>
+          ))}
+        </div>
+      )}
       <div style={{ fontFamily: "'Playfair Display'", fontSize: isMobile ? 22 : 28, fontWeight: 800, color: tokens.ink, marginTop: 8, lineHeight: 1.1 }}>
         {t('plan.headline')}{' '}
         <em style={{ color: tokens.terra, fontStyle: 'italic', fontWeight: 700 }}>{t('plan.headlineEm')}</em>
@@ -293,7 +334,7 @@ export function TrainingPlan({ activities }: { activities: Activity[] }) {
         <div>
           <Label style={{ display: 'block', marginBottom: 6 }}>{t('plan.targetDate')}</Label>
           <input type="date" value={targetDate}
-            min={new Date(new Date(startDate).getTime() + 4 * 86400e3).toISOString().slice(0, 10)}
+            min={new Date(new Date(startDate).getTime() + 2 * 86400e3).toISOString().slice(0, 10)}
             onChange={e => setTargetDate(e.target.value)} style={INPUT} />
         </div>
       </div>
