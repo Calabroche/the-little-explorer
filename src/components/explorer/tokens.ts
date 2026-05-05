@@ -88,14 +88,14 @@ export function deriveStats(activities: Activity[]): GlobalStats {
   const cycling = activities.filter(a => a.type === 'cycling');
   const running = activities.filter(a => a.type === 'running');
   const hiking  = activities.filter(a => a.type === 'hiking');
+  // Use duration_min (already in minutes) instead of parsing the formatted
+  // duration string — the old "27m" parser was treating the 27 as hours.
+  const totalMinutes = activities.reduce((s, a) => s + (a.duration_min ?? 0), 0);
   return {
     totalActivities: activities.length,
     totalDistance:   +activities.reduce((s, a) => s + a.distance, 0).toFixed(0),
     totalElevation:  +activities.reduce((s, a) => s + a.elevation, 0).toFixed(0),
-    totalHours:      +activities.reduce((s, a) => {
-      const [h = 0, m = 0] = a.duration.replace('h ', ':').replace('m', '').split(':').map(Number);
-      return s + h + m / 60;
-    }, 0).toFixed(0),
+    totalHours:      Math.round(totalMinutes / 60),
     cycling: cycling.length,
     running: running.length,
     hiking:  hiking.length,
