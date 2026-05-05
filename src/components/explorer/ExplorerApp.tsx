@@ -141,6 +141,24 @@ export function ExplorerApp() {
     return () => { cancelled = true; };
   }, [user]);
 
+  // If the current sport isn't in the active user's data (e.g. just switched
+  // from Florian-cycling to Helena who has no cycling), bounce to the first
+  // available one. Has to live ABOVE the loading early-return so React's
+  // hook order stays stable between renders.
+  useEffect(() => {
+    if (activities.length === 0) return;
+    const present = new Set(activities.map(a => a.type as SportId));
+    if (present.size > 0 && !present.has(sport)) {
+      const SPORT_ORDER: SportId[] = ['cycling', 'running', 'hiking', 'ski', 'snowshoe', 'walking', 'swim'];
+      const first = SPORT_ORDER.find(s => present.has(s));
+      if (first) {
+        setSport(first);
+        localStorage.setItem('tle_sport', first);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, activities.length]);
+
   // Synchronise state ← URL (au mount, à la navigation back/forward, et dès
   // que les activités sont chargées pour résoudre les deep links /activites/:id).
   const syncFromUrl = useCallback((acts: Activity[]) => {
@@ -202,29 +220,18 @@ export function ExplorerApp() {
     );
   }
 
-  // Sports actually present in this user's data — drives which buttons appear.
-  // Sorted by activity count desc so the most-practiced sport is leftmost.
-  const SPORT_ORDER: SportId[] = ['cycling', 'running', 'hiking', 'ski', 'snowshoe', 'walking', 'swim'];
-  const sportCounts: Partial<Record<SportId, number>> = {};
-  for (const a of activities) sportCounts[a.type as SportId] = (sportCounts[a.type as SportId] ?? 0) + 1;
-  const availableSports: SportId[] = SPORT_ORDER.filter(s => (sportCounts[s] ?? 0) > 0);
-
-  // If the current sport isn't in the active user's data (e.g. just switched
-  // from Florian-cycling to Helena who has no cycling), bounce to the first
-  // available one — without crashing on an empty page.
-  useEffect(() => {
-    if (availableSports.length > 0 && !availableSports.includes(sport)) {
-      setSport(availableSports[0]);
-      localStorage.setItem('tle_sport', availableSports[0]);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, activities.length]);
-
   // Activités filtrées par le sport courant.
   // Les stats "En un coup d'œil" sont aussi recalculées sur cet ensemble
   // pour que la sidebar reflète le couple utilisateur + sport sélectionné.
   const filteredActivities = activities.filter(a => a.type === sport);
   const filteredStats = deriveStats(filteredActivities);
+
+  // Sports actually present in this user's data → drives which toggle
+  // buttons appear in the sidebar. Computed below the early return because
+  // it's a derived value, not a hook.
+  const SPORT_ORDER: SportId[] = ['cycling', 'running', 'hiking', 'ski', 'snowshoe', 'walking', 'swim'];
+  const presentSports = new Set(activities.map(a => a.type as SportId));
+  const availableSports: SportId[] = SPORT_ORDER.filter(s => presentSports.has(s));
 
   const pageContent: Record<PageId, React.ReactNode> = {
     feed:    <FeedPage    activities={filteredActivities} stats={filteredStats!} sport={sport} onSelect={openActivity} />,
