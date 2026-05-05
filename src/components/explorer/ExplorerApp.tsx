@@ -185,8 +185,10 @@ export function ExplorerApp() {
   }
 
   // Activités filtrées par le sport courant (le toggle Vélo / Course).
+  // Les stats "En un coup d'œil" sont aussi recalculées sur cet ensemble
+  // pour que la sidebar reflète le couple utilisateur + sport sélectionné.
   const filteredActivities = activities.filter(a => a.type === sport);
-  const filteredStats = stats ? { ...stats, totalActivities: filteredActivities.length } : null;
+  const filteredStats = deriveStats(filteredActivities);
 
   const pageContent: Record<PageId, React.ReactNode> = {
     feed:    <FeedPage    activities={filteredActivities} stats={filteredStats!} sport={sport} onSelect={openActivity} />,
@@ -201,7 +203,7 @@ export function ExplorerApp() {
   return (
     <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: '100dvh', overflow: 'hidden' }}>
       {!isMobile && (
-        <Sidebar activePage={page} onNav={handleNav} stats={stats} darkMode={darkMode} onToggleDark={toggleDark}
+        <Sidebar activePage={page} onNav={handleNav} stats={filteredStats} darkMode={darkMode} onToggleDark={toggleDark}
                  sport={sport} onSportChange={handleSportChange} user={user} onUserChange={handleUserChange} />
       )}
       <main style={{ flex: 1, display: 'flex', overflow: 'hidden', background: tokens.cream, minHeight: 0 }}>
@@ -211,7 +213,7 @@ export function ExplorerApp() {
         }
       </main>
       {isMobile && (
-        <Sidebar activePage={page} onNav={handleNav} stats={stats} darkMode={darkMode} onToggleDark={toggleDark} mobile
+        <Sidebar activePage={page} onNav={handleNav} stats={filteredStats} darkMode={darkMode} onToggleDark={toggleDark} mobile
                  sport={sport} onSportChange={handleSportChange} user={user} onUserChange={handleUserChange} />
       )}
     </div>
