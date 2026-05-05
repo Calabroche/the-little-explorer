@@ -11,13 +11,32 @@ import { useT, formatDateLocale } from '@/i18n';
 // ── Plan algorithm ─────────────────────────────────────────────────────────
 
 type Phase = 'build' | 'deload' | 'taper' | 'race';
-type SessionType = 'long' | 'tempo' | 'endurance' | 'recovery';
+type DayType = 'rest' | 'recovery' | 'endurance' | 'tempo' | 'long' | 'openers' | 'goal' | 'outside';
 
-const SESSION_RATIO: Record<SessionType, number> = {
+// Distribution of weekly TSS across the four "training" sessions in a normal
+// build week. Race week is built day-by-day instead.
+const SESSION_RATIO: Record<'long' | 'tempo' | 'endurance' | 'recovery', number> = {
   long: 0.40, tempo: 0.25, endurance: 0.20, recovery: 0.15,
 };
 
-interface SessionPlan { type: SessionType; tss: number; km: number; elev: number; }
+// Day-of-week templates: which DayType lands on which dow (0=Mon..6=Sun).
+// Empty string = rest. Each template assigns sessions consistent with the
+// SESSION_RATIO so the weekly TSS adds up.
+const DOW_TEMPLATES: Record<Exclude<Phase, 'race'>, (DayType | 'rest')[]> = {
+  build:  ['recovery', 'tempo',     'endurance', 'rest', 'rest', 'long', 'rest'],
+  deload: ['recovery', 'endurance', 'rest',      'rest', 'rest', 'long', 'rest'],
+  taper:  ['endurance','rest',      'tempo',     'rest', 'rest', 'long', 'rest'],
+};
+
+interface DayPlan {
+  dow:   number;        // 0=Mon..6=Sun
+  date:  Date;
+  type:  DayType;
+  km:    number;
+  elev:  number;
+  tss:   number;
+}
+
 interface WeekPlan {
   index:     number;       // 1-based for display
   weekStart: Date;
@@ -28,7 +47,81 @@ interface WeekPlan {
   totalTss:  number;
   totalKm:   number;
   totalElev: number;
-  sessions:  SessionPlan[];
+  days:      DayPlan[];    // always 7 entries, including 'outside' if needed
+}
+
+// Allocate a session of `share` of the weekly volume to a DayPlan.
+function dayFromShare(dow: number, date: Date, type: DayType, share: number, totals: { tss: number; km: number; elev: number }): DayPlan {
+  return {
+    dow, date, type,
+    tss:  Math.round(totals.tss  * share),
+    km:   Math.round(totals.km   * share),
+    elev: Math.round(totals.elev * share),
+  };
+}
+
+function shareFor(type: DayType): number {
+  if (type === 'long')      return SESSION_RATIO.long;
+  if (type === 'tempo')     return SESSION_RATIO.tempo;
+  if (type === 'endurance') return SESSION_RATIO.endurance;
+  if (type === 'recovery')  return SESSION_RATIO.recovery;
+  return 0;
+}
+
+// Build the day-by-day plan for a non-race week using the dow template.
+function buildBuildishWeek(
+  weekStart: Date, phase: Exclude<Phase, 'race'>,
+  totals: { tss: number; km: number; elev: number },
+  startDate: Date, goalDate: Date,
+): DayPlan[] {
+  const tpl = DOW_TEMPLATES[phase];
+  return Array.from({ length: 7 }, (_, dow) => {
+    const date = new Date(weekStart); date.setDate(date.getDate() + dow);
+    if (date < startDate || date > goalDate) {
+      return { dow, date, type: 'outside' as DayType, tss: 0, km: 0, elev: 0 };
+    }
+    const t = tpl[dow];
+    if (t === 'rest') return { dow, date, type: 'rest', tss: 0, km: 0, elev: 0 };
+    return dayFromShare(dow, date, t, shareFor(t as DayType), totals);
+  });
+}
+
+// Race-week countdown: tailored sessions based on how many days separate the
+// day from the goal day. Real-world taper rules:
+//   D-0 : goal
+//   D-1 : full rest (critical — never train hard the day before)
+//   D-2 : openers (short tempo with 3×30s sprints)
+//   D-3 : rest or very short shakeout
+//   D-4 : recovery (15 min easy)
+//   D-5 : short endurance
+//   D-6+: rest
+// Light volumes are absolute (not % of weekly), since the goal day dominates.
+function raceWeekDay(daysToGoal: number): { type: DayType; km: number; elev: number; tss: number } {
+  if (daysToGoal === 0) return { type: 'goal',     km: 0,  elev: 0,  tss: 0  }; // overridden below
+  if (daysToGoal === 1) return { type: 'rest',     km: 0,  elev: 0,  tss: 0  };
+  if (daysToGoal === 2) return { type: 'openers',  km: 8,  elev: 60, tss: 25 };
+  if (daysToGoal === 3) return { type: 'recovery', km: 10, elev: 60, tss: 18 };
+  if (daysToGoal === 4) return { type: 'rest',     km: 0,  elev: 0,  tss: 0  };
+  if (daysToGoal === 5) return { type: 'endurance',km: 18, elev: 130,tss: 40 };
+  return { type: 'rest', km: 0, elev: 0, tss: 0 };
+}
+
+function buildRaceWeek(
+  weekStart: Date, goalDate: Date, goal: { km: number; elev: number; oneDayTss: number },
+  startDate: Date,
+): DayPlan[] {
+  return Array.from({ length: 7 }, (_, dow) => {
+    const date = new Date(weekStart); date.setDate(date.getDate() + dow);
+    if (date < startDate || date > goalDate) {
+      return { dow, date, type: 'outside' as DayType, tss: 0, km: 0, elev: 0 };
+    }
+    const daysToGoal = Math.round((goalDate.getTime() - date.getTime()) / 86400000);
+    if (daysToGoal === 0) {
+      return { dow, date, type: 'goal', tss: goal.oneDayTss, km: goal.km, elev: goal.elev };
+    }
+    const { type, km, elev, tss } = raceWeekDay(daysToGoal);
+    return { dow, date, type, tss, km, elev };
+  });
 }
 
 function startOfMonday(d: Date): Date {
@@ -132,27 +225,32 @@ function buildPlan(
     weekStart.setDate(start.getDate() + i * 7);
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekStart.getDate() + 6);
-    // Race week is sized directly off the goal: it's the goal day + a
-    // short shakeout, NOT a fraction of the peak weekly volume. This
-    // makes ultra-short windows (1-2 weeks) sensible — otherwise a
-    // 100 km goal would suggest a 64 km race week.
-    const isRace = phase === 'race';
-    const totalTss  = isRace ? Math.round(goal.oneDayTss * 1.05) : Math.round(baselineTss   * ratio);
-    const totalKm   = isRace ? Math.round(goal.km        * 1.05) : Math.round(peakWeeklyKm   * (ratio / peak));
-    const totalElev = isRace ? Math.round(goal.elev      * 1.05) : Math.round(peakWeeklyElev * (ratio / peak));
-    const sessions: SessionPlan[] = (Object.keys(SESSION_RATIO) as SessionType[]).map(type => ({
-      type,
-      tss:  Math.round(totalTss  * SESSION_RATIO[type]),
-      km:   Math.round(totalKm   * SESSION_RATIO[type]),
-      elev: Math.round(totalElev * SESSION_RATIO[type]),
-    }));
+    let days: DayPlan[];
+    if (phase === 'race') {
+      // Race week is built day-by-day off the goal, never as a fraction of
+      // the peak weekly volume — that would put a long ride on the day
+      // before the goal, which is wrong taper-wise.
+      days = buildRaceWeek(weekStart, targetDate, goal, startDate);
+    } else {
+      const totals = {
+        tss:  Math.round(baselineTss   * ratio),
+        km:   Math.round(peakWeeklyKm   * (ratio / peak)),
+        elev: Math.round(peakWeeklyElev * (ratio / peak)),
+      };
+      days = buildBuildishWeek(weekStart, phase, totals, startDate, targetDate);
+    }
+    // Recompute weekly totals from the actual day plan so partial first/last
+    // weeks (out-of-window days) correctly contribute 0.
+    const totalTss  = days.reduce((s, d) => s + d.tss,  0);
+    const totalKm   = days.reduce((s, d) => s + d.km,   0);
+    const totalElev = days.reduce((s, d) => s + d.elev, 0);
     return {
       index: i + 1,
       weekStart, weekEnd,
       ratio, phase,
       isPeak: ratio === peak,
       totalTss, totalKm, totalElev,
-      sessions,
+      days,
     };
   });
   return { weeks, tooSteep, peak, totalWeeks };
@@ -437,17 +535,14 @@ export function TrainingPlan({ activities }: { activities: Activity[] }) {
                   <Stat label={t('plan.elevWeekly')} value={w.totalElev} unit="m" />
                 </div>
 
-                {/* Sessions */}
-                <div style={{ flex: 1, display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: isMobile ? 'flex-start' : 'flex-end' }}>
-                  {w.sessions.map(s => (
-                    <div key={s.type} style={{
-                      padding: '4px 8px', background: tokens.surface, borderRadius: 2,
-                      border: `1px solid ${tokens.creamBorder}`,
-                      fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkMid,
-                    }}>
-                      <strong style={{ color: PHASE_COLOR[w.phase] }}>{t(`plan.${s.type}`)}</strong>
-                      {' '}— {s.km} km · {s.tss} TSS
-                    </div>
+                {/* 7-day grid */}
+                <div style={{
+                  flex: 1, display: 'grid',
+                  gridTemplateColumns: 'repeat(7, 1fr)', gap: 4,
+                  minWidth: isMobile ? 0 : 380,
+                }}>
+                  {w.days.map(d => (
+                    <DayCell key={d.dow} day={d} phase={w.phase} />
                   ))}
                 </div>
               </div>
@@ -466,6 +561,71 @@ function Stat({ label, value, unit, color }: { label: string; value: number; uni
       <span style={{ fontFamily: "'Playfair Display'", fontSize: 16, fontWeight: 700, color: color ?? tokens.ink }}>
         {value}<span style={{ fontFamily: "'Space Grotesk'", fontSize: 9, color: tokens.inkLight, marginLeft: 2 }}>{unit}</span>
       </span>
+    </div>
+  );
+}
+
+const DAY_TYPE_COLOR: Record<DayType, string> = {
+  goal:      tokens.green,
+  long:      tokens.terra,
+  tempo:     '#c4602a',
+  endurance: tokens.blue,
+  recovery:  '#9b6fb5',
+  openers:   '#e07030',
+  rest:      tokens.inkLight,
+  outside:   tokens.creamBorder,
+};
+
+const DAY_TYPE_LABEL: Record<DayType, string> = {
+  goal:      'plan.goalDay',
+  long:      'plan.long',
+  tempo:     'plan.tempo',
+  endurance: 'plan.endurance',
+  recovery:  'plan.recovery',
+  openers:   'plan.openers',
+  rest:      'plan.restDay',
+  outside:   'plan.outside',
+};
+
+const DAY_LETTERS: Record<'fr' | 'en', string[]> = {
+  fr: ['L', 'M', 'M', 'J', 'V', 'S', 'D'],
+  en: ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
+};
+
+function DayCell({ day, phase }: { day: DayPlan; phase: Phase }) {
+  const { t, lang } = useT();
+  const dowLetter = DAY_LETTERS[lang][day.dow];
+  const isOutside = day.type === 'outside';
+  const isRest    = day.type === 'rest';
+  const color     = DAY_TYPE_COLOR[day.type];
+  return (
+    <div title={day.date.toLocaleDateString(lang === 'en' ? 'en-US' : 'fr-FR', { weekday: 'long', day: 'numeric', month: 'short' })}
+      style={{
+        padding: '6px 4px',
+        background: isOutside ? 'transparent' : tokens.surface,
+        border: `1px solid ${isOutside ? 'transparent' : tokens.creamBorder}`,
+        borderTop: isOutside ? `1px solid transparent` : `2px solid ${color}`,
+        borderRadius: 2,
+        fontFamily: "'Space Grotesk'", fontSize: 9,
+        textAlign: 'center', minHeight: 56,
+        opacity: isOutside ? 0.25 : 1,
+      }}>
+      <div style={{ color: isOutside ? tokens.inkLight : tokens.inkLight, fontWeight: 700, marginBottom: 2 }}>{dowLetter}</div>
+      <div style={{ color: isOutside ? tokens.inkLight : color, fontWeight: 700, marginBottom: 2 }}>
+        {isOutside ? '—' : t(DAY_TYPE_LABEL[day.type])}
+      </div>
+      {!isOutside && !isRest && (
+        <>
+          <div style={{ color: tokens.ink, fontFamily: "'Playfair Display'", fontSize: 11, fontWeight: 700, lineHeight: 1 }}>
+            {day.km > 0 ? `${day.km}km` : ''}
+          </div>
+          <div style={{ color: tokens.inkLight, marginTop: 1 }}>{day.tss} TSS</div>
+        </>
+      )}
+      {/* Force the phase color as a faint hint when phase color differs from session color */}
+      {!isOutside && phase === 'race' && day.type === 'goal' && (
+        <div style={{ marginTop: 2, fontSize: 8, color: tokens.green, fontWeight: 700 }}>★</div>
+      )}
     </div>
   );
 }
