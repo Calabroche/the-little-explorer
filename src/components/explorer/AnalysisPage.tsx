@@ -28,11 +28,11 @@ function translateWeather(desc: string, t: (k: string) => string): string {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const MASS = 74.18; // 66 kg rider + 8.18 kg bike
+// Fallbacks if activity doesn't carry the per-user profile (legacy data).
+const FALLBACK_MASS = 74.18; // Florian: 66 kg rider + 8.18 kg bike
+const FALLBACK_RIDER_KG = 66;
 const G = 9.81, CRR = 0.004, CDA = 0.3, RHO = 1.225;
-const Fr_FIXED = +(MASS * G * CRR).toFixed(1);
-const FTP_FALLBACK = 291;    // 66 kg × 2.205 lb/kg × 2 = 291 W (utilisé si activity.ftp manque)
-const RIDER_KG = 66;
+const FTP_FALLBACK = 291;
 
 // ── Data prep ────────────────────────────────────────────────────────────────
 
@@ -40,6 +40,9 @@ function buildChartData(activity: Activity) {
   const { heartrate = [], altitude = [], distance_m = [], speed_kmh = [] } = activity;
   const len = Math.min(heartrate.length, altitude.length, distance_m.length, speed_kmh.length);
   if (len < 10) return [];
+
+  const mass = activity.total_mass ?? FALLBACK_MASS;
+  const Fr   = +(mass * G * CRR).toFixed(1);
 
   const WINDOW = 40;
   const gradient: number[] = new Array(len).fill(0);
@@ -55,11 +58,11 @@ function buildChartData(activity: Activity) {
   for (let i = 0; i < len; i++) {
     const v  = (speed_kmh[i] || 0) / 3.6;
     const gr = gradient[i] / 100;
-    const Fg = MASS * G * gr;
+    const Fg = mass * G * gr;
     const Fa = 0.5 * RHO * CDA * v * v;
     Fg_arr[i] = +Fg.toFixed(1);
     Fa_arr[i] = +Fa.toFixed(1);
-    power[i]  = Math.max(0, Math.round((Fg + Fr_FIXED + Fa) * v));
+    power[i]  = Math.max(0, Math.round((Fg + Fr + Fa) * v));
   }
 
   const step = Math.max(1, Math.floor(len / 300));
@@ -77,7 +80,8 @@ function buildChartData(activity: Activity) {
       speed:    speed_kmh[i] != null ? +speed_kmh[i].toFixed(1) : null,
       power:    power[i],
       Fg:       Fg_arr[i],
-      Fr:       Fr_FIXED,
+      Fr,
+      mass,
       Fa:       Fa_arr[i],
       v_ms,
     });
@@ -145,6 +149,12 @@ function PowerCard({ activity, data }: { activity: Activity; data: ReturnType<ty
   const maxPower  = data.length ? Math.max(...data.map(d => d.power || 0)) : 0;
   const totalWork = avgPower * (activity.duration_min ?? 0) * 60 / 1000;
 
+  // Per-user physics constants (rider + bike). Falls back to Florian's profile.
+  const rider = activity.rider_kg  ?? FALLBACK_RIDER_KG;
+  const total = activity.total_mass ?? FALLBACK_MASS;
+  const bike  = +(total - rider).toFixed(2);
+  const Fr    = +(total * G * CRR).toFixed(1);
+
   return (
     <div style={{ ...CARD_STYLE, flex: 1 }}>
       <Label style={{ display: 'block', marginBottom: 14 }}>{t('charts.powerEstHeader')}</Label>
@@ -158,9 +168,9 @@ function PowerCard({ activity, data }: { activity: Activity; data: ReturnType<ty
       </div>
       <div style={{ marginTop: 14, fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight, lineHeight: 1.8 }}>
         <strong style={{ color: tokens.ink }}>Formule :</strong> P = (F_gravité + F_roulement + F_aéro) × v<br />
-        <strong style={{ color: tokens.ink }}>Toi :</strong> 66 kg · Vélo : 8.18 kg · <strong style={{ color: tokens.ink }}>Total : {MASS} kg</strong><br />
-        <span style={{ color: tokens.terra }}>F_roulement</span> = {MASS} × 9.81 × 0.004 = <strong>{Fr_FIXED} N</strong> (constant)<br />
-        <span style={{ color: tokens.terra }}>F_gravité</span> = {MASS} × 9.81 × pente → varie<br />
+        <strong style={{ color: tokens.ink }}>Coureur :</strong> {rider} kg · Vélo : {bike} kg · <strong style={{ color: tokens.ink }}>Total : {total} kg</strong><br />
+        <span style={{ color: tokens.terra }}>F_roulement</span> = {total} × 9.81 × 0.004 = <strong>{Fr} N</strong> (constant)<br />
+        <span style={{ color: tokens.terra }}>F_gravité</span> = {total} × 9.81 × pente → varie<br />
         <span style={{ color: tokens.terra }}>F_aéro</span> = 0.5 × 1.225 × 0.3 × v² → varie
       </div>
     </div>
@@ -188,8 +198,8 @@ function PowerTooltip({ active, payload, label }: any) {
   return (
     <div style={{ background: tokens.surface, border: `1px solid ${tokens.creamBorder}`, borderRadius: 4, padding: '10px 14px', fontFamily: "'Space Grotesk'", fontSize: 11, lineHeight: 1.8, minWidth: 220 }}>
       <div style={{ color: tokens.inkLight, marginBottom: 6, fontWeight: 600 }}>{label} km</div>
-      <div><span style={{ color: tokens.terra }}>F_gravité</span> = {MASS} × 9.81 × {(d.gradient/100).toFixed(3)} = <strong>{d.Fg} N</strong></div>
-      <div><span style={{ color: tokens.terra }}>F_roulement</span> = {MASS} × 9.81 × 0.004 = <strong>{d.Fr} N</strong></div>
+      <div><span style={{ color: tokens.terra }}>F_gravité</span> = {d.mass} × 9.81 × {(d.gradient/100).toFixed(3)} = <strong>{d.Fg} N</strong></div>
+      <div><span style={{ color: tokens.terra }}>F_roulement</span> = {d.mass} × 9.81 × 0.004 = <strong>{d.Fr} N</strong></div>
       <div><span style={{ color: tokens.terra }}>F_aéro</span> = ½ × 1.225 × 0.3 × {d.v_ms}² = <strong>{d.Fa} N</strong></div>
       <div style={{ borderTop: `1px solid ${tokens.creamBorder}`, marginTop: 6, paddingTop: 6 }}>
         <strong>P = ({d.Fg} + {d.Fr} + {d.Fa}) × {d.v_ms} = </strong>
@@ -388,7 +398,7 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
           </div>
           <div style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight, lineHeight: 1.9 }}>
             <div><strong style={{ color: tokens.ink }}>Formule :</strong> best 20 min × 0.95 (Coggan)</div>
-            <div>FTP = <strong style={{ color: tokens.terra }}>{activity.ftp ?? FTP_FALLBACK} W</strong> · {RIDER_KG} kg → {((activity.ftp ?? FTP_FALLBACK) / RIDER_KG).toFixed(2)} W/kg</div>
+            <div>FTP = <strong style={{ color: tokens.terra }}>{activity.ftp ?? FTP_FALLBACK} W</strong> · {activity.rider_kg ?? FALLBACK_RIDER_KG} kg → {((activity.ftp ?? FTP_FALLBACK) / (activity.rider_kg ?? FALLBACK_RIDER_KG)).toFixed(2)} W/kg</div>
             <div style={{ marginTop: 2, color: tokens.inkLight }}>
               Calculée depuis tes meilleures sorties non assistées · pour mesurer (vs estimer), un capteur de puissance est nécessaire
             </div>
