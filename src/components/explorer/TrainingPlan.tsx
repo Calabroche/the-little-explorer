@@ -39,56 +39,96 @@ function startOfMonday(d: Date): Date {
   return out;
 }
 
-// Build a load-multiplier per week. The peak week is followed by 2 taper
-// weeks. Inside the build phase: 3 progressive weeks (+10% each), then a
-// 4th deload week at 60% of the previous week.
-function buildRatios(totalWeeks: number): { ratio: number; phase: Phase }[] {
-  const taperWeeks = Math.min(2, Math.max(1, totalWeeks - 1));
-  const buildWeeks = Math.max(1, totalWeeks - taperWeeks);
+// Build a load-multiplier per week, adapted to the available window:
+//   2 weeks  → just taper + race (impossible to build)
+//   3 weeks  → 1 build + taper + race
+//   4 weeks  → 2 build + taper + race
+//   5 weeks  → 3 build (no deload) + taper + race
+//   6+ weeks → 3:1 cycles (3 progressive + 1 deload), then taper + race
+//
+// The progressive ramp tightens or relaxes itself so the peak week reaches
+// `targetPeak`. We compute the required step from `targetPeak` and the
+// number of progressive weeks. If the step exceeds 1.10 the caller gets a
+// `tooSteep` flag back so the UI can warn.
+function buildRatios(totalWeeks: number, targetPeak: number): {
+  steps: { ratio: number; phase: Phase }[];
+  tooSteep: boolean;
+  peak: number;
+} {
+  const taperWeeks = totalWeeks >= 3 ? 2 : Math.max(0, totalWeeks - 1);
+  const racePresent = totalWeeks >= 2;
+  const trainingWeeks = totalWeeks - taperWeeks - (racePresent ? 1 : 0);
+  if (trainingWeeks <= 0) {
+    // Just taper(s) + race week.
+    const out: { ratio: number; phase: Phase }[] = [];
+    if (taperWeeks >= 2) out.push({ ratio: 0.85, phase: 'taper' });
+    if (taperWeeks >= 1) out.push({ ratio: 0.65, phase: 'taper' });
+    if (racePresent)     out.push({ ratio: 0.50, phase: 'race'  });
+    return { steps: out, tooSteep: true, peak: 0.85 };
+  }
+
+  // Decide whether we have room for a deload pattern. Deload only kicks in
+  // at 6+ training weeks; otherwise we ramp straight.
+  const useDeloadPattern = trainingWeeks >= 6;
+  // How many progressive weeks count toward the peak (deload weeks don't).
+  const progressiveCount = useDeloadPattern
+    ? trainingWeeks - Math.floor(trainingWeeks / 4)
+    : trainingWeeks;
+  // Required per-step multiplier: targetPeak ^ (1 / (progressiveCount - 1)).
+  const N = Math.max(1, progressiveCount - 1);
+  const step = Math.pow(targetPeak, 1 / N);
+  const tooSteep = step > 1.105;
+
   const out: { ratio: number; phase: Phase }[] = [];
   let cur = 1.0;
-  for (let i = 0; i < buildWeeks; i++) {
+  let lastProgressive = 1.0;
+  for (let i = 0; i < trainingWeeks; i++) {
     const isFourth = (i + 1) % 4 === 0;
-    if (isFourth && i < buildWeeks - 1) {
-      // Insert a deload — 60% of the previous progressive level.
-      out.push({ ratio: +(cur * 0.6).toFixed(2), phase: 'deload' });
+    if (useDeloadPattern && isFourth && i < trainingWeeks - 1) {
+      out.push({ ratio: +(lastProgressive * 0.6).toFixed(2), phase: 'deload' });
     } else {
-      out.push({ ratio: +Math.min(cur, 1.6).toFixed(2), phase: 'build' });
-      cur *= 1.10;
+      lastProgressive = cur;
+      out.push({ ratio: +cur.toFixed(2), phase: 'build' });
+      cur *= step;
     }
   }
-  // Taper: -30%, -50%, then race week if we still have room.
+  // Taper: scaled relative to the actual peak, not absolute.
+  const peak = Math.max(...out.map(o => o.ratio));
   if (taperWeeks >= 2) {
-    out.push({ ratio: 0.70, phase: 'taper' });
-    out.push({ ratio: 0.50, phase: 'race' });
-  } else {
-    out.push({ ratio: 0.50, phase: 'race' });
+    out.push({ ratio: +(peak * 0.65).toFixed(2), phase: 'taper' });
+    out.push({ ratio: +(peak * 0.45).toFixed(2), phase: 'taper' });
+  } else if (taperWeeks === 1) {
+    out.push({ ratio: +(peak * 0.55).toFixed(2), phase: 'taper' });
   }
-  return out;
+  if (racePresent) {
+    out.push({ ratio: 0.40, phase: 'race' });
+  }
+  return { steps: out, tooSteep, peak };
 }
 
 function buildPlan(
   baselineTss: number,
-  weeklyKm: number,
-  weeklyElev: number,
+  peakWeeklyTss: number,    // absolute TSS we want at peak (drives target ratio)
+  peakWeeklyKm: number,
+  peakWeeklyElev: number,
+  startDate: Date,
   targetDate: Date,
-  today: Date = new Date(),
-): WeekPlan[] {
-  const start = startOfMonday(today);
+): { weeks: WeekPlan[]; tooSteep: boolean; peak: number; totalWeeks: number } {
+  const start = startOfMonday(startDate);
   const targetMonday = startOfMonday(targetDate);
   const span = Math.round((targetMonday.getTime() - start.getTime()) / (7 * 86400000)) + 1;
-  const totalWeeks = Math.min(16, Math.max(2, span));
-  const ratios = buildRatios(totalWeeks);
-  const peak = Math.max(...ratios.map(r => r.ratio));
+  const totalWeeks = Math.min(24, Math.max(2, span));
+  const targetPeak = Math.max(1.05, peakWeeklyTss / Math.max(baselineTss, 1));
+  const { steps, tooSteep, peak } = buildRatios(totalWeeks, targetPeak);
 
-  return ratios.map(({ ratio, phase }, i) => {
+  const weeks = steps.map(({ ratio, phase }, i) => {
     const weekStart = new Date(start);
     weekStart.setDate(start.getDate() + i * 7);
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekStart.getDate() + 6);
-    const totalTss  = Math.round(baselineTss * ratio);
-    const totalKm   = Math.round(weeklyKm    * ratio);
-    const totalElev = Math.round(weeklyElev  * ratio);
+    const totalTss  = Math.round(baselineTss   * ratio);
+    const totalKm   = Math.round(peakWeeklyKm   * (ratio / peak));
+    const totalElev = Math.round(peakWeeklyElev * (ratio / peak));
     const sessions: SessionPlan[] = (Object.keys(SESSION_RATIO) as SessionType[]).map(type => ({
       type,
       tss:  Math.round(totalTss  * SESSION_RATIO[type]),
@@ -104,6 +144,7 @@ function buildPlan(
       sessions,
     };
   });
+  return { weeks, tooSteep, peak, totalWeeks };
 }
 
 // Compute baseline weekly TSS from last 4 weeks of activities.
@@ -129,38 +170,44 @@ export function TrainingPlan({ activities }: { activities: Activity[] }) {
   const { t, lang } = useT();
   const isMobile = useIsMobile();
 
-  // Default target: 8 weeks from today.
-  const defaultDate = (() => {
+  // Defaults: prep starts today, target 8 weeks from now.
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const defaultTarget = (() => {
     const d = new Date(); d.setDate(d.getDate() + 56);
     return d.toISOString().slice(0, 10);
   })();
 
   const [targetKm,   setTargetKm]   = useState(100);
   const [targetElev, setTargetElev] = useState(1500);
-  const [targetDate, setTargetDate] = useState(defaultDate);
+  const [startDate,  setStartDate]  = useState(todayIso);
+  const [targetDate, setTargetDate] = useState(defaultTarget);
   const [generated,  setGenerated]  = useState(false);
 
   const { tss: baselineTss, hasData } = useMemo(() => baselineWeeklyTss(activities), [activities]);
 
   const dateError = useMemo(() => {
     if (!generated) return null;
-    const d = new Date(targetDate);
-    if (isNaN(d.getTime())) return t('plan.invalidDate');
-    const minDate = new Date();
-    minDate.setDate(minDate.getDate() + 14);
-    if (d < minDate) return t('plan.invalidDate');
+    const start  = new Date(startDate);
+    const target = new Date(targetDate);
+    if (isNaN(start.getTime()) || isNaN(target.getTime())) return t('plan.invalidDate');
+    const diffWeeks = (target.getTime() - start.getTime()) / (7 * 86400000);
+    if (diffWeeks < 2) return t('plan.invalidDate');
     return null;
-  }, [generated, targetDate, t]);
+  }, [generated, startDate, targetDate, t]);
 
-  const plan = useMemo(() => {
-    if (!generated || dateError) return [];
-    // Weekly volume target: roughly 60% of the goal-day distance/elev at peak,
-    // scaled by ratio. e.g. 100 km goal → 60 km peak weekly long ride which
-    // is `totalKm * 0.40` of a 150 km peak week.
-    const peakWeeklyKm   = Math.round(targetKm   * 1.5);
+  const planResult = useMemo(() => {
+    if (!generated || dateError) return null;
+    // The "race day" effort itself: a 100 km / 1500 m ride at moderate pace
+    // ≈ 250 TSS. We size the peak week to ~2.4× that single-day load so the
+    // body is comfortably fatigue-resistant by race week.
+    const oneDayTss   = Math.round(targetKm * 2.5 + targetElev * 0.05);
+    const peakWeeklyTss  = Math.round(oneDayTss * 2.4);
+    const peakWeeklyKm   = Math.round(targetKm   * 1.6);
     const peakWeeklyElev = Math.round(targetElev * 1.5);
-    return buildPlan(baselineTss, peakWeeklyKm, peakWeeklyElev, new Date(targetDate));
-  }, [generated, dateError, baselineTss, targetKm, targetElev, targetDate]);
+    return buildPlan(baselineTss, peakWeeklyTss, peakWeeklyKm, peakWeeklyElev, new Date(startDate), new Date(targetDate));
+  }, [generated, dateError, baselineTss, targetKm, targetElev, startDate, targetDate]);
+
+  const plan = planResult?.weeks ?? [];
 
   // Chart data : weekly TSS bars.
   const chartData = useMemo(() => plan.map(w => ({
@@ -201,9 +248,11 @@ export function TrainingPlan({ activities }: { activities: Activity[] }) {
 
       {/* Form */}
       <div style={{
-        display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 18, marginBottom: 18,
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr 1fr' : '1fr 1fr 1fr 1fr',
+        gap: 18, marginBottom: 18,
       }}>
-        <div>
+        <div style={{ gridColumn: isMobile ? 'span 2' : undefined }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
             <Label>{t('plan.targetDist')}</Label>
             <span style={{ fontFamily: "'Playfair Display'", fontSize: 22, fontWeight: 700, color: tokens.ink }}>
@@ -216,7 +265,7 @@ export function TrainingPlan({ activities }: { activities: Activity[] }) {
             <span>20 km</span><span>200 km</span>
           </div>
         </div>
-        <div>
+        <div style={{ gridColumn: isMobile ? 'span 2' : undefined }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
             <Label>{t('plan.targetElev')}</Label>
             <span style={{ fontFamily: "'Playfair Display'", fontSize: 22, fontWeight: 700, color: tokens.ink }}>
@@ -230,9 +279,15 @@ export function TrainingPlan({ activities }: { activities: Activity[] }) {
           </div>
         </div>
         <div>
+          <Label style={{ display: 'block', marginBottom: 6 }}>{t('plan.startDate')}</Label>
+          <input type="date" value={startDate}
+            max={targetDate}
+            onChange={e => setStartDate(e.target.value)} style={INPUT} />
+        </div>
+        <div>
           <Label style={{ display: 'block', marginBottom: 6 }}>{t('plan.targetDate')}</Label>
           <input type="date" value={targetDate}
-            min={new Date(Date.now() + 14 * 86400e3).toISOString().slice(0, 10)}
+            min={new Date(new Date(startDate).getTime() + 14 * 86400e3).toISOString().slice(0, 10)}
             onChange={e => setTargetDate(e.target.value)} style={INPUT} />
         </div>
       </div>
@@ -251,8 +306,20 @@ export function TrainingPlan({ activities }: { activities: Activity[] }) {
       )}
 
       {/* Plan output */}
-      {generated && !dateError && plan.length > 0 && (
+      {generated && !dateError && plan.length > 0 && planResult && (
         <div style={{ marginTop: 24 }}>
+          {/* Safe-zone / overload banner */}
+          <div style={{
+            padding: '10px 14px', marginBottom: 14, borderRadius: 3,
+            borderLeft: `3px solid ${planResult.tooSteep ? '#cc3333' : tokens.green}`,
+            background: tokens.creamDark,
+            fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkMid, lineHeight: 1.6,
+          }}>
+            {planResult.tooSteep
+              ? t('plan.tooSteep', { weeks: planResult.totalWeeks })
+              : t('plan.okWindow', { weeks: planResult.totalWeeks, peak: planResult.peak.toFixed(2) })}
+          </div>
+
           {/* Header */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
             <Label style={{ color: tokens.green }}>§ {plan.length} {t('plan.results')}</Label>
