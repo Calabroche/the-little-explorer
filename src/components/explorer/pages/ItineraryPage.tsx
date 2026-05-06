@@ -733,12 +733,20 @@ export function ItineraryPage({ user }: Props) {
               zoom={waypoints.length > 0 ? 12 : 10}
               scrollWheelZoom={true}
               style={{ height: mapHeight, width: '100%' }}
+              maxZoom={20}
+              minZoom={4}
             >
               <TileLayer
                 key={tileUrl}
                 url={tileUrl}
                 attribution={tileAttribution}
-                maxZoom={19}
+                // osm-fr renders up to zoom 20; CARTO dark caps at 19,
+                // so we let the tile service draw native tiles up to its
+                // own ceiling and Leaflet up-scales the last level when
+                // the user zooms beyond that. End result: every street
+                // name and minor place is readable at zoom 18+.
+                maxZoom={20}
+                maxNativeZoom={dark ? 19 : 20}
               />
               {polylinePositions && polylinePositions.length > 1 && (
                 <Polyline positions={polylinePositions} pathOptions={{ color: tokens.terra, weight: 4, opacity: 0.85 }} />
