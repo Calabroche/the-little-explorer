@@ -467,11 +467,20 @@ export function ItineraryPage({ user }: Props) {
   const deltaKm           = distanceKm != null ? +(distanceKm - targetKm).toFixed(1) : null;
   const deltaPct          = distanceKm != null && targetKm > 0 ? ((distanceKm - targetKm) / targetKm) * 100 : 0;
 
-  // CARTO Voyager / dark — same setup as ActivityRouteMap so the map
-  // matches everywhere on the site.
+  // OpenStreetMap-FR (light) / CARTO dark (dark mode).
+  //
+  // The activity-detail map uses CARTO Voyager — visually clean but
+  // sparse with labels until zoom 13+. For the itinerary builder the
+  // user explicitly wants to see "tous les noms de villages", so we
+  // switch the light base to osm-fr's rendering of standard OSM data,
+  // which labels every commune, hamlet and place name aggressively.
+  // No API key, CORS-friendly, free for sane usage.
   const tileUrl = dark
     ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-    : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+    : 'https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png';
+  const tileAttribution = dark
+    ? '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap'
+    : '&copy; <a href="https://www.openstreetmap.fr/">OSM-FR</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>';
 
   // Map grew by +200px vs the previous V1 to leave room for the
   // elevation chart underneath without scrolling pressure.
@@ -721,14 +730,15 @@ export function ItineraryPage({ user }: Props) {
           <div style={{ ...CARD, padding: 0, overflow: 'hidden', minHeight: mapHeight, position: 'relative' }}>
             <MapContainer
               center={mapCenter}
-              zoom={waypoints.length > 0 ? 11 : 9}
-              scrollWheelZoom={false}
+              zoom={waypoints.length > 0 ? 12 : 10}
+              scrollWheelZoom={true}
               style={{ height: mapHeight, width: '100%' }}
             >
               <TileLayer
                 key={tileUrl}
                 url={tileUrl}
-                attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap'
+                attribution={tileAttribution}
+                maxZoom={19}
               />
               {polylinePositions && polylinePositions.length > 1 && (
                 <Polyline positions={polylinePositions} pathOptions={{ color: tokens.terra, weight: 4, opacity: 0.85 }} />
