@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 // Proxy to the French government's free communes API.
-// Search-as-you-type lookup of French villages by name.
 //
-// Upstream: https://geo.api.gouv.fr/communes
+// Two modes:
+//   ?q=...                → search by name (typeahead autocomplete)
+//   ?lat=...&lng=...      → reverse-lookup the commune containing a point
+//                           (used by auto-extend to pick a detour village)
+//   ?exclude=code1,code2  → drop matching INSEE codes from the response
+//                           (so auto-extend never re-suggests an existing
+//                           waypoint)
+//
 // We strip the response down to what the itinerary builder needs:
 // { name, code, postal, lat, lng }.
 export const dynamic = 'force-dynamic';
@@ -17,14 +23,30 @@ interface UpstreamCommune {
   centre?:       { type: 'Point'; coordinates: [number, number] };
 }
 
-export async function GET(req: NextRequest) {
-  const q = (req.nextUrl.searchParams.get('q') || '').trim();
-  if (q.length < 2) return NextResponse.json([]);
+const FIELDS = 'nom,code,codesPostaux,centre,population';
 
-  const url = `https://geo.api.gouv.fr/communes`
-    + `?nom=${encodeURIComponent(q)}`
-    + `&fields=nom,code,codesPostaux,centre,population`
-    + `&format=json&geometry=centre&boost=population&limit=10`;
+export async function GET(req: NextRequest) {
+  const q       = (req.nextUrl.searchParams.get('q') || '').trim();
+  const lat     = req.nextUrl.searchParams.get('lat');
+  const lng     = req.nextUrl.searchParams.get('lng');
+  const exRaw   = req.nextUrl.searchParams.get('exclude') || '';
+  const exclude = new Set(exRaw.split(',').filter(Boolean));
+
+  let url: string;
+  if (lat && lng && Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) {
+    // Reverse-lookup mode — geo.api.gouv.fr returns the commune
+    // containing this point (every point in metropolitan France is in
+    // exactly one commune, so this is reliable for picking a detour).
+    url = `https://geo.api.gouv.fr/communes`
+      + `?lat=${lat}&lon=${lng}`
+      + `&fields=${FIELDS}&format=json&geometry=centre`;
+  } else if (q.length >= 2) {
+    url = `https://geo.api.gouv.fr/communes`
+      + `?nom=${encodeURIComponent(q)}`
+      + `&fields=${FIELDS}&format=json&geometry=centre&boost=population&limit=10`;
+  } else {
+    return NextResponse.json([]);
+  }
 
   try {
     const upstream = await fetch(url, { headers: { 'Accept': 'application/json' } });
@@ -34,6 +56,7 @@ export async function GET(req: NextRequest) {
     const data: UpstreamCommune[] = await upstream.json();
     const out = data
       .filter(c => c.centre?.coordinates)
+      .filter(c => !exclude.has(c.code))
       .map(c => ({
         name:   c.nom,
         code:   c.code,

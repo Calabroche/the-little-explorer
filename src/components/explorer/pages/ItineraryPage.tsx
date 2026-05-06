@@ -8,6 +8,9 @@ import { useT } from '@/i18n';
 import { UserId } from '../Sidebar';
 import { Waypoint, Itinerary } from '../itinerary/types';
 import { loadAll, upsert, remove, newId } from '../itinerary/storage';
+import { downsampleByDistance, buildElevationSeries, ascentDescent, haversineM } from '../itinerary/elevation';
+import { ElevationChart } from '../itinerary/ElevationChart';
+import { buildGpx, downloadGpx, slugify as gpxSlug } from '../itinerary/gpx';
 
 // Leaflet pulls in `window` at import time → ssr:false.
 const MapContainer = dynamic(() => import('react-leaflet').then(m => m.MapContainer), { ssr: false });
@@ -18,6 +21,24 @@ const Tooltip      = dynamic(() => import('react-leaflet').then(m => m.Tooltip),
 const FitBounds    = dynamic(() => import('../itinerary/FitBounds').then(m => m.FitBounds), { ssr: false });
 
 interface Props { user: UserId }
+
+// ── Hooks ───────────────────────────────────────────────────────────────────
+
+// Mirror the activity-detail map's dark-mode behaviour: the rest of the
+// site toggles a `data-dark` attr on <html> when the user flips dark
+// mode, so we observe it and swap tile layers in lockstep.
+function useDarkMode() {
+  const [dark, setDark] = useState(false);
+  useEffect(() => {
+    setDark(document.documentElement.hasAttribute('data-dark'));
+    const obs = new MutationObserver(() =>
+      setDark(document.documentElement.hasAttribute('data-dark'))
+    );
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-dark'] });
+    return () => obs.disconnect();
+  }, []);
+  return dark;
+}
 
 // ── Village search input ────────────────────────────────────────────────────
 
@@ -32,7 +53,6 @@ function VillageSearch({ onPick, placeholder }: {
   const debounceRef               = useRef<NodeJS.Timeout | null>(null);
   const containerRef              = useRef<HTMLDivElement | null>(null);
 
-  // Debounced fetch.
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (q.trim().length < 2) { setResults([]); setOpen(false); return; }
@@ -44,16 +64,12 @@ function VillageSearch({ onPick, placeholder }: {
         const data: Waypoint[] = await res.json();
         setResults(data);
         setOpen(true);
-      } catch {
-        setResults([]);
-      } finally {
-        setLoading(false);
-      }
+      } catch { setResults([]); }
+      finally { setLoading(false); }
     }, 220);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [q]);
 
-  // Close dropdown on outside click.
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
@@ -117,11 +133,86 @@ function VillageSearch({ onPick, placeholder }: {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-function formatKm(m: number): string { return (m / 1000).toFixed(1); }
 function formatDuration(s: number): string {
   const h = Math.floor(s / 3600);
   const m = Math.round((s % 3600) / 60);
   return h > 0 ? `${h}h${m.toString().padStart(2, '0')}` : `${m} min`;
+}
+
+// Waypoints actually sent to OSRM. When `loop` is on we append the
+// start village as the final stop so the route ends where it begins.
+function effectiveWaypoints(wp: Waypoint[], loop: boolean): Waypoint[] {
+  if (!loop || wp.length < 2) return wp;
+  return [...wp, wp[0]];
+}
+
+// ── Auto-extend: insert a detour village to hit the target distance ────────
+
+async function findDetour(
+  waypoints: Waypoint[],
+  targetKm: number,
+  distanceKm: number,
+  loop: boolean,
+): Promise<{ waypoint: Waypoint; insertAt: number } | null> {
+  const extraKm = targetKm - distanceKm;
+  if (extraKm < 3) return null;
+  if (waypoints.length < (loop ? 1 : 2)) return null;
+
+  // Effective leg list — same order OSRM saw, including loop closure.
+  const eff = effectiveWaypoints(waypoints, loop);
+  let bestI = 0, bestD = 0;
+  for (let i = 0; i < eff.length - 1; i++) {
+    const d = haversineM([eff[i].lat, eff[i].lng], [eff[i + 1].lat, eff[i + 1].lng]);
+    if (d > bestD) { bestD = d; bestI = i; }
+  }
+  const a = eff[bestI];
+  const b = eff[bestI + 1];
+  const midLat = (a.lat + b.lat) / 2;
+  const midLng = (a.lng + b.lng) / 2;
+
+  // Perpendicular direction (rotate the leg vector 90°), normalised.
+  const dLat = b.lat - a.lat;
+  const dLng = b.lng - a.lng;
+  const perpLat = -dLng;
+  const perpLng =  dLat;
+  const norm = Math.hypot(perpLat, perpLng) || 1;
+
+  // A detour adds ≈ 2× the offset distance to the route (out and back).
+  // Cap at 12 km so we don't drag the route into the next region.
+  const offsetKm = Math.max(3, Math.min(12, extraKm / 4));
+  const cosLat = Math.cos((midLat * Math.PI) / 180);
+
+  // INSEE codes already in the itinerary so we never re-suggest one.
+  const exclude = waypoints.map(w => w.code).join(',');
+
+  // Try the perpendicular shift, then the opposite side if that fails.
+  const candidates: [number, number][] = [
+    [
+      midLat + (perpLat / norm) * (offsetKm / 111),
+      midLng + (perpLng / norm) * (offsetKm / (111 * cosLat || 1)),
+    ],
+    [
+      midLat - (perpLat / norm) * (offsetKm / 111),
+      midLng - (perpLng / norm) * (offsetKm / (111 * cosLat || 1)),
+    ],
+  ];
+  for (const [tLat, tLng] of candidates) {
+    try {
+      const res = await fetch(`/api/commune-search?lat=${tLat}&lng=${tLng}&exclude=${exclude}`);
+      if (!res.ok) continue;
+      const arr: Waypoint[] = await res.json();
+      if (arr.length > 0) {
+        // Insert position in the *user-visible* waypoints array.
+        // If we picked the loop-closure leg, insert before the implicit closure
+        // (i.e. at the end of the user list).
+        const insertAt = bestI === waypoints.length - 1 && loop
+          ? waypoints.length
+          : bestI + 1;
+        return { waypoint: arr[0], insertAt };
+      }
+    } catch { /* try next */ }
+  }
+  return null;
 }
 
 // ── Main component ──────────────────────────────────────────────────────────
@@ -129,21 +220,31 @@ function formatDuration(s: number): string {
 export function ItineraryPage({ user }: Props) {
   const { t } = useT();
   const isMobile = useIsMobile();
+  const dark = useDarkMode();
 
   const [waypoints, setWaypoints]     = useState<Waypoint[]>([]);
   const [targetKm, setTargetKm]       = useState<number>(50);
+  const [loop, setLoop]               = useState<boolean>(false);
   const [name, setName]               = useState<string>('');
-  const [activeId, setActiveId]       = useState<string | null>(null); // current loaded itinerary
+  const [activeId, setActiveId]       = useState<string | null>(null);
 
   const [geometry, setGeometry]       = useState<[number, number][] | null>(null);
   const [distanceM, setDistanceM]     = useState<number | null>(null);
   const [durationS, setDurationS]     = useState<number | null>(null);
   const [routing, setRouting]         = useState(false);
   const [routeError, setRouteError]   = useState<string | null>(null);
+  const [extending, setExtending]     = useState(false);
+
+  // Elevation cache for the current geometry.
+  const [elevSeries, setElevSeries]   = useState<{ km: number; ele: number }[]>([]);
+  const [elevations, setElevations]   = useState<number[] | null>(null);
+  const [elevIndices, setElevIndices] = useState<number[] | null>(null);
+  const [ascent, setAscent]           = useState(0);
+  const [descent, setDescent]         = useState(0);
+  const [eleLoading, setEleLoading]   = useState(false);
 
   const [library, setLibrary]         = useState<Itinerary[]>([]);
 
-  // Hydrate library on mount + when user changes.
   useEffect(() => { setLibrary(loadAll(user)); }, [user]);
 
   // ── Waypoint manipulation ────────────────────────────────────────────────
@@ -161,12 +262,15 @@ export function ItineraryPage({ user }: Props) {
   const clearAll = () => {
     setWaypoints([]); setGeometry(null); setDistanceM(null); setDurationS(null);
     setName(''); setActiveId(null); setRouteError(null);
+    setElevSeries([]); setElevations(null); setElevIndices(null); setAscent(0); setDescent(0);
   };
 
   // ── Routing ──────────────────────────────────────────────────────────────
   const computeRoute = useCallback(async () => {
-    if (waypoints.length < 2) {
+    const eff = effectiveWaypoints(waypoints, loop);
+    if (eff.length < 2) {
       setGeometry(null); setDistanceM(null); setDurationS(null); setRouteError(null);
+      setElevSeries([]); setElevations(null); setElevIndices(null);
       return;
     }
     setRouting(true); setRouteError(null);
@@ -174,7 +278,7 @@ export function ItineraryPage({ user }: Props) {
       const res = await fetch('/api/route-bike', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ waypoints: waypoints.map(w => [w.lat, w.lng]) }),
+        body: JSON.stringify({ waypoints: eff.map(w => [w.lat, w.lng]) }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
@@ -188,13 +292,69 @@ export function ItineraryPage({ user }: Props) {
     } finally {
       setRouting(false);
     }
-  }, [waypoints]);
+  }, [waypoints, loop]);
 
-  // Auto-route whenever waypoints change (debounced).
   useEffect(() => {
     const id = setTimeout(computeRoute, 300);
     return () => clearTimeout(id);
   }, [computeRoute]);
+
+  // ── Elevation: fetch a downsampled profile each time the geometry changes
+  useEffect(() => {
+    let cancelled = false;
+    if (!geometry || geometry.length < 2) {
+      setElevSeries([]); setElevations(null); setElevIndices(null);
+      setAscent(0); setDescent(0);
+      return;
+    }
+    const { points, indices } = downsampleByDistance(geometry, 80);
+    setEleLoading(true);
+    fetch('/api/elevation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ points }),
+    })
+      .then(r => r.ok ? r.json() : Promise.reject(r))
+      .then((data: { elevations: number[] }) => {
+        if (cancelled) return;
+        const series = buildElevationSeries(geometry, indices, data.elevations);
+        const { ascent, descent } = ascentDescent(data.elevations);
+        setElevSeries(series);
+        setElevations(data.elevations);
+        setElevIndices(indices);
+        setAscent(ascent);
+        setDescent(descent);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        // Elevation is decorative — silent fail keeps the rest of the
+        // page usable even when opentopodata is rate-limiting us.
+        setElevSeries([]); setElevations(null); setElevIndices(null);
+        setAscent(0); setDescent(0);
+      })
+      .finally(() => { if (!cancelled) setEleLoading(false); });
+    return () => { cancelled = true; };
+  }, [geometry]);
+
+  // ── Auto-extend ──────────────────────────────────────────────────────────
+  const handleAutoExtend = async () => {
+    if (distanceM == null) return;
+    const distanceKm = distanceM / 1000;
+    if (targetKm - distanceKm < 3) return;
+    setExtending(true);
+    try {
+      const found = await findDetour(waypoints, targetKm, distanceKm, loop);
+      if (found) {
+        setWaypoints(prev => {
+          const next = [...prev];
+          next.splice(found.insertAt, 0, found.waypoint);
+          return next;
+        });
+      }
+    } finally {
+      setExtending(false);
+    }
+  };
 
   // ── Save / load / delete ─────────────────────────────────────────────────
   const handleSave = () => {
@@ -205,9 +365,14 @@ export function ItineraryPage({ user }: Props) {
       createdAt:   new Date().toISOString(),
       waypoints,
       targetKm,
+      loop,
       distanceKm:  distanceM != null ? +(distanceM / 1000).toFixed(1) : undefined,
       durationMin: durationS != null ? Math.round(durationS / 60)     : undefined,
       geometry:    geometry ?? undefined,
+      elevSampleIndices: elevIndices ?? undefined,
+      elevations:        elevations ?? undefined,
+      totalAscent:       ascent || undefined,
+      totalDescent:      descent || undefined,
     };
     setLibrary(upsert(user, it));
     setActiveId(it.id);
@@ -219,10 +384,22 @@ export function ItineraryPage({ user }: Props) {
     setName(it.name);
     setWaypoints(it.waypoints);
     setTargetKm(it.targetKm);
+    setLoop(!!it.loop);
     setGeometry(it.geometry ?? null);
     setDistanceM(it.distanceKm != null ? it.distanceKm * 1000 : null);
     setDurationS(it.durationMin != null ? it.durationMin * 60 : null);
     setRouteError(null);
+    // Restore elevation cache if present — saves an opentopodata call.
+    if (it.geometry && it.elevSampleIndices && it.elevations) {
+      const series = buildElevationSeries(it.geometry, it.elevSampleIndices, it.elevations);
+      setElevSeries(series);
+      setElevations(it.elevations);
+      setElevIndices(it.elevSampleIndices);
+      setAscent(it.totalAscent ?? 0);
+      setDescent(it.totalDescent ?? 0);
+    } else {
+      setElevSeries([]); setElevations(null); setElevIndices(null); setAscent(0); setDescent(0);
+    }
   };
 
   const handleDelete = (id: string) => {
@@ -232,23 +409,63 @@ export function ItineraryPage({ user }: Props) {
     if (activeId === id) clearAll();
   };
 
+  // ── GPX export ───────────────────────────────────────────────────────────
+  const handleExportGpx = () => {
+    if (!geometry || geometry.length < 2 || waypoints.length < 1) return;
+    // Interpolate elevations to per-trkpt: only fill if we have the
+    // downsampled cache; otherwise skip <ele> tags.
+    let perPointElev: number[] | undefined;
+    if (elevations && elevIndices && elevations.length === elevIndices.length) {
+      perPointElev = new Array(geometry.length).fill(0);
+      for (let s = 0; s < elevIndices.length - 1; s++) {
+        const i0 = elevIndices[s];
+        const i1 = elevIndices[s + 1];
+        const e0 = elevations[s];
+        const e1 = elevations[s + 1];
+        for (let i = i0; i <= i1; i++) {
+          const t = i1 > i0 ? (i - i0) / (i1 - i0) : 0;
+          perPointElev[i] = e0 + (e1 - e0) * t;
+        }
+      }
+    }
+    const itinName = name.trim() || `${waypoints[0].name} → ${waypoints[waypoints.length - 1].name}`;
+    const gpx = buildGpx({
+      name:       itinName,
+      waypoints,
+      polyline:   geometry,
+      elevations: perPointElev,
+    });
+    downloadGpx(`${gpxSlug(itinName)}.gpx`, gpx);
+  };
+
   // ── Map data ─────────────────────────────────────────────────────────────
   const mapCenter = useMemo<[number, number]>(() => {
     if (waypoints.length > 0) return [waypoints[0].lat, waypoints[0].lng];
-    return [45.75, 4.85]; // Lyon area default
+    return [45.75, 4.85];
   }, [waypoints]);
 
   const polylinePositions = geometry ?? null;
+  const distanceKm        = distanceM != null ? +(distanceM / 1000).toFixed(1) : null;
+  const deltaKm           = distanceKm != null ? +(distanceKm - targetKm).toFixed(1) : null;
+  const deltaPct          = distanceKm != null && targetKm > 0 ? ((distanceKm - targetKm) / targetKm) * 100 : 0;
 
-  const distanceKm = distanceM != null ? +(distanceM / 1000).toFixed(1) : null;
-  const deltaKm    = distanceKm != null ? +(distanceKm - targetKm).toFixed(1) : null;
-  const deltaPct   = distanceKm != null && targetKm > 0 ? ((distanceKm - targetKm) / targetKm) * 100 : 0;
+  // CARTO Voyager / dark — same setup as ActivityRouteMap so the map
+  // matches everywhere on the site.
+  const tileUrl = dark
+    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+    : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+
+  // Map grew by +200px vs the previous V1 to leave room for the
+  // elevation chart underneath without scrolling pressure.
+  const mapHeight = isMobile ? 560 : 720;
 
   // ── Layout ───────────────────────────────────────────────────────────────
   const CARD: CSSProperties = {
     background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
     borderRadius: 4, padding: 20,
   };
+
+  const canExtend = distanceKm != null && targetKm - distanceKm >= 3 && !extending && !routing;
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '20px 16px' : '32px 40px' }}>
@@ -267,13 +484,8 @@ export function ItineraryPage({ user }: Props) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Step 1: villages */}
           <div style={CARD}>
-            <Label style={{ display: 'block', marginBottom: 10 }}>
-              {t('itinerary.step1')}
-            </Label>
-            <VillageSearch
-              onPick={addWaypoint}
-              placeholder={t('itinerary.searchPlaceholder')}
-            />
+            <Label style={{ display: 'block', marginBottom: 10 }}>{t('itinerary.step1')}</Label>
+            <VillageSearch onPick={addWaypoint} placeholder={t('itinerary.searchPlaceholder')} />
             {waypoints.length === 0 && (
               <p style={{ marginTop: 12, fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight, lineHeight: 1.5 }}>
                 {t('itinerary.searchHint')}
@@ -310,6 +522,16 @@ export function ItineraryPage({ user }: Props) {
                     </div>
                   </div>
                 ))}
+                {loop && waypoints.length >= 2 && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '6px 10px', background: tokens.terraLight, borderRadius: 3,
+                    fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.terra, fontWeight: 600,
+                    letterSpacing: '0.05em',
+                  }}>
+                    ↺ {t('itinerary.loopReturn').replace('{name}', waypoints[0].name)}
+                  </div>
+                )}
                 <button onClick={clearAll} style={{
                   marginTop: 4, alignSelf: 'flex-start',
                   fontFamily: "'Space Grotesk'", fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase',
@@ -321,11 +543,9 @@ export function ItineraryPage({ user }: Props) {
             )}
           </div>
 
-          {/* Step 2: target distance */}
+          {/* Step 2: target distance + loop + auto-extend */}
           <div style={CARD}>
-            <Label style={{ display: 'block', marginBottom: 10 }}>
-              {t('itinerary.step2')}
-            </Label>
+            <Label style={{ display: 'block', marginBottom: 10 }}>{t('itinerary.step2')}</Label>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <input
                 type="number" min={5} max={400} step={5}
@@ -350,6 +570,36 @@ export function ItineraryPage({ user }: Props) {
                 ))}
               </div>
             </div>
+
+            {/* Loop toggle */}
+            <div style={{
+              marginTop: 12, display: 'flex', alignItems: 'center', gap: 10,
+              padding: '8px 10px', background: tokens.creamDark, borderRadius: 3,
+            }}>
+              <button
+                role="switch"
+                aria-checked={loop}
+                onClick={() => setLoop(v => !v)}
+                style={{
+                  width: 36, height: 20, padding: 2,
+                  background: loop ? tokens.terra : tokens.creamBorder,
+                  border: 'none', borderRadius: 10, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: loop ? 'flex-end' : 'flex-start',
+                  transition: 'all 0.15s',
+                }}
+              >
+                <span style={{ width: 16, height: 16, borderRadius: '50%', background: '#fff' }} />
+              </button>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: "'Space Grotesk'", fontSize: 13, fontWeight: 600, color: tokens.ink }}>
+                  {t('itinerary.loop')}
+                </div>
+                <div style={{ fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight, letterSpacing: '0.04em', marginTop: 1 }}>
+                  {t('itinerary.loopHint')}
+                </div>
+              </div>
+            </div>
+
             {distanceKm != null && (
               <div style={{ marginTop: 14, padding: 12, background: tokens.creamDark, borderRadius: 3 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
@@ -376,6 +626,20 @@ export function ItineraryPage({ user }: Props) {
                     )}
                   </div>
                 )}
+                {canExtend && (
+                  <button
+                    onClick={handleAutoExtend}
+                    disabled={extending}
+                    style={{
+                      marginTop: 10, width: '100%', padding: '8px 10px',
+                      fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase',
+                      background: tokens.green, color: '#fff', border: 'none', borderRadius: 3,
+                      cursor: extending ? 'wait' : 'pointer', opacity: extending ? 0.6 : 1,
+                    }}
+                  >
+                    {extending ? t('itinerary.extending') : t('itinerary.extendAuto')}
+                  </button>
+                )}
               </div>
             )}
             {routing && (
@@ -390,11 +654,9 @@ export function ItineraryPage({ user }: Props) {
             )}
           </div>
 
-          {/* Step 3: save */}
+          {/* Step 3: save + export */}
           <div style={CARD}>
-            <Label style={{ display: 'block', marginBottom: 10 }}>
-              {t('itinerary.step3')}
-            </Label>
+            <Label style={{ display: 'block', marginBottom: 10 }}>{t('itinerary.step3')}</Label>
             <input
               type="text"
               value={name}
@@ -420,15 +682,34 @@ export function ItineraryPage({ user }: Props) {
             >
               {activeId ? t('itinerary.update') : t('itinerary.save')}
             </button>
+            <button
+              onClick={handleExportGpx}
+              disabled={!geometry || geometry.length < 2}
+              style={{
+                marginTop: 8, width: '100%', padding: '10px 12px',
+                fontFamily: "'Space Grotesk'", fontSize: 12, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase',
+                background: 'transparent', color: !geometry ? tokens.creamBorder : tokens.ink,
+                border: `1px solid ${!geometry ? tokens.creamBorder : tokens.ink}`, borderRadius: 4,
+                cursor: !geometry ? 'not-allowed' : 'pointer',
+              }}
+            >
+              ⤓ {t('itinerary.exportGpx')}
+            </button>
           </div>
         </div>
 
         {/* ─── RIGHT COLUMN: map ───────────────────────────────────────── */}
-        <div style={{ ...CARD, padding: 0, overflow: 'hidden', minHeight: isMobile ? 360 : 520, position: 'relative' }}>
-          <MapContainer center={mapCenter} zoom={waypoints.length > 0 ? 11 : 9} style={{ height: isMobile ? 360 : 520, width: '100%' }}>
+        <div style={{ ...CARD, padding: 0, overflow: 'hidden', minHeight: mapHeight, position: 'relative' }}>
+          <MapContainer
+            center={mapCenter}
+            zoom={waypoints.length > 0 ? 11 : 9}
+            scrollWheelZoom={false}
+            style={{ height: mapHeight, width: '100%' }}
+          >
             <TileLayer
-              url="https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png"
-              attribution='&copy; <a href="https://www.cyclosm.org">CyclOSM</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+              key={tileUrl}
+              url={tileUrl}
+              attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap'
             />
             {polylinePositions && polylinePositions.length > 1 && (
               <Polyline positions={polylinePositions} pathOptions={{ color: tokens.terra, weight: 4, opacity: 0.85 }} />
@@ -438,9 +719,7 @@ export function ItineraryPage({ user }: Props) {
                 key={`${w.code}-${i}`}
                 center={[w.lat, w.lng]}
                 radius={9}
-                pathOptions={{
-                  fillColor: tokens.terra, color: '#fff', weight: 2, fillOpacity: 1,
-                }}
+                pathOptions={{ fillColor: tokens.terra, color: '#fff', weight: 2, fillOpacity: 1 }}
               >
                 <Tooltip permanent direction="top" offset={[0, -10]}>
                   <span style={{ fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 600 }}>
@@ -453,6 +732,16 @@ export function ItineraryPage({ user }: Props) {
           </MapContainer>
         </div>
       </div>
+
+      {/* ─── ELEVATION PROFILE (full width below the map) ──────────────── */}
+      {(eleLoading || elevSeries.length > 1) && (
+        <ElevationChart
+          data={elevSeries}
+          totalAscent={ascent}
+          totalDescent={descent}
+          loading={eleLoading && elevSeries.length === 0}
+        />
+      )}
 
       {/* ─── LIBRARY ────────────────────────────────────────────────────── */}
       <div style={{ marginTop: 32 }}>
@@ -470,16 +759,15 @@ export function ItineraryPage({ user }: Props) {
                 ...CARD, padding: 14,
                 borderTop: activeId === it.id ? `2px solid ${tokens.terra}` : `1px solid ${tokens.creamBorder}`,
                 cursor: 'pointer',
-              }}
-                onClick={() => handleLoad(it)}
-              >
+              }} onClick={() => handleLoad(it)}>
                 <div style={{ fontFamily: "'Playfair Display'", fontSize: 16, fontWeight: 700, color: tokens.ink, marginBottom: 4 }}>
-                  {it.name}
+                  {it.loop ? '↺ ' : ''}{it.name}
                 </div>
                 <div style={{ fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight, marginBottom: 8, letterSpacing: '0.05em' }}>
                   {it.waypoints.length} {t('itinerary.stops')}
                   {it.distanceKm != null && ` · ${it.distanceKm} km`}
                   {it.durationMin != null && ` · ${formatDuration(it.durationMin * 60)}`}
+                  {it.totalAscent != null && ` · ↗ ${it.totalAscent} m`}
                 </div>
                 <div style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkMid, lineHeight: 1.4, marginBottom: 8 }}>
                   {it.waypoints.slice(0, 4).map(w => w.name).join(' → ')}
