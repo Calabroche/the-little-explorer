@@ -13,23 +13,26 @@ import { PlannerPage } from './pages/PlannerPage';
 import { FtpPage } from './pages/FtpPage';
 import { ComparePage } from './pages/ComparePage';
 import { WrappedPage } from './pages/WrappedPage';
+import { ItineraryPage } from './pages/ItineraryPage';
 import { AnalysisPage } from './AnalysisPage';
 
 // ── URL <-> state helpers ────────────────────────────────────────────────────
 
 const PAGE_PATHS: Record<PageId, string> = {
-  feed:    '/',
-  planner: '/planificateur',
-  compare: '/comparer',
-  map:     '/carte',
-  stats:   '/stats',
-  wrapped: '/bilan',
-  ftp:     '/ftp',
-  photos:  '/photos',
+  feed:      '/',
+  planner:   '/planificateur',
+  itinerary: '/itineraire',
+  compare:   '/comparer',
+  map:       '/carte',
+  stats:     '/stats',
+  wrapped:   '/bilan',
+  ftp:       '/ftp',
+  photos:    '/photos',
 };
 
 function pathToPage(pathname: string): PageId {
   if (pathname.startsWith('/planificateur')) return 'planner';
+  if (pathname.startsWith('/itineraire'))    return 'itinerary';
   if (pathname.startsWith('/comparer'))      return 'compare';
   if (pathname.startsWith('/carte'))         return 'map';
   if (pathname.startsWith('/stats'))         return 'stats';
@@ -90,7 +93,7 @@ export function ExplorerApp() {
     localStorage.setItem('tle_sport', s);
     setAnalysisActivity(null);
     // Sur les pages spécifiques au vélo, retomber sur le feed quand on passe en course.
-    if (s === 'running' && (page === 'planner' || page === 'ftp')) {
+    if (s !== 'cycling' && (page === 'planner' || page === 'ftp' || page === 'itinerary')) {
       setPage('feed');
       window.history.pushState(null, '', '/');
     }
@@ -237,14 +240,15 @@ export function ExplorerApp() {
   const availableSports: SportId[] = SPORT_ORDER.filter(s => presentSports.has(s));
 
   const pageContent: Record<PageId, React.ReactNode> = {
-    feed:    <FeedPage    activities={filteredActivities} stats={filteredStats!} sport={sport} onSelect={openActivity} />,
-    planner: <PlannerPage activities={filteredActivities} />,
-    compare: <ComparePage activities={filteredActivities} />,
-    map:     <MapPage     activities={filteredActivities} selectedActivity={selectedActivityForMap} />,
-    stats:   <StatsPage   activities={filteredActivities} stats={filteredStats!} />,
-    wrapped: <WrappedPage activities={activities} />,
-    ftp:     <FtpPage     activities={filteredActivities} />,
-    photos:  <PhotosPage  activities={filteredActivities} />,
+    feed:      <FeedPage      activities={filteredActivities} stats={filteredStats!} sport={sport} onSelect={openActivity} />,
+    planner:   <PlannerPage   activities={filteredActivities} />,
+    itinerary: <ItineraryPage user={user} />,
+    compare:   <ComparePage   activities={filteredActivities} />,
+    map:       <MapPage       activities={filteredActivities} selectedActivity={selectedActivityForMap} />,
+    stats:     <StatsPage     activities={filteredActivities} stats={filteredStats!} />,
+    wrapped:   <WrappedPage   activities={activities} />,
+    ftp:       <FtpPage       activities={filteredActivities} />,
+    photos:    <PhotosPage    activities={filteredActivities} />,
   };
 
   return (

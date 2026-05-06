@@ -5,7 +5,7 @@ import { Label } from './ui';
 import { useT } from '@/i18n';
 import type { Lang } from '@/i18n';
 
-export type PageId = 'feed' | 'planner' | 'map' | 'stats' | 'photos' | 'ftp' | 'compare' | 'wrapped';
+export type PageId = 'feed' | 'planner' | 'map' | 'stats' | 'photos' | 'ftp' | 'compare' | 'wrapped' | 'itinerary';
 export type SportId = 'cycling' | 'running' | 'hiking' | 'ski' | 'snowshoe' | 'walking' | 'swim';
 export type UserId  = 'florian' | 'helena';
 
@@ -14,8 +14,9 @@ export type UserId  = 'florian' | 'helena';
 // outdoor activity.
 const ALL_SPORTS: SportId[] = ['cycling', 'running', 'hiking', 'ski', 'snowshoe', 'walking', 'swim'];
 const ALL_NAV_ITEMS: { id: PageId; icon: string; label: string; sports: SportId[] }[] = [
-  { id: 'feed',    icon: '◎', label: 'Activités',     sports: ALL_SPORTS },
-  { id: 'planner', icon: '✦', label: 'Planificateur', sports: ['cycling'] },
+  { id: 'feed',      icon: '◎', label: 'Activités',     sports: ALL_SPORTS },
+  { id: 'itinerary', icon: '⤳', label: 'Itinéraire',    sports: ['cycling'] },
+  { id: 'planner',   icon: '✦', label: 'Planificateur', sports: ['cycling'] },
   { id: 'compare', icon: '⇄', label: 'Comparer',      sports: ALL_SPORTS },
   { id: 'stats',   icon: '▬', label: 'Stats',         sports: ALL_SPORTS },
   { id: 'wrapped', icon: '✺', label: 'Bilan',         sports: ALL_SPORTS },
@@ -153,14 +154,15 @@ function LangToggle({ lang, onChange, compact }: { lang: Lang; onChange: (l: Lan
 }
 
 const NAV_LABEL_KEY: Record<PageId, string> = {
-  feed:    'nav.activities',
-  planner: 'nav.planner',
-  compare: 'nav.compare',
-  map:     'nav.map',
-  stats:   'nav.stats',
-  wrapped: 'nav.wrapped',
-  ftp:     'nav.ftp',
-  photos:  'nav.photos',
+  feed:      'nav.activities',
+  planner:   'nav.planner',
+  itinerary: 'nav.itinerary',
+  compare:   'nav.compare',
+  map:       'nav.map',
+  stats:     'nav.stats',
+  wrapped:   'nav.wrapped',
+  ftp:       'nav.ftp',
+  photos:    'nav.photos',
 };
 
 export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobile, sport, onSportChange, availableSports, user, onUserChange, onHome }: Props) {
