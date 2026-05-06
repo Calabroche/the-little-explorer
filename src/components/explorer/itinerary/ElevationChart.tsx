@@ -4,8 +4,11 @@ import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis, ReferenceA
 import { tokens } from '../tokens';
 import { Label } from '../ui';
 
+interface RawPoint { km: number; ele: number }
+interface Point extends RawPoint { gradPct: number; cumD: number }
+
 interface Props {
-  data:        { km: number; ele: number }[];
+  data:        RawPoint[];
   totalAscent:  number;
   totalDescent: number;
   loading?:     boolean;
@@ -16,15 +19,33 @@ interface Props {
 // multi-coloured custom shape.
 const STEEP_PCT = 5;
 
-function steepBands(data: { km: number; ele: number }[]): { x1: number; x2: number }[] {
+// Pre-compute, for each sample, the local grade (between this point and
+// the previous one) and the cumulative D+ up to here. The tooltip reads
+// these directly so it doesn't have to reach back into the array on
+// every hover frame.
+function enrich(data: RawPoint[]): Point[] {
+  const out: Point[] = [];
+  let cum = 0;
+  for (let i = 0; i < data.length; i++) {
+    if (i === 0) {
+      out.push({ ...data[i], gradPct: 0, cumD: 0 });
+      continue;
+    }
+    const dxM = (data[i].km - data[i - 1].km) * 1000;
+    const dy  =  data[i].ele - data[i - 1].ele;
+    const grade = dxM > 0 ? (dy / dxM) * 100 : 0;
+    if (dy > 0) cum += dy;
+    out.push({ ...data[i], gradPct: +grade.toFixed(1), cumD: Math.round(cum) });
+  }
+  return out;
+}
+
+function steepBands(data: Point[]): { x1: number; x2: number }[] {
   if (data.length < 2) return [];
   const bands: { x1: number; x2: number }[] = [];
   let bandStart: number | null = null;
   for (let i = 1; i < data.length; i++) {
-    const dx = (data[i].km - data[i - 1].km) * 1000;
-    const dy =  data[i].ele - data[i - 1].ele;
-    const grade = dx > 0 ? (dy / dx) * 100 : 0;
-    const isSteep = grade >= STEEP_PCT;
+    const isSteep = data[i].gradPct >= STEEP_PCT;
     if (isSteep && bandStart == null) bandStart = data[i - 1].km;
     if ((!isSteep || i === data.length - 1) && bandStart != null) {
       const end = !isSteep ? data[i - 1].km : data[i].km;
@@ -33,6 +54,44 @@ function steepBands(data: { km: number; ele: number }[]): { x1: number; x2: numb
     }
   }
   return bands;
+}
+
+// Recharts hands the active payload to the tooltip — we just pull out
+// our enriched fields and render them. Colour the slope value by sign
+// (terra for climbs, green for descents, neutral for flats).
+interface TooltipPayload { payload?: Point }
+function HoverTooltip({ active, payload }: { active?: boolean; payload?: TooltipPayload[] }) {
+  if (!active || !payload || payload.length === 0) return null;
+  const p = payload[0]?.payload;
+  if (!p) return null;
+  const slopeColor = p.gradPct >=  1 ? tokens.terra
+                  : p.gradPct <= -1 ? tokens.green
+                  :                   tokens.inkMid;
+  const slopeSign  = p.gradPct > 0 ? '+' : '';
+  return (
+    <div style={{
+      background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
+      borderRadius: 4, padding: '10px 12px', minWidth: 160,
+      fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.ink,
+      boxShadow: '0 6px 20px rgba(0,0,0,0.08)',
+    }}>
+      <div style={{ fontWeight: 700, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: tokens.inkLight, marginBottom: 6 }}>
+        {p.km.toFixed(1)} km
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, lineHeight: 1.7 }}>
+        <span style={{ color: tokens.inkMid }}>Altitude</span>
+        <strong>{p.ele} m</strong>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, lineHeight: 1.7 }}>
+        <span style={{ color: tokens.inkMid }}>Pente</span>
+        <strong style={{ color: slopeColor }}>{slopeSign}{p.gradPct.toFixed(1)} %</strong>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, lineHeight: 1.7 }}>
+        <span style={{ color: tokens.inkMid }}>D+ cumulé</span>
+        <strong style={{ color: tokens.terra }}>↗ {p.cumD.toLocaleString()} m</strong>
+      </div>
+    </div>
+  );
 }
 
 export function ElevationChart({ data, totalAscent, totalDescent, loading }: Props) {
@@ -45,10 +104,11 @@ export function ElevationChart({ data, totalAscent, totalDescent, loading }: Pro
   }
   if (!data || data.length < 2) return null;
 
-  const bands  = steepBands(data);
-  const minEle = Math.min(...data.map(d => d.ele));
-  const maxEle = Math.max(...data.map(d => d.ele));
-  const padded = Math.max(20, Math.round((maxEle - minEle) * 0.15));
+  const enriched = enrich(data);
+  const bands    = steepBands(enriched);
+  const minEle   = Math.min(...enriched.map(d => d.ele));
+  const maxEle   = Math.max(...enriched.map(d => d.ele));
+  const padded   = Math.max(20, Math.round((maxEle - minEle) * 0.15));
 
   return (
     <div style={{ background: tokens.surface, border: `1px solid ${tokens.creamBorder}`, borderRadius: 4, padding: 20, marginTop: 16 }}>
@@ -71,7 +131,7 @@ export function ElevationChart({ data, totalAscent, totalDescent, loading }: Pro
       </div>
 
       <ResponsiveContainer width="100%" height={140}>
-        <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+        <AreaChart data={enriched} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
           <defs>
             <linearGradient id="eleGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%"   stopColor={tokens.green}     stopOpacity={0.8} />
@@ -102,12 +162,8 @@ export function ElevationChart({ data, totalAscent, totalDescent, loading }: Pro
             width={50}
           />
           <Tooltip
-            contentStyle={{
-              background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
-              borderRadius: 4, fontFamily: 'Space Grotesk', fontSize: 12,
-            }}
-            formatter={(v, name) => name === 'ele' ? [`${v} m`, 'Altitude'] : [v as string | number, name as string]}
-            labelFormatter={(v) => `${v} km`}
+            content={<HoverTooltip />}
+            cursor={{ stroke: tokens.terra, strokeWidth: 1, strokeDasharray: '3 3' }}
           />
           <Area
             type="monotone" dataKey="ele"
