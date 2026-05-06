@@ -12,6 +12,7 @@ import { PhotosPage } from './pages/PhotosPage';
 import { PlannerPage } from './pages/PlannerPage';
 import { FtpPage } from './pages/FtpPage';
 import { ComparePage } from './pages/ComparePage';
+import { WrappedPage } from './pages/WrappedPage';
 import { AnalysisPage } from './AnalysisPage';
 
 // ── URL <-> state helpers ────────────────────────────────────────────────────
@@ -22,6 +23,7 @@ const PAGE_PATHS: Record<PageId, string> = {
   compare: '/comparer',
   map:     '/carte',
   stats:   '/stats',
+  wrapped: '/bilan',
   ftp:     '/ftp',
   photos:  '/photos',
 };
@@ -31,6 +33,7 @@ function pathToPage(pathname: string): PageId {
   if (pathname.startsWith('/comparer'))      return 'compare';
   if (pathname.startsWith('/carte'))         return 'map';
   if (pathname.startsWith('/stats'))         return 'stats';
+  if (pathname.startsWith('/bilan'))         return 'wrapped';
   if (pathname.startsWith('/ftp'))           return 'ftp';
   if (pathname.startsWith('/photos'))        return 'photos';
   return 'feed';
@@ -239,6 +242,7 @@ export function ExplorerApp() {
     compare: <ComparePage activities={filteredActivities} />,
     map:     <MapPage     activities={filteredActivities} selectedActivity={selectedActivityForMap} />,
     stats:   <StatsPage   activities={filteredActivities} stats={filteredStats!} />,
+    wrapped: <WrappedPage activities={activities} />,
     ftp:     <FtpPage     activities={filteredActivities} />,
     photos:  <PhotosPage  activities={filteredActivities} />,
   };

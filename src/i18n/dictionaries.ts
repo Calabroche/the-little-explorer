@@ -47,6 +47,7 @@ export const dict = {
       compare:    'Comparer',
       map:        'Carte',
       stats:      'Stats',
+      wrapped:    'Bilan',
       ftp:        'FTP',
       photos:     'Photos',
     },
@@ -466,6 +467,55 @@ export const dict = {
       hrChart:    'FRÉQUENCE CARDIAQUE — overlay',
       pwrChart:   'PUISSANCE — overlay',
     },
+    wrapped: {
+      empty:           'Pas encore de données pour faire un bilan.',
+      play:            '▶ Lecture',
+      pause:           '⏸ Pause',
+      intro: {
+        tag:           'BILAN',
+        subtitle:      'Une année en mouvement.',
+      },
+      distance: {
+        tag:           '§ 01 · DISTANCE',
+        caption:       'Voilà ce que tu as parcouru cette année. Chaque kilomètre, encaissé.',
+      },
+      elevation: {
+        tag:           '§ 02 · DÉNIVELÉ',
+        caption:       "Soit {n} fois la hauteur du Mont Blanc.",
+      },
+      count: {
+        tag:           '§ 03 · ENGAGEMENT',
+        activities:    'sorties',
+        hours:         'en mouvement',
+      },
+      longest: {
+        tag:           '§ 04 · LA PLUS LONGUE',
+      },
+      climb: {
+        tag:           '§ 05 · LE PLUS GROS DÉNIVELÉ',
+      },
+      topSport: {
+        tag:           '§ 06 · TON SPORT N°1',
+        caption:       '{count} sorties · {km} km. Tu sais ce que tu aimes.',
+      },
+      bestMonth: {
+        tag:           '§ 07 · TON MEILLEUR MOIS',
+        caption:       '{km} km parcourus. Le mois où tu étais lancé.',
+      },
+      outro: {
+        tag:           'BILAN',
+        title:         'Une année. Et la suivante qui arrive.',
+        caption:       '{n} sorties · {km} km · {m} m de D+ · {h} h en mouvement. À l’année prochaine.',
+      },
+      hint: {
+        click:         '← → pour naviguer · Échap pour mettre en pause',
+        tap:           'Tape pour avancer',
+      },
+      month: {
+        jan: 'Janvier', feb: 'Février', mar: 'Mars', apr: 'Avril', may: 'Mai', jun: 'Juin',
+        jul: 'Juillet', aug: 'Août', sep: 'Septembre', oct: 'Octobre', nov: 'Novembre', dec: 'Décembre',
+      },
+    },
   },
 
   en: {
@@ -510,6 +560,7 @@ export const dict = {
       compare:    'Compare',
       map:        'Map',
       stats:      'Stats',
+      wrapped:    'Recap',
       ftp:        'FTP',
       photos:     'Photos',
     },
@@ -926,6 +977,55 @@ export const dict = {
       stats:      'STATS',
       hrChart:    'HEART RATE — overlay',
       pwrChart:   'POWER — overlay',
+    },
+    wrapped: {
+      empty:           'No data yet to wrap up.',
+      play:            '▶ Play',
+      pause:           '⏸ Pause',
+      intro: {
+        tag:           'RECAP',
+        subtitle:      'A year in motion.',
+      },
+      distance: {
+        tag:           '§ 01 · DISTANCE',
+        caption:       "Here's how far you went this year. Every kilometre earned.",
+      },
+      elevation: {
+        tag:           '§ 02 · ELEVATION',
+        caption:       "That's {n}× Mont Blanc, climbed.",
+      },
+      count: {
+        tag:           '§ 03 · COMMITMENT',
+        activities:    'sessions',
+        hours:         'in motion',
+      },
+      longest: {
+        tag:           '§ 04 · YOUR LONGEST',
+      },
+      climb: {
+        tag:           '§ 05 · YOUR BIGGEST CLIMB',
+      },
+      topSport: {
+        tag:           '§ 06 · YOUR #1 SPORT',
+        caption:       '{count} sessions · {km} km. You know what you love.',
+      },
+      bestMonth: {
+        tag:           '§ 07 · YOUR BEST MONTH',
+        caption:       '{km} km logged. The month you were on fire.',
+      },
+      outro: {
+        tag:           'RECAP',
+        title:         'One year. Another one coming.',
+        caption:       '{n} sessions · {km} km · {m} m climbed · {h} h in motion. See you next year.',
+      },
+      hint: {
+        click:         '← → to navigate · Esc to pause',
+        tap:           'Tap to advance',
+      },
+      month: {
+        jan: 'January', feb: 'February', mar: 'March', apr: 'April', may: 'May', jun: 'June',
+        jul: 'July', aug: 'August', sep: 'September', oct: 'October', nov: 'November', dec: 'December',
+      },
     },
   },
 } as const;
