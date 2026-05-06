@@ -242,6 +242,10 @@ export function ItineraryPage({ user }: Props) {
   const [ascent, setAscent]           = useState(0);
   const [descent, setDescent]         = useState(0);
   const [eleLoading, setEleLoading]   = useState(false);
+  // When the user hovers the elevation chart, this holds the index in
+  // the elevSeries array; the map then renders a synced marker at the
+  // matching geometry point so you can see where on the route you are.
+  const [hoverEleIdx, setHoverEleIdx] = useState<number | null>(null);
 
   const [library, setLibrary]         = useState<Itinerary[]>([]);
 
@@ -445,6 +449,20 @@ export function ItineraryPage({ user }: Props) {
   }, [waypoints]);
 
   const polylinePositions = geometry ?? null;
+
+  // Map the elevation-chart hover index back into a [lat, lng] on the
+  // map. The chart is sampled at `elevIndices` of the polyline, so step 1
+  // is `chartIdx → polyIdx`, step 2 is `polyIdx → geometry[polyIdx]`.
+  const hoverPos = useMemo<[number, number] | null>(() => {
+    if (hoverEleIdx == null || !elevIndices || !geometry) return null;
+    const polyIdx = elevIndices[hoverEleIdx];
+    if (polyIdx == null || polyIdx < 0 || polyIdx >= geometry.length) return null;
+    return geometry[polyIdx];
+  }, [hoverEleIdx, elevIndices, geometry]);
+
+  // Stale-index guard: clear the hover whenever the route changes.
+  useEffect(() => { setHoverEleIdx(null); }, [geometry]);
+
   const distanceKm        = distanceM != null ? +(distanceM / 1000).toFixed(1) : null;
   const deltaKm           = distanceKm != null ? +(distanceKm - targetKm).toFixed(1) : null;
   const deltaPct          = distanceKm != null && targetKm > 0 ? ((distanceKm - targetKm) / targetKm) * 100 : 0;
@@ -698,50 +716,72 @@ export function ItineraryPage({ user }: Props) {
           </div>
         </div>
 
-        {/* ─── RIGHT COLUMN: map ───────────────────────────────────────── */}
-        <div style={{ ...CARD, padding: 0, overflow: 'hidden', minHeight: mapHeight, position: 'relative' }}>
-          <MapContainer
-            center={mapCenter}
-            zoom={waypoints.length > 0 ? 11 : 9}
-            scrollWheelZoom={false}
-            style={{ height: mapHeight, width: '100%' }}
-          >
-            <TileLayer
-              key={tileUrl}
-              url={tileUrl}
-              attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap'
+        {/* ─── RIGHT COLUMN: map + elevation profile ───────────────────── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0 }}>
+          <div style={{ ...CARD, padding: 0, overflow: 'hidden', minHeight: mapHeight, position: 'relative' }}>
+            <MapContainer
+              center={mapCenter}
+              zoom={waypoints.length > 0 ? 11 : 9}
+              scrollWheelZoom={false}
+              style={{ height: mapHeight, width: '100%' }}
+            >
+              <TileLayer
+                key={tileUrl}
+                url={tileUrl}
+                attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap'
+              />
+              {polylinePositions && polylinePositions.length > 1 && (
+                <Polyline positions={polylinePositions} pathOptions={{ color: tokens.terra, weight: 4, opacity: 0.85 }} />
+              )}
+              {waypoints.map((w, i) => (
+                <CircleMarker
+                  key={`${w.code}-${i}`}
+                  center={[w.lat, w.lng]}
+                  radius={9}
+                  pathOptions={{ fillColor: tokens.terra, color: '#fff', weight: 2, fillOpacity: 1 }}
+                >
+                  <Tooltip permanent direction="top" offset={[0, -10]}>
+                    <span style={{ fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 600 }}>
+                      {i + 1}. {w.name}
+                    </span>
+                  </Tooltip>
+                </CircleMarker>
+              ))}
+              {/* Synced hover marker: tracks the cursor on the elevation chart.
+                  Two stacked circles for a "halo" effect so it stands out
+                  against the route polyline. */}
+              {hoverPos && (
+                <>
+                  <CircleMarker
+                    center={hoverPos}
+                    radius={14}
+                    pathOptions={{ fillColor: tokens.blue, color: tokens.blue, weight: 0, fillOpacity: 0.25 }}
+                  />
+                  <CircleMarker
+                    center={hoverPos}
+                    radius={7}
+                    pathOptions={{ fillColor: tokens.blue, color: '#fff', weight: 2, fillOpacity: 1 }}
+                  />
+                </>
+              )}
+              <FitBounds positions={polylinePositions ?? waypoints.map(w => [w.lat, w.lng] as [number, number])} />
+            </MapContainer>
+          </div>
+
+          {/* Elevation chart sits directly under the map so you can read both
+              at once — and hovering it places a synced marker on the route
+              above. */}
+          {(eleLoading || elevSeries.length > 1) && (
+            <ElevationChart
+              data={elevSeries}
+              totalAscent={ascent}
+              totalDescent={descent}
+              loading={eleLoading && elevSeries.length === 0}
+              onHover={setHoverEleIdx}
             />
-            {polylinePositions && polylinePositions.length > 1 && (
-              <Polyline positions={polylinePositions} pathOptions={{ color: tokens.terra, weight: 4, opacity: 0.85 }} />
-            )}
-            {waypoints.map((w, i) => (
-              <CircleMarker
-                key={`${w.code}-${i}`}
-                center={[w.lat, w.lng]}
-                radius={9}
-                pathOptions={{ fillColor: tokens.terra, color: '#fff', weight: 2, fillOpacity: 1 }}
-              >
-                <Tooltip permanent direction="top" offset={[0, -10]}>
-                  <span style={{ fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 600 }}>
-                    {i + 1}. {w.name}
-                  </span>
-                </Tooltip>
-              </CircleMarker>
-            ))}
-            <FitBounds positions={polylinePositions ?? waypoints.map(w => [w.lat, w.lng] as [number, number])} />
-          </MapContainer>
+          )}
         </div>
       </div>
-
-      {/* ─── ELEVATION PROFILE (full width below the map) ──────────────── */}
-      {(eleLoading || elevSeries.length > 1) && (
-        <ElevationChart
-          data={elevSeries}
-          totalAscent={ascent}
-          totalDescent={descent}
-          loading={eleLoading && elevSeries.length === 0}
-        />
-      )}
 
       {/* ─── LIBRARY ────────────────────────────────────────────────────── */}
       <div style={{ marginTop: 32 }}>

@@ -12,6 +12,10 @@ interface Props {
   totalAscent:  number;
   totalDescent: number;
   loading?:     boolean;
+  // When the cursor moves over the chart, fires with the hovered sample
+  // index (or null on leave). Lets the parent show a synced marker on
+  // the map at the matching geometry point.
+  onHover?:    (sampleIdx: number | null) => void;
 }
 
 // Highlight x-bands where the local gradient exceeds STEEP_PCT — cheap
@@ -94,7 +98,7 @@ function HoverTooltip({ active, payload }: { active?: boolean; payload?: Tooltip
   );
 }
 
-export function ElevationChart({ data, totalAscent, totalDescent, loading }: Props) {
+export function ElevationChart({ data, totalAscent, totalDescent, loading, onHover }: Props) {
   if (loading) {
     return (
       <div style={{ padding: '32px 24px', textAlign: 'center', fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
@@ -131,7 +135,15 @@ export function ElevationChart({ data, totalAscent, totalDescent, loading }: Pro
       </div>
 
       <ResponsiveContainer width="100%" height={140}>
-        <AreaChart data={enriched} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+        <AreaChart
+          data={enriched}
+          margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
+          onMouseMove={(s) => {
+            const idx = (s as { activeTooltipIndex?: number | null })?.activeTooltipIndex;
+            if (onHover && typeof idx === 'number') onHover(idx);
+          }}
+          onMouseLeave={() => onHover?.(null)}
+        >
           <defs>
             <linearGradient id="eleGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%"   stopColor={tokens.green}     stopOpacity={0.8} />
