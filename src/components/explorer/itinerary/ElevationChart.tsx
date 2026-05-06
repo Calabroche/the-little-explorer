@@ -139,8 +139,14 @@ export function ElevationChart({ data, totalAscent, totalDescent, loading, onHov
           data={enriched}
           margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
           onMouseMove={(s) => {
-            const idx = (s as { activeTooltipIndex?: number | null })?.activeTooltipIndex;
-            if (onHover && typeof idx === 'number') onHover(idx);
+            // Recharts v3 ships `activeTooltipIndex` as `number | string |
+            // null` (the type is widened to accommodate Treemap-style
+            // charts). Accept both numeric and stringified-number forms.
+            const raw = (s as { activeTooltipIndex?: number | string | null })?.activeTooltipIndex;
+            const idx = typeof raw === 'number' ? raw
+                      : typeof raw === 'string' ? Number(raw)
+                      :                           NaN;
+            if (onHover && Number.isFinite(idx)) onHover(idx);
           }}
           onMouseLeave={() => onHover?.(null)}
         >
