@@ -406,7 +406,36 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
         </div>
       )}
 
-      {/* Advanced metrics */}
+      {/* Chart grid — Row 1: FC | Vitesse */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20, marginBottom: 20 }}>
+        {hrGradChart || <div />}
+        {speedChart}
+      </div>
+
+      {/* Chart grid — Row 2: Puissance | Altitude */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20, marginBottom: 20 }}>
+        {powerChart || <div />}
+        {altChart}
+      </div>
+
+      {/* VO2 Max + Power summary */}
+      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 20, marginBottom: 20 }}>
+        {activity.max_hr && <VO2MaxCard activity={activity} />}
+        {hasPow && <PowerCard activity={activity} data={data} />}
+      </div>
+
+      {/* Route map */}
+      {hasGPS && (
+        <div style={{ ...CARD_STYLE, marginBottom: 20 }}>
+          <Label style={{ display: 'block', marginBottom: 14 }}>CARTE DU TRAJET</Label>
+          <ActivityRouteMap activity={activity} />
+        </div>
+      )}
+
+      {/* Advanced metrics — moved to the bottom of the page so the
+          heatmap-style route is the first thing the eye lands on, and
+          the dense effort/cardio/mech tables come after as deeper read.
+          (Original placement was right above the chart grid.) */}
       {(activity.np || activity.tss || activity.trimp) && (
         <div style={{ ...CARD_STYLE, marginBottom: 20 }}>
           <Label style={{ display: 'block', marginBottom: 16 }}>{t('analysis.effort')}</Label>
@@ -561,32 +590,6 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
               </div>
             );
           })()}
-        </div>
-      )}
-
-      {/* Chart grid — Row 1: FC | Vitesse */}
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20, marginBottom: 20 }}>
-        {hrGradChart || <div />}
-        {speedChart}
-      </div>
-
-      {/* Chart grid — Row 2: Puissance | Altitude */}
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20, marginBottom: 20 }}>
-        {powerChart || <div />}
-        {altChart}
-      </div>
-
-      {/* VO2 Max + Power summary */}
-      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 20, marginBottom: 20 }}>
-        {activity.max_hr && <VO2MaxCard activity={activity} />}
-        {hasPow && <PowerCard activity={activity} data={data} />}
-      </div>
-
-      {/* Route map */}
-      {hasGPS && (
-        <div style={{ ...CARD_STYLE, marginBottom: 20 }}>
-          <Label style={{ display: 'block', marginBottom: 14 }}>CARTE DU TRAJET</Label>
-          <ActivityRouteMap activity={activity} />
         </div>
       )}
     </div>
