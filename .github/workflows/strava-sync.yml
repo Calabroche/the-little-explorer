@@ -6,7 +6,14 @@ on:
     # on Hobby repos can be delayed during peak hours, so the real cadence is
     # closer to "20-30 minutes most of the time".
     - cron: '*/15 * * * *'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      # Optional — passed by /api/strava-webhook so the run logs can show
+      # which athlete triggered it. Cron and manual UI dispatches omit it.
+      strava_owner_id:
+        description: 'Strava athlete id that triggered this sync (webhook only)'
+        required: false
+        default: ''
 
 permissions:
   contents: write
