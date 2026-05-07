@@ -92,24 +92,31 @@ function SportToggle({ sport, onChange, available, compact }: {
 }) {
   const { t } = useT();
   if (available.length === 0) return null;
+  // Compact (mobile) mode forces a single horizontal row that scrolls
+  // instead of wrapping to two lines and stealing vertical space.
   return (
     <div style={{
-      display: 'flex', flexWrap: 'wrap', gap: 4, padding: 3,
+      display: 'flex',
+      flexWrap: compact ? 'nowrap' : 'wrap',
+      overflowX: compact ? 'auto' : 'visible',
+      WebkitOverflowScrolling: 'touch',
+      gap: 4, padding: 3,
       background: tokens.creamDark, borderRadius: 4,
       border: `1px solid ${tokens.creamBorder}`,
+      scrollbarWidth: 'none',
     }}>
       {available.map(id => {
         const meta = SPORT_META[id];
         const active = sport === id;
         return (
           <button key={id} onClick={() => onChange(id)} style={{
-            flex: compact ? '1 1 auto' : '1 1 30%',
+            flex: compact ? '0 0 auto' : '1 1 30%',
             minWidth: compact ? 0 : 60,
-            padding: compact ? '4px 6px' : '6px 8px',
+            padding: compact ? '4px 8px' : '6px 8px',
             border: 'none', cursor: 'pointer', borderRadius: 3,
             background: active ? tokens.terra : 'transparent',
             color: active ? '#fff' : tokens.inkMid,
-            fontFamily: "'Space Grotesk'", fontSize: compact ? 9 : 11,
+            fontFamily: "'Space Grotesk'", fontSize: compact ? 10 : 11,
             fontWeight: active ? 700 : 500, letterSpacing: '0.04em',
             transition: 'all 0.12s', whiteSpace: 'nowrap',
           }}>
@@ -177,36 +184,76 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
         flexShrink: 0,
         paddingBottom: 'env(safe-area-inset-bottom)',
       }}>
-      <div style={{ padding: '6px 8px', borderBottom: `1px solid ${tokens.creamBorder}`, display: 'flex', gap: 6 }}>
-        <div style={{ flex: 2 }}><UserToggle  user={user}   onChange={onUserChange}  compact /></div>
-        <div style={{ flex: 2 }}><SportToggle sport={sport} onChange={onSportChange} available={availableSports} compact /></div>
-        <div style={{ flex: 1 }}><LangToggle  lang={lang}   onChange={setLang}       compact /></div>
-      </div>
-      <div style={{ height: 60, display: 'flex' }}>
-        {navItems.map(item => {
-          const active = activePage === item.id;
-          return (
-            <div key={item.id} onClick={() => onNav(item.id)} style={{
-              flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
-              justifyContent: 'center', gap: 3, cursor: 'pointer',
-              color: active ? tokens.terra : tokens.inkMid,
-            }}>
-              <span style={{ fontSize: 18 }}>{item.icon}</span>
-              <span style={{ fontFamily: "'Space Grotesk'", fontSize: 9, fontWeight: active ? 600 : 400, letterSpacing: '0.05em' }}>
-                {t(NAV_LABEL_KEY[item.id])}
-              </span>
-            </div>
-          );
-        })}
-        <div onClick={onToggleDark} style={{
-          width: 52, display: 'flex', flexDirection: 'column', alignItems: 'center',
-          justifyContent: 'center', gap: 3, cursor: 'pointer', color: tokens.inkMid,
-          borderLeft: `1px solid ${tokens.creamBorder}`,
+        {/* ── Top toggle strip ──────────────────────────────────────
+            User + Sport + Lang on a single line. Sport row scrolls
+            horizontally if it has >3 options. Dark mode is a small
+            icon button on the right, no longer competing for nav
+            real estate at the bottom. */}
+        <div style={{
+          padding: '6px 8px',
+          borderBottom: `1px solid ${tokens.creamBorder}`,
+          display: 'flex', gap: 6, alignItems: 'center',
         }}>
-          <span style={{ fontSize: 18 }}>{darkMode ? '◑' : '◐'}</span>
-          <span style={{ fontFamily: "'Space Grotesk'", fontSize: 9, letterSpacing: '0.05em' }}>{t('common.darkMode')}</span>
+          <div style={{ flex: '0 0 auto' }}><UserToggle user={user} onChange={onUserChange} compact /></div>
+          <div style={{ flex: '1 1 0%', minWidth: 0 }}><SportToggle sport={sport} onChange={onSportChange} available={availableSports} compact /></div>
+          <div style={{ flex: '0 0 auto' }}><LangToggle lang={lang} onChange={setLang} compact /></div>
+          <button
+            onClick={onToggleDark}
+            aria-label={darkMode ? 'Mode clair' : 'Mode sombre'}
+            style={{
+              flex: '0 0 auto', width: 32, height: 32, borderRadius: '50%',
+              background: tokens.creamDark, border: `1px solid ${tokens.creamBorder}`,
+              color: tokens.inkMid, fontSize: 16, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            {darkMode ? '◑' : '◐'}
+          </button>
         </div>
-      </div>
+
+        {/* ── Bottom nav: horizontally scrollable so each item gets
+            its own breathing room (no more 7 items mashed across
+            the width of an iPhone). Hide the scrollbar — users feel
+            the swipe affordance from the bigger items, no need for
+            a visible track. */}
+        <div style={{
+          height: 64,
+          display: 'flex',
+          overflowX: 'auto',
+          WebkitOverflowScrolling: 'touch',
+          scrollbarWidth: 'none',
+        }}
+          onWheel={(e) => {
+            // Forward vertical wheel to horizontal scroll on desktop
+            // (lets you preview the layout without touch).
+            const t = e.currentTarget as HTMLDivElement;
+            if (e.deltaY !== 0) t.scrollLeft += e.deltaY;
+          }}
+        >
+          {navItems.map(item => {
+            const active = activePage === item.id;
+            return (
+              <div key={item.id} onClick={() => onNav(item.id)} style={{
+                flex: '0 0 auto', minWidth: 78,
+                padding: '8px 14px',
+                display: 'flex', flexDirection: 'column', alignItems: 'center',
+                justifyContent: 'center', gap: 4, cursor: 'pointer',
+                color: active ? tokens.terra : tokens.inkMid,
+                borderTop: active ? `2px solid ${tokens.terra}` : '2px solid transparent',
+                background: active ? tokens.terraLight : 'transparent',
+              }}>
+                <span style={{ fontSize: 22, lineHeight: 1 }}>{item.icon}</span>
+                <span style={{
+                  fontFamily: "'Space Grotesk'", fontSize: 10,
+                  fontWeight: active ? 700 : 500, letterSpacing: '0.04em',
+                  whiteSpace: 'nowrap',
+                }}>
+                  {t(NAV_LABEL_KEY[item.id])}
+                </span>
+              </div>
+            );
+          })}
+        </div>
       </div>
     );
   }

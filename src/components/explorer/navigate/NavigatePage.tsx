@@ -309,28 +309,56 @@ export function NavigatePage({ itineraryId }: Props) {
           zoomControl={false}
           maxZoom={20}
         >
+          {/* CARTO Voyager: dramatically less label noise than OSM-FR
+              — for navigation we want roads + your route to dominate,
+              not every shop and bus stop within 200 m. Same provider
+              as the activity-detail map. */}
           <TileLayer
-            url="https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png"
-            attribution='&copy; <a href="https://www.openstreetmap.fr/">OSM-FR</a>'
+            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+            attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap'
             maxZoom={20}
           />
-          <Polyline positions={polyline} pathOptions={{ color: tokens.terra, weight: 5, opacity: 0.85 }} />
-          {/* Highlight remaining piece in green so the user can tell at a
-              glance how much is left (they're literally looking at progress) */}
-          {progress && (
-            <Polyline
-              positions={[
-                progress.foot,
-                ...polyline.slice(progress.segIdx + 1),
-              ]}
-              pathOptions={{ color: tokens.green, weight: 5, opacity: 0.95 }}
-            />
+
+          {/* Komoot-style route line: a wide white halo underneath
+              and a bold blue ribbon on top, so the path POPS against
+              the road network at any zoom. Two layers, both rounded.
+              The unridden portion fades to grey once you've passed it,
+              and the remaining portion stays vivid blue. */}
+          {progress ? (
+            <>
+              {/* Already-ridden tail (greyed) */}
+              <Polyline
+                positions={[...polyline.slice(0, progress.segIdx + 1), progress.foot]}
+                pathOptions={{ color: '#fff', weight: 11, opacity: 0.9, lineCap: 'round', lineJoin: 'round' }}
+              />
+              <Polyline
+                positions={[...polyline.slice(0, progress.segIdx + 1), progress.foot]}
+                pathOptions={{ color: tokens.inkLight, weight: 6, opacity: 0.55, lineCap: 'round', lineJoin: 'round' }}
+              />
+              {/* Remaining (vivid) */}
+              <Polyline
+                positions={[progress.foot, ...polyline.slice(progress.segIdx + 1)]}
+                pathOptions={{ color: '#fff', weight: 12, opacity: 1, lineCap: 'round', lineJoin: 'round' }}
+              />
+              <Polyline
+                positions={[progress.foot, ...polyline.slice(progress.segIdx + 1)]}
+                pathOptions={{ color: tokens.blue, weight: 7, opacity: 1, lineCap: 'round', lineJoin: 'round' }}
+              />
+            </>
+          ) : (
+            // Pre-start view: the whole route in one bold blue ribbon.
+            <>
+              <Polyline positions={polyline} pathOptions={{ color: '#fff', weight: 12, opacity: 1, lineCap: 'round', lineJoin: 'round' }} />
+              <Polyline positions={polyline} pathOptions={{ color: tokens.blue, weight: 7, opacity: 1, lineCap: 'round', lineJoin: 'round' }} />
+            </>
           )}
-          {/* Maneuver markers — small dots at every turn */}
+
+          {/* Bigger, higher-contrast maneuver markers — visible against
+              both the route ribbon and the basemap. */}
           {steps?.map((s, i) => (
             s.type !== 'depart' && s.type !== 'arrive' ? (
-              <CircleMarker key={i} center={s.start} radius={4}
-                pathOptions={{ fillColor: '#fff', color: tokens.ink, weight: 1.5, fillOpacity: 1 }} />
+              <CircleMarker key={i} center={s.start} radius={6}
+                pathOptions={{ fillColor: '#fff', color: tokens.ink, weight: 2, fillOpacity: 1 }} />
             ) : null
           ))}
           <UserMarker fix={fix} />

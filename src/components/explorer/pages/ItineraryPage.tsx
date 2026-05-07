@@ -107,13 +107,22 @@ function VillageSearch({ onPick, placeholder }: {
           borderRadius: 4, maxHeight: 240, overflowY: 'auto',
           boxShadow: '0 6px 20px rgba(0,0,0,0.08)',
         }}>
-          {results.map(r => (
+          {results.map((r, i) => {
+            // BAN can return multiple results that share the same INSEE
+            // citycode (e.g. several streets in one commune), so we
+            // include the index to keep React keys unique.
+            const isPrecise = r.kind === 'housenumber' || r.kind === 'street';
+            const icon = r.kind === 'housenumber' ? '⌂'
+                       : r.kind === 'street'      ? '═'
+                       : r.kind === 'locality'    ? '◦'
+                       :                            '◉';
+            return (
             <button
-              key={r.code}
+              key={`${r.code}-${i}-${r.label ?? r.name}`}
               onClick={() => { onPick(r); setQ(''); setResults([]); setOpen(false); }}
               style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
-                width: '100%', padding: '8px 12px', textAlign: 'left',
+                display: 'flex', alignItems: 'center', gap: 10,
+                width: '100%', padding: '10px 12px', textAlign: 'left',
                 background: 'transparent', border: 'none', cursor: 'pointer',
                 fontFamily: "'Space Grotesk'", fontSize: 13, color: tokens.ink,
                 borderBottom: `1px solid ${tokens.creamBorder}`,
@@ -121,10 +130,23 @@ function VillageSearch({ onPick, placeholder }: {
               onMouseEnter={e => (e.currentTarget.style.background = tokens.creamDark)}
               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
             >
-              <span>{r.name}</span>
-              <span style={{ fontSize: 10, color: tokens.inkLight, letterSpacing: '0.05em' }}>{r.postal}</span>
+              <span style={{ fontSize: 13, color: isPrecise ? tokens.terra : tokens.inkLight, width: 14, textAlign: 'center', flexShrink: 0 }}>{icon}</span>
+              <span style={{ flex: 1, minWidth: 0, display: 'block' }}>
+                <span style={{ display: 'block', fontWeight: isPrecise ? 600 : 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {r.name}
+                </span>
+                {isPrecise && (r.city || r.postal) && (
+                  <span style={{ display: 'block', fontSize: 10, color: tokens.inkLight, letterSpacing: '0.04em', marginTop: 1 }}>
+                    {r.city ?? ''}{r.postal ? ` · ${r.postal}` : ''}
+                  </span>
+                )}
+              </span>
+              {!isPrecise && (
+                <span style={{ fontSize: 10, color: tokens.inkLight, letterSpacing: '0.05em', flexShrink: 0 }}>{r.postal}</span>
+              )}
             </button>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -562,10 +584,17 @@ export function ItineraryPage({ user }: Props) {
                       flexShrink: 0,
                     }}>{i + 1}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontFamily: "'Space Grotesk'", fontSize: 13, color: tokens.ink, fontWeight: 500 }}>
+                      <div style={{ fontFamily: "'Space Grotesk'", fontSize: 13, color: tokens.ink, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {w.name}
                       </div>
-                      {w.postal && (
+                      {/* Street-level waypoints get a 2nd line with the
+                          commune (since `name` is the street). For pure
+                          municipalities we just show the postal code. */}
+                      {(w.city && w.city !== w.name) ? (
+                        <div style={{ fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight, letterSpacing: '0.05em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {w.city}{w.postal ? ` · ${w.postal}` : ''}
+                        </div>
+                      ) : w.postal && (
                         <div style={{ fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight, letterSpacing: '0.05em' }}>
                           {w.postal}
                         </div>
