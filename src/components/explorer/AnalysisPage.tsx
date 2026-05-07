@@ -412,6 +412,44 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
         {speedChart}
       </div>
 
+      {/* HR Zones — moved here so it sits right under the FC chart it
+          contextualises (instead of hiding at the bottom of the
+          EFFORT & ÉNERGIE block). Standalone card with the same look. */}
+      {activity.hrZones && (() => {
+        const zones = [
+          { label: 'Z1 — Récupération', bpm: '< 136 bpm',    val: activity.hrZones.z1, color: tokens.blue   },
+          { label: 'Z2 — Endurance',    bpm: '137–149 bpm',   val: activity.hrZones.z2, color: tokens.green  },
+          { label: 'Z3 — Tempo',        bpm: '150–162 bpm',   val: activity.hrZones.z3, color: tokens.terra  },
+          { label: 'Z4 — Seuil',        bpm: '163–175 bpm',   val: activity.hrZones.z4, color: '#e07030'     },
+          { label: 'Z5 — VO₂max',       bpm: '> 176 bpm',     val: activity.hrZones.z5, color: '#cc3333'     },
+        ];
+        const total = zones.reduce((s, z) => s + z.val, 0);
+        return (
+          <div style={{ ...CARD_STYLE, marginBottom: 20 }}>
+            <Label style={{ display: 'block', marginBottom: 14 }}>ZONES FC — TEMPS PASSÉ</Label>
+            {zones.map(({ label, bpm, val, color }) => {
+              const pct = total ? (val / total) * 100 : 0;
+              return (
+                <div key={label} style={{ marginBottom: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkMid, fontWeight: 600 }}>{label}</span>
+                      <span style={{ fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight }}>{bpm}</span>
+                    </div>
+                    <span style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight }}>
+                      {val.toFixed(0)} min · <strong style={{ color: tokens.ink }}>{pct.toFixed(0)}%</strong>
+                    </span>
+                  </div>
+                  <div style={{ height: 7, background: tokens.creamBorder, borderRadius: 3 }}>
+                    <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 3, transition: 'width 1s ease' }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
+
       {/* Chart grid — Row 2: Puissance | Altitude */}
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20, marginBottom: 20 }}>
         {powerChart || <div />}
@@ -439,7 +477,7 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
       {(activity.np || activity.tss || activity.trimp) && (
         <div style={{ ...CARD_STYLE, marginBottom: 20 }}>
           <Label style={{ display: 'block', marginBottom: 16 }}>{t('analysis.effort')}</Label>
-          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 20, marginBottom: activity.hrZones ? 24 : 0 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 20 }}>
             {/* Effort */}
             <div>
               <Label style={{ display: 'block', marginBottom: 12, color: tokens.terra }}>{t('analysis.power')}</Label>
@@ -555,41 +593,6 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
             </div>
           </div>
 
-          {/* HR Zones */}
-          {activity.hrZones && (() => {
-            const zones = [
-              { label: 'Z1 — Récupération', bpm: '< 136 bpm',    val: activity.hrZones.z1, color: tokens.blue   },
-              { label: 'Z2 — Endurance',    bpm: '137–149 bpm',   val: activity.hrZones.z2, color: tokens.green  },
-              { label: 'Z3 — Tempo',        bpm: '150–162 bpm',   val: activity.hrZones.z3, color: tokens.terra  },
-              { label: 'Z4 — Seuil',        bpm: '163–175 bpm',   val: activity.hrZones.z4, color: '#e07030'     },
-              { label: 'Z5 — VO₂max',       bpm: '> 176 bpm',     val: activity.hrZones.z5, color: '#cc3333'     },
-            ];
-            const total = zones.reduce((s, z) => s + z.val, 0);
-            return (
-              <div style={{ borderTop: `1px solid ${tokens.creamBorder}`, paddingTop: 16 }}>
-                <Label style={{ display: 'block', marginBottom: 14 }}>ZONES FC — TEMPS PASSÉ</Label>
-                {zones.map(({ label, bpm, val, color }) => {
-                  const pct = total ? (val / total) * 100 : 0;
-                  return (
-                    <div key={label} style={{ marginBottom: 10 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkMid, fontWeight: 600 }}>{label}</span>
-                          <span style={{ fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight }}>{bpm}</span>
-                        </div>
-                        <span style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight }}>
-                          {val.toFixed(0)} min · <strong style={{ color: tokens.ink }}>{pct.toFixed(0)}%</strong>
-                        </span>
-                      </div>
-                      <div style={{ height: 7, background: tokens.creamBorder, borderRadius: 3 }}>
-                        <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 3, transition: 'width 1s ease' }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })()}
         </div>
       )}
     </div>
