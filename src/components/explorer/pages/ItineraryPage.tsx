@@ -413,6 +413,35 @@ export function ItineraryPage({ user }: Props) {
     if (activeId === id) clearAll();
   };
 
+  // ── Start navigation: auto-save the itinerary (so /navigate/<id> can
+  // find it on reload) and jump to the full-screen turn-by-turn view.
+  const handleStartNavigation = () => {
+    if (waypoints.length < 2 || !geometry) return;
+    let id = activeId;
+    if (!id) {
+      const it: Itinerary = {
+        id:          newId(),
+        name:        name.trim() || `${waypoints[0].name} → ${waypoints[waypoints.length - 1].name}`,
+        createdAt:   new Date().toISOString(),
+        waypoints,
+        targetKm,
+        loop,
+        distanceKm:  distanceM != null ? +(distanceM / 1000).toFixed(1) : undefined,
+        durationMin: durationS != null ? Math.round(durationS / 60)     : undefined,
+        geometry,
+        elevSampleIndices: elevIndices ?? undefined,
+        elevations:        elevations ?? undefined,
+        totalAscent:       ascent || undefined,
+        totalDescent:      descent || undefined,
+      };
+      upsert(user, it);
+      id = it.id;
+      setActiveId(id);
+      setLibrary(loadAll(user));
+    }
+    window.location.href = `/navigate/${id}`;
+  };
+
   // ── GPX export ───────────────────────────────────────────────────────────
   const handleExportGpx = () => {
     if (!geometry || geometry.length < 2 || waypoints.length < 1) return;
@@ -721,6 +750,19 @@ export function ItineraryPage({ user }: Props) {
               }}
             >
               ⤓ {t('itinerary.exportGpx')}
+            </button>
+            <button
+              onClick={handleStartNavigation}
+              disabled={!geometry || geometry.length < 2}
+              style={{
+                marginTop: 8, width: '100%', padding: '12px 12px',
+                fontFamily: "'Space Grotesk'", fontSize: 13, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
+                background: !geometry ? tokens.creamBorder : tokens.green,
+                color: '#fff', border: 'none', borderRadius: 4,
+                cursor: !geometry ? 'not-allowed' : 'pointer',
+              }}
+            >
+              ▶ {t('itinerary.startNav')}
             </button>
           </div>
         </div>
