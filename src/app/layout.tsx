@@ -12,6 +12,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="fr">
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+        {/* iOS Add-to-Home-Screen: when launched from the home screen
+            icon, drop the Safari chrome so /navigate/<id> looks like a
+            real cycling-nav app on the iPhone. Status bar stays
+            translucent so the map can flow under it. */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="Le Petit Explorateur" />
+        <meta name="theme-color" content="#c75a3c" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
