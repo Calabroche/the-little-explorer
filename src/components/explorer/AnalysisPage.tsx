@@ -412,9 +412,16 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
         {speedChart}
       </div>
 
-      {/* HR Zones — moved here so it sits right under the FC chart it
-          contextualises (instead of hiding at the bottom of the
-          EFFORT & ÉNERGIE block). Standalone card with the same look. */}
+      {/* Chart grid — Row 2: Puissance | Altitude */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20, marginBottom: 20 }}>
+        {powerChart || <div />}
+        {altChart}
+      </div>
+
+      {/* HR Zones — sits under the Puissance + Altitude row so all four
+          time-series charts (FC, Vitesse, Puissance, Altitude) stay
+          stacked at the top of the page, then the time-in-zones
+          breakdown is the first contextual block. */}
       {activity.hrZones && (() => {
         const zones = [
           { label: 'Z1 — Récupération', bpm: '< 136 bpm',    val: activity.hrZones.z1, color: tokens.blue   },
@@ -450,18 +457,6 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
         );
       })()}
 
-      {/* Chart grid — Row 2: Puissance | Altitude */}
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20, marginBottom: 20 }}>
-        {powerChart || <div />}
-        {altChart}
-      </div>
-
-      {/* VO2 Max + Power summary */}
-      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 20, marginBottom: 20 }}>
-        {activity.max_hr && <VO2MaxCard activity={activity} />}
-        {hasPow && <PowerCard activity={activity} data={data} />}
-      </div>
-
       {/* Route map */}
       {hasGPS && (
         <div style={{ ...CARD_STYLE, marginBottom: 20 }}>
@@ -469,6 +464,14 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
           <ActivityRouteMap activity={activity} />
         </div>
       )}
+
+      {/* VO2 Max + Power summary — moved under the route map so the
+          synthesis cards (your physiological "score" for this ride)
+          come after the visual summary, not before it. */}
+      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 20, marginBottom: 20 }}>
+        {activity.max_hr && <VO2MaxCard activity={activity} />}
+        {hasPow && <PowerCard activity={activity} data={data} />}
+      </div>
 
       {/* Advanced metrics — moved to the bottom of the page so the
           heatmap-style route is the first thing the eye lands on, and
