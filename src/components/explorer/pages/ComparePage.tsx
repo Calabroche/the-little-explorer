@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
@@ -229,6 +229,9 @@ export function ComparePage({ activities }: { activities: Activity[] }) {
   const { t, lang } = useT();
   const [idA, setIdA] = useState<number | null>(activities[0]?.id ?? null);
   const [idB, setIdB] = useState<number | null>(activities[1]?.id ?? null);
+  // Which slot's picker sheet is open (matches iOS commit 0f098bd).
+  // null = closed; 'A' / 'B' = open for first / second slot.
+  const [pickerOpen, setPickerOpen] = useState<'A' | 'B' | null>(null);
 
   const a = useMemo(() => activities.find(x => x.id === idA) ?? null, [activities, idA]);
   const b = useMemo(() => activities.find(x => x.id === idB) ?? null, [activities, idB]);
@@ -237,13 +240,6 @@ export function ComparePage({ activities }: { activities: Activity[] }) {
   const CARD: React.CSSProperties = {
     background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
     borderRadius: 4, padding: 24, marginBottom: 24,
-  };
-
-  const SELECT: React.CSSProperties = {
-    width: '100%', padding: '8px 10px',
-    border: `1px solid ${tokens.creamBorder}`, borderRadius: 3,
-    fontFamily: "'Space Grotesk'", fontSize: 13, color: tokens.ink,
-    background: tokens.creamDark,
   };
 
   return (
@@ -258,31 +254,42 @@ export function ComparePage({ activities }: { activities: Activity[] }) {
       </h1>
 
       <div style={CARD}>
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
-          <div>
-            <Label style={{ display: 'block', marginBottom: 6, color: tokens.terra }}>{t('compare.pickFirst')}</Label>
-            <select value={idA ?? ''} onChange={e => setIdA(Number(e.target.value) || null)} style={SELECT}>
-              <option value="">{t('compare.pickPlaceholder')}</option>
-              {activities.map(x => (
-                <option key={x.id} value={x.id}>
-                  {formatDateLocale(x.rawDate, lang, { day: '2-digit', month: 'short', year: '2-digit' })} · {x.distance} km · {x.title.slice(0, 40)}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <Label style={{ display: 'block', marginBottom: 6, color: tokens.green }}>{t('compare.pickSecond')}</Label>
-            <select value={idB ?? ''} onChange={e => setIdB(Number(e.target.value) || null)} style={SELECT}>
-              <option value="">{t('compare.pickPlaceholder')}</option>
-              {activities.map(x => (
-                <option key={x.id} value={x.id}>
-                  {formatDateLocale(x.rawDate, lang, { day: '2-digit', month: 'short', year: '2-digit' })} · {x.distance} km · {x.title.slice(0, 40)}
-                </option>
-              ))}
-            </select>
-          </div>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
+          <SelectionCard
+            label={t('compare.pickFirst')}
+            color={tokens.terra}
+            activity={a}
+            placeholder={t('compare.pickPlaceholder')}
+            onTap={() => setPickerOpen('A')}
+            lang={lang}
+          />
+          <SelectionCard
+            label={t('compare.pickSecond')}
+            color={tokens.green}
+            activity={b}
+            placeholder={t('compare.pickPlaceholder')}
+            onTap={() => setPickerOpen('B')}
+            lang={lang}
+          />
         </div>
       </div>
+
+      {/* Picker sheet — modal list of activities, click to select. */}
+      {pickerOpen && (
+        <ActivityPickerSheet
+          activities={activities}
+          currentId={pickerOpen === 'A' ? idA : idB}
+          accent={pickerOpen === 'A' ? tokens.terra : tokens.green}
+          title={pickerOpen === 'A' ? t('compare.pickFirst') : t('compare.pickSecond')}
+          lang={lang}
+          onSelect={id => {
+            if (pickerOpen === 'A') setIdA(id); else setIdB(id);
+            setPickerOpen(null);
+          }}
+          onCancel={() => setPickerOpen(null)}
+          t={t}
+        />
+      )}
 
       {!a || !b ? (
         <div style={{ ...CARD, fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.inkLight }}>
@@ -349,5 +356,185 @@ export function ComparePage({ activities }: { activities: Activity[] }) {
         </>
       )}
     </div>
+  );
+}
+
+// ── Activity selection card (tappable) ───────────────────────────────────────
+function SelectionCard({ label, color, activity, placeholder, onTap, lang }: {
+  label:       string;
+  color:       string;
+  activity:    Activity | null;
+  placeholder: string;
+  onTap:       () => void;
+  lang:        'fr' | 'en';
+}) {
+  return (
+    <button
+      onClick={onTap}
+      style={{
+        display: 'flex', alignItems: 'stretch', gap: 0,
+        width: '100%', padding: 0,
+        background: tokens.creamDark, border: `1px solid ${tokens.creamBorder}`,
+        borderRadius: 4, cursor: 'pointer', textAlign: 'left',
+        transition: 'background 0.12s',
+      }}
+      onMouseEnter={e => (e.currentTarget.style.background = tokens.cream)}
+      onMouseLeave={e => (e.currentTarget.style.background = tokens.creamDark)}
+    >
+      {/* Coloured left rail — visually anchors which slot this is. */}
+      <div style={{ width: 4, background: color, borderRadius: '4px 0 0 4px', flexShrink: 0 }} />
+      <div style={{ flex: 1, padding: '10px 14px', minWidth: 0 }}>
+        <Label style={{ display: 'block', color, marginBottom: 4 }}>{label}</Label>
+        {activity ? (
+          <>
+            <div style={{
+              fontFamily: "'Playfair Display'", fontSize: 16, fontWeight: 700, color: tokens.ink,
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: 2,
+            }}>
+              {activity.title}
+            </div>
+            <div style={{
+              fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight,
+              letterSpacing: '0.04em',
+            }}>
+              {formatDateLocale(activity.rawDate, lang, { day: '2-digit', month: 'short', year: '2-digit' })} · {activity.distance} km · {activity.duration}
+            </div>
+          </>
+        ) : (
+          <div style={{ fontFamily: "'Space Grotesk'", fontSize: 13, color: tokens.inkLight, fontStyle: 'italic', padding: '4px 0' }}>
+            {placeholder}
+          </div>
+        )}
+      </div>
+      <div style={{
+        display: 'flex', alignItems: 'center', paddingRight: 14,
+        fontFamily: "'Space Grotesk'", fontSize: 16, color: tokens.inkLight, flexShrink: 0,
+      }}>›</div>
+    </button>
+  );
+}
+
+// ── Picker sheet (modal) ────────────────────────────────────────────────────
+function ActivityPickerSheet({ activities, currentId, accent, title, lang, onSelect, onCancel, t }: {
+  activities: Activity[];
+  currentId:  number | null;
+  accent:     string;
+  title:      string;
+  lang:       'fr' | 'en';
+  onSelect:   (id: number | null) => void;
+  onCancel:   () => void;
+  // Pass the t helper down rather than importing useT inside (this
+  // component is rendered as a sibling of ComparePage's main body and
+  // we want to keep i18n consistent without an extra hook chain).
+  t: (key: string, params?: Record<string, string | number>) => string;
+}) {
+  // ESC + click-outside dismiss.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onCancel]);
+
+  return (
+    <div
+      onClick={onCancel}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 2000,
+        background: 'rgba(0,0,0,0.45)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 16,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: tokens.surface, borderRadius: 8,
+          maxWidth: 520, width: '100%', maxHeight: 'calc(100vh - 32px)',
+          display: 'flex', flexDirection: 'column',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Sheet header */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12,
+          padding: '14px 18px',
+          borderBottom: `1px solid ${tokens.creamBorder}`,
+        }}>
+          <div style={{ width: 4, height: 22, background: accent, borderRadius: 2 }} />
+          <div style={{ flex: 1, fontFamily: "'Playfair Display'", fontSize: 17, fontWeight: 700, color: tokens.ink }}>
+            {title}
+          </div>
+          <button onClick={onCancel} style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            fontFamily: "'Space Grotesk'", fontSize: 12, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase',
+            color: tokens.inkMid, padding: '6px 10px',
+          }}>
+            {t('common.cancel')}
+          </button>
+        </div>
+
+        {/* Activity list (scrollable) */}
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          {/* "None" row — clears the slot */}
+          <PickerRow
+            onClick={() => onSelect(null)}
+            active={currentId == null}
+            accent={accent}
+          >
+            <div style={{ fontFamily: "'Space Grotesk'", fontSize: 13, color: tokens.inkLight, fontStyle: 'italic' }}>
+              {t('compare.noneRow')}
+            </div>
+          </PickerRow>
+          {activities.map(x => (
+            <PickerRow
+              key={x.id}
+              onClick={() => onSelect(x.id)}
+              active={currentId === x.id}
+              accent={accent}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontFamily: "'Playfair Display'", fontSize: 14, fontWeight: 700, color: tokens.ink,
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                }}>
+                  {x.title}
+                </div>
+                <div style={{ fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight, marginTop: 2 }}>
+                  {formatDateLocale(x.rawDate, lang, { day: '2-digit', month: 'short', year: '2-digit' })} · {x.distance} km · {x.duration}
+                </div>
+              </div>
+            </PickerRow>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PickerRow({ onClick, active, accent, children }: {
+  onClick:  () => void;
+  active:   boolean;
+  accent:   string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 12,
+        width: '100%', padding: '12px 18px',
+        background: active ? tokens.creamDark : 'transparent',
+        border: 'none', borderBottom: `1px solid ${tokens.creamBorder}`,
+        cursor: 'pointer', textAlign: 'left',
+      }}
+      onMouseEnter={e => { if (!active) e.currentTarget.style.background = tokens.creamDark; }}
+      onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+    >
+      {children}
+      {active && (
+        <span style={{ color: accent, fontSize: 18, fontWeight: 700, flexShrink: 0 }}>✓</span>
+      )}
+    </button>
   );
 }

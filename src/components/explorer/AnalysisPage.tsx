@@ -269,13 +269,30 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
 
   const chartHeight = isMobile ? 260 : 300;
 
+  // HR Y-range, tight to the ride's actual data. Matches iOS commit
+  // 253ae9b — Recharts' 'auto' tends to over-pad, which leaves dead
+  // space at the top/bottom on recovery rides. We round to the nearest
+  // 10 bpm so axis labels stay readable.
+  const hrRange = useMemo(() => {
+    const hrs = data.map(d => d.hr).filter((v): v is number => Number.isFinite(v as number) && (v as number) > 0);
+    if (hrs.length === 0) return { min: 80 as number, max: 200 as number };
+    const lo = Math.min(...hrs);
+    const hi = Math.max(...hrs);
+    if (hi <= lo) return { min: 80, max: 200 };
+    const pad = Math.max(5, (hi - lo) * 0.08);
+    return {
+      min: Math.max(40,  Math.floor((lo - pad) / 10) * 10),
+      max: Math.min(220, Math.ceil((hi + pad) / 10) * 10),
+    };
+  }, [data]);
+
   const hrGradChart = hasHR && mounted && (
     <ChartCard title={t("charts.hrSlope")}>
       <ResponsiveContainer width="100%" height={chartHeight}>
         <ComposedChart syncId="ride" data={data} margin={{ top: 4, right: 2, left: -10, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={tokens.creamBorder} />
           <XAxis dataKey="dist" tick={{ fontFamily: "'Space Grotesk'", fontSize: 10 }} tickFormatter={v => `${v}km`} />
-          <YAxis yAxisId="hr"   orientation="left"  width={38} tick={{ fontFamily: "'Space Grotesk'", fontSize: 10 }} domain={['auto', 'auto']} />
+          <YAxis yAxisId="hr"   orientation="left"  width={38} tick={{ fontFamily: "'Space Grotesk'", fontSize: 10 }} domain={[hrRange.min, hrRange.max]} allowDataOverflow />
           <YAxis yAxisId="grad" orientation="right" width={32} tick={{ fontFamily: "'Space Grotesk'", fontSize: 10 }} tickFormatter={v => `${v}%`} domain={[-25, 25]} />
           <Tooltip content={<ChartTooltip />} />
           <Bar yAxisId="grad" dataKey="gradUp"   name="Montée (%)"  fill={tokens.terra} opacity={0.7} maxBarSize={6} />

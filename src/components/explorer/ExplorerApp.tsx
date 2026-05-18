@@ -244,7 +244,7 @@ export function ExplorerApp() {
     planner:   <PlannerPage   activities={filteredActivities} />,
     itinerary: <ItineraryPage user={user} />,
     compare:   <ComparePage   activities={filteredActivities} />,
-    map:       <MapPage       activities={filteredActivities} selectedActivity={selectedActivityForMap} />,
+    map:       <MapPage       activities={activities} selectedActivity={selectedActivityForMap} />,
     stats:     <StatsPage     activities={filteredActivities} stats={filteredStats!} />,
     wrapped:   <WrappedPage   activities={activities} />,
     ftp:       <FtpPage       activities={filteredActivities} />,
