@@ -441,12 +441,15 @@ export const dict = {
     },
     calendar: {
       tag:      '§ CALENDRIER',
-      label:    '12 DERNIÈRES SEMAINES',
+      label:    'DISTANCE PAR JOUR',
       legend:   'Moins',
       legendHi: 'Plus',
-      tooltipNone: 'Aucune sortie',
-      tooltipOne:  '1 sortie · {km} km · TSS {tss}',
-      tooltipMany: '{n} sorties · {km} km · TSS {tss}',
+      tooltipNone: 'Pas d\'activité',
+      // Kept around for backward-compat callers; the new tooltip
+      // renders chips directly, so these are unused now.
+      tooltipOne:  '1 sortie · {km} km · {elev} m D+',
+      tooltipMany: '{n} sorties · {km} km · {elev} m D+',
+      rides:    'sorties',
       monShort: ['L', 'M', 'M', 'J', 'V', 'S', 'D'],
     },
     ftpEvol: {
@@ -462,6 +465,7 @@ export const dict = {
       pickFirst:  'Sortie A',
       pickSecond: 'Sortie B',
       pickPlaceholder: '— choisis une sortie —',
+      noneRow:    'Aucune (laisser vide)',
       noPick:     'Sélectionne deux sorties pour démarrer la comparaison.',
       diff:       'Δ',
       stats:      'STATISTIQUES',
@@ -988,12 +992,13 @@ export const dict = {
     },
     calendar: {
       tag:      '§ CALENDAR',
-      label:    'LAST 12 WEEKS',
+      label:    'DISTANCE PER DAY',
       legend:   'Less',
       legendHi: 'More',
       tooltipNone: 'No activity',
-      tooltipOne:  '1 activity · {km} km · TSS {tss}',
-      tooltipMany: '{n} activities · {km} km · TSS {tss}',
+      tooltipOne:  '1 activity · {km} km · {elev} m climb',
+      tooltipMany: '{n} activities · {km} km · {elev} m climb',
+      rides:    'rides',
       monShort: ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
     },
     ftpEvol: {
@@ -1009,6 +1014,7 @@ export const dict = {
       pickFirst:  'Ride A',
       pickSecond: 'Ride B',
       pickPlaceholder: '— pick a ride —',
+      noneRow:    'None (leave empty)',
       noPick:     'Pick two rides to start comparing.',
       diff:       'Δ',
       stats:      'STATS',
