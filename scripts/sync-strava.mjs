@@ -83,6 +83,9 @@ async function refreshToken() {
   });
   if (!res.ok) throw new Error(`Strava token refresh failed: ${res.status} ${await res.text()}`);
   const data = await res.json();
+  // DEBUG: surface the scope so we can tell if the access token is
+  // actually allowed to read activities. (Temporary diag for sync-debug.)
+  console.log(`[diag] refresh scope=${data.scope || '(none)'} athlete_id=${data.athlete?.id || '?'}`);
   return data.access_token;
 }
 
@@ -141,6 +144,14 @@ async function main() {
   let page = 1;
   outer: while (page <= maxPages) {
     const list = await getJson(`https://www.strava.com/api/v3/athlete/activities?per_page=50&page=${page}`, token);
+    // DEBUG: show what Strava actually returned for this page so we can
+    // tell if the API hit a stale cache, returned an empty list, or if
+    // we're hitting an unexpected first-known short-circuit.
+    console.log(`[diag] page=${page} returned ${list.length} items`);
+    if (Array.isArray(list) && list.length > 0) {
+      console.log(`[diag]   first 3: ${list.slice(0, 3).map(a => `${a.id}/${a.type}/${a.start_date_local?.slice(0, 10)}`).join(' | ')}`);
+      console.log(`[diag]   have-size=${have.size}, first-id-known=${have.has(list[0].id)}`);
+    }
     if (!list.length) break;
     for (const a of list) {
       if (have.has(a.id)) {
