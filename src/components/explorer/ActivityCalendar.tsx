@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, CSSProperties } from 'react';
+import { useState, useMemo, useCallback, CSSProperties } from 'react';
 import { Activity, tokens } from './tokens';
 import { Label } from './ui';
 import { useT } from '@/i18n';
@@ -54,13 +54,21 @@ function buildCells(activities: Activity[]): DayCell[] {
   for (let i = 0; i < DAYS_MAX; i++) {
     const iso = isoDay(cur);
     const acts = byDay.get(iso) ?? [];
+    // Single-pass aggregation so 140 cells × 3 reduce()s don't become
+    // the framerate bottleneck while the user hovers.
+    let totalKm = 0, totalElev = 0, totalDur = 0;
+    for (const a of acts) {
+      totalKm   += a.distance ?? 0;
+      totalElev += a.elevation ?? 0;
+      totalDur  += a.duration_min ?? 0;
+    }
     cells.push({
       iso,
       date: new Date(cur),
       activities:       acts,
-      totalKm:          acts.reduce((s, a) => s + (a.distance ?? 0), 0),
-      totalElevationM:  acts.reduce((s, a) => s + (a.elevation ?? 0), 0),
-      totalDurationMin: acts.reduce((s, a) => s + (a.duration_min ?? 0), 0),
+      totalKm,
+      totalElevationM:  totalElev,
+      totalDurationMin: totalDur,
       inFuture:         cur.getTime() > today.getTime(),
     });
     cur.setDate(cur.getDate() + 1);
@@ -103,28 +111,39 @@ function avgSpeedKmh(cell: DayCell): number | null {
 
 export function ActivityCalendar({ activities }: { activities: Activity[] }) {
   const { t, lang } = useT();
-  const allCells = buildCells(activities);
-  const cells    = trimLeadingEmptyWeeks(allCells);
-  const weeks    = cells.length / 7;
   const [hover, setHover] = useState<DayCell | null>(null);
 
-  // Build columns (week-by-week, top→bottom = Mon..Sun).
-  const cols: DayCell[][] = [];
-  for (let w = 0; w < weeks; w++) cols.push(cells.slice(w * 7, w * 7 + 7));
+  // Memoise the grid so it doesn't get rebuilt every time the hover
+  // state flips. With 140 cells × month-label string formatting, doing
+  // this on every render is what was making the cursor stutter / freeze
+  // while moving across the heatmap.
+  const cells = useMemo(() => trimLeadingEmptyWeeks(buildCells(activities)), [activities]);
+  const weeks = cells.length / 7;
+
+  const cols = useMemo<DayCell[][]>(() => {
+    const out: DayCell[][] = [];
+    for (let w = 0; w < weeks; w++) out.push(cells.slice(w * 7, w * 7 + 7));
+    return out;
+  }, [cells, weeks]);
+
+  const monthLabels = useMemo(() => {
+    const monthAt = cols.map(col => col[0]?.date.getMonth() ?? 0);
+    return cols.map((col, i) => {
+      const m = monthAt[i];
+      const prev = i > 0 ? monthAt[i - 1] : -1;
+      if (m === prev) return '';
+      return col[0]?.date.toLocaleDateString(lang === 'en' ? 'en-US' : 'fr-FR', { month: 'short' }).replace('.', '');
+    });
+  }, [cols, lang]);
 
   const dayLabels   = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
   const dayLabelsEn = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
   const dayShort    = lang === 'en' ? dayLabelsEn : dayLabels;
 
-  // Month labels above columns: only when the displayed month changes
-  // between two adjacent weeks.
-  const monthAt = cols.map(col => col[0]?.date.getMonth() ?? 0);
-  const monthLabels = cols.map((col, i) => {
-    const m = monthAt[i];
-    const prev = i > 0 ? monthAt[i - 1] : -1;
-    if (m === prev) return '';
-    return col[0]?.date.toLocaleDateString(lang === 'en' ? 'en-US' : 'fr-FR', { month: 'short' }).replace('.', '');
-  });
+  // Stable hover handlers — each cell renders an onMouseEnter that
+  // captures the cell reference. We use useCallback for the leave
+  // handler so it's a single function reference across renders.
+  const handleLeave = useCallback(() => setHover(null), []);
 
   const CELL    = 14;
   const GAP     = 3;
@@ -177,7 +196,7 @@ export function ActivityCalendar({ activities }: { activities: Activity[] }) {
               return (
                 <span key={w}
                   onMouseEnter={() => setHover(c)}
-                  onMouseLeave={() => setHover(null)}
+                  onMouseLeave={handleLeave}
                   style={{
                     width: CELL, height: CELL,
                     background: c.inFuture ? 'transparent' : bg,
