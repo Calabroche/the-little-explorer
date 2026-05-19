@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { LanguageProvider } from "@/i18n";
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 export const metadata: Metadata = {
   title: "The Little Explorer",
@@ -27,7 +29,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body><LanguageProvider>{children}</LanguageProvider></body>
+      <body>
+        <LanguageProvider>{children}</LanguageProvider>
+        {/* Vercel Analytics + Speed Insights — both free for personal
+            projects, surface in the Vercel dashboard within a few
+            minutes of the next deploy + some traffic. Analytics tracks
+            page views & top routes; Speed Insights tracks real-user
+            Core Web Vitals (LCP / CLS / INP). No PII collected. */}
+        <Analytics />
+        <SpeedInsights />
+      </body>
     </html>
   );
 }
