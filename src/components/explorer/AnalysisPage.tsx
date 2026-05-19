@@ -47,12 +47,26 @@ function buildChartData(activity: Activity) {
   // Gradient smoothing window. Was ±40 samples (~280 m of road at
   // cycling speed) which averaged short ramps into oblivion. ±18 keeps
   // a single steep section visible without being noisy on GPS jitter.
-  const WINDOW = 18;
+  //
+  // The chart's gradient is then *clamped* to the activity-level
+  // max_incline / min_incline computed server-side. The server uses a
+  // tighter window (5 samples) PLUS a 97th-percentile filter that
+  // discards GPS noise — matching Strava's reported max grade within
+  // ~0.1-0.2%. Without this clamp, the chart can show ~3-4% phantom
+  // spikes from altimeter noise on top of real ramps, which is why
+  // the hover-tooltip used to read 15.8% on a road that's really
+  // capped at 11.9% (per Strava + per the EFFORT card).
+  const WINDOW   = 18;
+  const truthMax = activity.max_incline ??  25;
+  const truthMin = activity.min_incline ?? -25;
   const gradient: number[] = new Array(len).fill(0);
   for (let i = WINDOW; i < len - WINDOW; i++) {
     const dAlt  = altitude[i + WINDOW] - altitude[i - WINDOW];
     const dDist = distance_m[i + WINDOW] - distance_m[i - WINDOW];
-    if (dDist >= 10) gradient[i] = Math.max(-25, Math.min(25, +((dAlt / dDist) * 100).toFixed(1)));
+    if (dDist >= 10) {
+      const raw = (dAlt / dDist) * 100;
+      gradient[i] = +Math.max(truthMin, Math.min(truthMax, raw)).toFixed(1);
+    }
   }
 
   const power: number[]  = new Array(len).fill(0);
