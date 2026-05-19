@@ -44,12 +44,15 @@ function buildChartData(activity: Activity) {
   const mass = activity.total_mass ?? FALLBACK_MASS;
   const Fr   = +(mass * G * CRR).toFixed(1);
 
-  const WINDOW = 40;
+  // Gradient smoothing window. Was ±40 samples (~280 m of road at
+  // cycling speed) which averaged short ramps into oblivion. ±18 keeps
+  // a single steep section visible without being noisy on GPS jitter.
+  const WINDOW = 18;
   const gradient: number[] = new Array(len).fill(0);
   for (let i = WINDOW; i < len - WINDOW; i++) {
     const dAlt  = altitude[i + WINDOW] - altitude[i - WINDOW];
     const dDist = distance_m[i + WINDOW] - distance_m[i - WINDOW];
-    if (dDist >= 20) gradient[i] = Math.max(-25, Math.min(25, +((dAlt / dDist) * 100).toFixed(1)));
+    if (dDist >= 10) gradient[i] = Math.max(-25, Math.min(25, +((dAlt / dDist) * 100).toFixed(1)));
   }
 
   const power: number[]  = new Array(len).fill(0);
@@ -65,10 +68,26 @@ function buildChartData(activity: Activity) {
     power[i]  = Math.max(0, Math.round((Fg + Fr + Fa) * v));
   }
 
-  const step = Math.max(1, Math.floor(len / 300));
+  // Peak-preserving downsampling. Bucket size targets ~600 chart points
+  // (was 300). For each bucket, pick the sample whose *absolute*
+  // gradient is highest — this guarantees the steepest ramp / descent
+  // in every road segment shows up on the chart instead of being
+  // averaged out between two arbitrary samples. Falls back to the
+  // bucket midpoint when the bucket has no meaningful gradient values
+  // (e.g. the first / last WINDOW samples).
+  const TARGET = 600;
+  const step = Math.max(1, Math.floor(len / TARGET));
   const data = [];
-  for (let i = 0; i < len; i += step) {
-    const g   = gradient[i];
+  for (let bucketStart = 0; bucketStart < len; bucketStart += step) {
+    const bucketEnd = Math.min(bucketStart + step, len);
+    let pickIdx = bucketStart + Math.floor((bucketEnd - bucketStart) / 2);
+    let pickMag = -1;
+    for (let i = bucketStart; i < bucketEnd; i++) {
+      const mag = Math.abs(gradient[i]);
+      if (mag > pickMag) { pickMag = mag; pickIdx = i; }
+    }
+    const i = pickIdx;
+    const g = gradient[i];
     const v_ms = +((speed_kmh[i] || 0) / 3.6).toFixed(2);
     data.push({
       dist:     +(distance_m[i] / 1000).toFixed(2),
