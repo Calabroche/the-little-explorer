@@ -73,10 +73,14 @@ export function ExplorerApp() {
   const [darkMode, setDarkMode] = useState(false);
   const [sport, setSport] = useState<SportId>('cycling');
   const [user, setUser]   = useState<UserId>('florian');
+  // Desktop-only: when true the left sidebar is hidden and the main
+  // area (charts, map) gets +220px of horizontal space — useful for
+  // reading dense ride-detail charts.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const isMobile = useIsMobile();
   const { t } = useT();
 
-  // Dark mode + sport + user persistence (localStorage — pas lié à l'URL)
+  // Dark mode + sport + user + sidebar persistence (localStorage — pas lié à l'URL)
   useEffect(() => {
     const dark = localStorage.getItem('tle_dark') === '1';
     setDarkMode(dark);
@@ -86,7 +90,16 @@ export function ExplorerApp() {
     if (savedSport && validSports.includes(savedSport)) setSport(savedSport);
     const savedUser = localStorage.getItem('tle_user') as UserId | null;
     if (savedUser === 'florian' || savedUser === 'helena') setUser(savedUser);
+    if (localStorage.getItem('tle_sidebar_collapsed') === '1') setSidebarCollapsed(true);
   }, []);
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem('tle_sidebar_collapsed', next ? '1' : '0');
+      return next;
+    });
+  };
 
   const handleSportChange = (s: SportId) => {
     setSport(s);
@@ -253,11 +266,28 @@ export function ExplorerApp() {
 
   return (
     <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: '100dvh', overflow: 'hidden' }}>
-      {!isMobile && (
+      {!isMobile && !sidebarCollapsed && (
         <Sidebar activePage={page} onNav={handleNav} stats={filteredStats} darkMode={darkMode} onToggleDark={toggleDark}
-                 sport={sport} onSportChange={handleSportChange} user={user} onUserChange={handleUserChange} onHome={handleHome} availableSports={availableSports} />
+                 sport={sport} onSportChange={handleSportChange} user={user} onUserChange={handleUserChange} onHome={handleHome} availableSports={availableSports}
+                 onToggleCollapse={toggleSidebar} />
       )}
-      <main style={{ flex: 1, display: 'flex', overflow: 'hidden', background: tokens.cream, minHeight: 0 }}>
+      <main style={{ flex: 1, display: 'flex', overflow: 'hidden', background: tokens.cream, minHeight: 0, position: 'relative' }}>
+        {/* Floating re-open button (desktop only, sidebar collapsed) */}
+        {!isMobile && sidebarCollapsed && (
+          <button
+            onClick={toggleSidebar}
+            title="Rouvrir le menu"
+            aria-label="Expand sidebar"
+            style={{
+              position: 'absolute', top: 16, left: 16, zIndex: 1000,
+              width: 32, height: 32, borderRadius: 16,
+              background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
+              color: tokens.inkMid, fontFamily: "'Space Grotesk'", fontSize: 14, fontWeight: 700,
+              cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >›</button>
+        )}
         {analysisActivity
           ? <AnalysisPage activity={analysisActivity} onBack={closeActivity} />
           : pageContent[page]

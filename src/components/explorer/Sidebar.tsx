@@ -36,6 +36,11 @@ interface Props {
   user: UserId;
   onUserChange: (u: UserId) => void;
   onHome: () => void;
+  // Desktop collapse — when true the sidebar is fully hidden and the
+  // main area expands to use the freed width. `onToggleCollapse` is
+  // wired to the chevron button in the sidebar header (to collapse)
+  // and to a floating chevron in the main area (to re-open).
+  onToggleCollapse?: () => void;
 }
 
 function UserToggle({ user, onChange, compact }: { user: UserId; onChange: (u: UserId) => void; compact?: boolean }) {
@@ -172,7 +177,7 @@ const NAV_LABEL_KEY: Record<PageId, string> = {
   photos:    'nav.photos',
 };
 
-export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobile, sport, onSportChange, availableSports, user, onUserChange, onHome }: Props) {
+export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobile, sport, onSportChange, availableSports, user, onUserChange, onHome, onToggleCollapse }: Props) {
   const { t, lang, setLang } = useT();
   const navItems = ALL_NAV_ITEMS.filter(n => n.sports.includes(sport));
   if (mobile) {
@@ -264,7 +269,7 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
       display: 'flex', flexDirection: 'column', flexShrink: 0, padding: '0 0 24px',
     }}>
       <div style={{ padding: '28px 24px 24px', borderBottom: `1px solid ${tokens.creamBorder}` }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 6 }}>
           <button
             onClick={onHome}
             title="Retour à l'accueil"
@@ -277,18 +282,35 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
             The Little<br />
             <em style={{ color: tokens.terra }}>Explorer</em>
           </button>
-          <button
-            onClick={onToggleDark}
-            title={darkMode ? 'Mode clair' : 'Mode sombre'}
-            style={{
-              background: tokens.creamDark, border: `1px solid ${tokens.creamBorder}`,
-              borderRadius: 20, padding: '4px 10px', cursor: 'pointer',
-              fontFamily: "'Space Grotesk'", fontSize: 13, color: tokens.inkMid,
-              lineHeight: 1, flexShrink: 0,
-            }}
-          >
-            {darkMode ? '◑' : '◐'}
-          </button>
+          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+            <button
+              onClick={onToggleDark}
+              title={darkMode ? 'Mode clair' : 'Mode sombre'}
+              style={{
+                background: tokens.creamDark, border: `1px solid ${tokens.creamBorder}`,
+                borderRadius: 20, padding: '4px 10px', cursor: 'pointer',
+                fontFamily: "'Space Grotesk'", fontSize: 13, color: tokens.inkMid,
+                lineHeight: 1,
+              }}
+            >
+              {darkMode ? '◑' : '◐'}
+            </button>
+            {onToggleCollapse && (
+              <button
+                onClick={onToggleCollapse}
+                title="Replier le menu (plus de place pour les graphes)"
+                aria-label="Collapse sidebar"
+                style={{
+                  background: tokens.creamDark, border: `1px solid ${tokens.creamBorder}`,
+                  borderRadius: 20, padding: '4px 10px', cursor: 'pointer',
+                  fontFamily: "'Space Grotesk'", fontSize: 13, color: tokens.inkMid,
+                  lineHeight: 1, fontWeight: 700,
+                }}
+              >
+                ‹
+              </button>
+            )}
+          </div>
         </div>
         <Label style={{ marginTop: 6, display: 'block' }}>{user === 'helena' ? 'Helena' : 'Florian Calabrese'}</Label>
       </div>
