@@ -6,7 +6,7 @@ import { Label } from './ui';
 import { useT } from '@/i18n';
 import type { Lang } from '@/i18n';
 
-export type PageId = 'feed' | 'planner' | 'map' | 'stats' | 'photos' | 'ftp' | 'compare' | 'wrapped' | 'itinerary';
+export type PageId = 'feed' | 'planner' | 'map' | 'photos' | 'ftp' | 'compare' | 'wrapped' | 'itinerary';
 export type SportId = 'cycling' | 'running' | 'hiking' | 'ski' | 'snowshoe' | 'walking' | 'swim';
 export type UserId  = 'florian' | 'helena';
 
@@ -21,7 +21,6 @@ const ALL_NAV_ITEMS: { id: PageId; icon: string; label: string; sports: SportId[
   // (/itineraire still works and lands on the itinerary tab).
   { id: 'planner',   icon: '✦', label: 'Planificateur', sports: ['cycling'] },
   { id: 'compare', icon: '⇄', label: 'Comparer',      sports: ALL_SPORTS },
-  { id: 'stats',   icon: '▬', label: 'Stats',         sports: ALL_SPORTS },
   { id: 'wrapped', icon: '✺', label: 'Bilan',         sports: ALL_SPORTS },
   { id: 'ftp',     icon: '⚡', label: 'FTP',           sports: ['cycling'] },
 ];
@@ -308,7 +307,6 @@ const NAV_LABEL_KEY: Record<PageId, string> = {
   itinerary: 'nav.itinerary',
   compare:   'nav.compare',
   map:       'nav.map',
-  stats:     'nav.stats',
   wrapped:   'nav.wrapped',
   ftp:       'nav.ftp',
   photos:    'nav.photos',
