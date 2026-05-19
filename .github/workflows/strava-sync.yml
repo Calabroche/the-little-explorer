@@ -68,3 +68,31 @@ jobs:
           else
             echo "No new activities for ${{ matrix.user }}."
           fi
+
+      # ── Persist rotated refresh_token ────────────────────────────────
+      # Strava rotates refresh tokens on every /oauth/token call. The
+      # sync script captures the rotated one in /tmp; here we push it
+      # back into the per-user secret so the next run (cron or webhook)
+      # never falls back to a stale RT that Strava might silently
+      # downgrade to read-only scope.
+      - name: Rotate refresh_token secret if Strava issued a new one
+        if: always()  # also persist if a later step failed; we still got a fresh RT
+        env:
+          GH_TOKEN: ${{ secrets.STRAVA_TOKEN_PAT }}
+          USER:     ${{ matrix.user }}
+        run: |
+          ROT_FILE="/tmp/strava-rotated-rt-${USER}.txt"
+          if [[ ! -f "$ROT_FILE" ]]; then
+            echo "No rotated RT for $USER — keeping existing secret."
+            exit 0
+          fi
+          if [[ -z "$GH_TOKEN" ]]; then
+            echo "::warning::STRAVA_TOKEN_PAT secret missing — cannot persist rotated RT."
+            exit 0
+          fi
+          USER_UPPER=$(echo "$USER" | tr '[:lower:]' '[:upper:]')
+          # gh CLI is preinstalled on ubuntu-latest runners
+          cat "$ROT_FILE" | gh secret set "STRAVA_REFRESH_TOKEN_${USER_UPPER}" \
+            --repo "${{ github.repository }}"
+          echo "✓ rotated refresh_token persisted to STRAVA_REFRESH_TOKEN_${USER_UPPER}"
+          rm -f "$ROT_FILE"

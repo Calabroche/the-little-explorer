@@ -83,7 +83,15 @@ async function refreshToken() {
   });
   if (!res.ok) throw new Error(`Strava token refresh failed: ${res.status} ${await res.text()}`);
   const data = await res.json();
-  return data.access_token;
+  // Strava rotates the refresh_token on every /oauth/token call. We
+  // need to persist the new one or the next sync will end up using a
+  // stale RT that Strava might silently downgrade to a reduced scope
+  // (= "Nothing new to import" forever). Surface BOTH the access_token
+  // and any new refresh_token so the caller can compare and re-store.
+  return {
+    accessToken:  data.access_token,
+    refreshToken: data.refresh_token,
+  };
 }
 
 async function getJson(url, token) {
@@ -126,8 +134,22 @@ function buildJson(activity, streams) {
 }
 
 async function main() {
-  const token = await refreshToken();
+  const { accessToken: token, refreshToken: rotatedRT } = await refreshToken();
   console.log('✓ token refreshed');
+
+  // If Strava handed us a fresh refresh_token (they rotate per call),
+  // write it to a known path so the GitHub Action can pick it up and
+  // re-save it into the per-user secret. Skip when unchanged (so we
+  // don't spam GitHub's API with no-op updates).
+  if (rotatedRT && rotatedRT !== REFRESH_TOKEN) {
+    const outPath = path.join('/tmp', `strava-rotated-rt-${USER}.txt`);
+    try {
+      fs.writeFileSync(outPath, rotatedRT, { mode: 0o600 });
+      console.log(`✓ rotated refresh_token captured for ${USER}`);
+    } catch (e) {
+      console.error(`⚠️  could not persist rotated RT: ${e.message}`);
+    }
+  }
 
   // Walk recent pages until we find activities we already have.
   const have = existingIds();
