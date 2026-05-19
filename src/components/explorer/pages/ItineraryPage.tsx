@@ -526,18 +526,17 @@ export function ItineraryPage({ user, embedded }: Props) {
 
   // OpenStreetMap-FR (light) / CARTO dark (dark mode).
   //
-  // The activity-detail map uses CARTO Voyager — visually clean but
-  // sparse with labels until zoom 13+. For the itinerary builder the
-  // user explicitly wants to see "tous les noms de villages", so we
-  // switch the light base to osm-fr's rendering of standard OSM data,
-  // which labels every commune, hamlet and place name aggressively.
-  // No API key, CORS-friendly, free for sane usage.
-  const tileUrl = dark
-    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-    : 'https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png';
-  const tileAttribution = dark
-    ? '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap'
-    : '&copy; <a href="https://www.openstreetmap.fr/">OSM-FR</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>';
+  // OSM-FR for both light and dark mode — the user explicitly wants
+  // every commune / hamlet labelled, and CARTO's dark_all variant was
+  // way too sparse on labels (only Lyon, Villefranche, etc., none of
+  // Tassin / Dardilly / Caluire visible). In dark mode we keep the
+  // same OSM-FR raster and apply a CSS invert filter (see the
+  // .tile-dark-invert rule in globals.css) so the user gets the same
+  // label density with a dark-ink-on-light-bg → light-ink-on-dark-bg
+  // colour treatment. No API key, no extra tile request, identical
+  // road & label coverage between modes.
+  const tileUrl         = 'https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png';
+  const tileAttribution = '&copy; <a href="https://www.openstreetmap.fr/">OSM-FR</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>';
 
   // Map grew by +200px vs the previous V1 to leave room for the
   // elevation chart underneath without scrolling pressure.
@@ -826,16 +825,15 @@ export function ItineraryPage({ user, embedded }: Props) {
               minZoom={4}
             >
               <TileLayer
-                key={tileUrl}
+                // `key` forces a remount when the mode flips so the CSS
+                // filter applies cleanly to freshly-painted tiles.
+                key={`${tileUrl}|${dark ? 'dark' : 'light'}`}
                 url={tileUrl}
                 attribution={tileAttribution}
-                // osm-fr renders up to zoom 20; CARTO dark caps at 19,
-                // so we let the tile service draw native tiles up to its
-                // own ceiling and Leaflet up-scales the last level when
-                // the user zooms beyond that. End result: every street
-                // name and minor place is readable at zoom 18+.
+                className={dark ? 'tile-dark-invert' : undefined}
+                // osm-fr renders up to zoom 20.
                 maxZoom={20}
-                maxNativeZoom={dark ? 19 : 20}
+                maxNativeZoom={20}
               />
               {polylinePositions && polylinePositions.length > 1 && (
                 <Polyline positions={polylinePositions} pathOptions={{ color: tokens.terra, weight: 4, opacity: 0.85 }} />

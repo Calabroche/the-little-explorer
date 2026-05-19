@@ -50,3 +50,15 @@ body {
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--bg-border); border-radius: 2px; }
+
+/* Dark-mode tile inversion.
+   The OSM-FR raster is rendered with dark ink on a light background;
+   in dark mode we invert + hue-rotate so it becomes light ink on a
+   dark background while keeping every label and road exactly where
+   it was. `invert(1)` flips luminance, `hue-rotate(180deg)` rebalances
+   the inverted hue back to something close to the original (greens
+   stay greenish, roads stay yellowish). brightness/contrast soften
+   the result so it doesn't burn at night. */
+.tile-dark-invert {
+  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.95) saturate(0.85);
+}
