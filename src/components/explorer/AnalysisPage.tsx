@@ -95,9 +95,12 @@ const CARD_STYLE: React.CSSProperties = {
   background: tokens.surface, border: `1px solid ${tokens.creamBorder}`, borderRadius: 4, padding: 20,
 };
 
-function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
+function ChartCard({ title, scrub, children }: { title: string; scrub?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div style={CARD_STYLE}>
+      {scrub != null && (
+        <div style={{ marginBottom: 14 }}>{scrub}</div>
+      )}
       <Label style={{ display: 'block', marginBottom: 14 }}>{title}</Label>
       {children}
     </div>
@@ -253,7 +256,94 @@ function MetricList({ rows, accentColor }: { rows: MetricRow[]; accentColor: str
   );
 }
 
+// ── Scrub card ────────────────────────────────────────────────────────────────
+//
+// Mirrors the iOS scrub card (commit cede1ec on the-little-explorer-ios):
+// a compact one-row readout that sits at the top of whichever chart card
+// the user is hovering. Replaces / complements the per-chart floating
+// tooltip with a single multi-metric summary so the cursor's km is
+// surfaced alongside FC / Speed / Power / Altitude / Slope no matter
+// which chart it's on.
+
+type ScrubData = {
+  dist: number;
+  hr?: number | null;
+  speed?: number | null;
+  power?: number;
+  altitude?: number | null;
+  gradient?: number;
+};
+
+function ScrubCard({ d }: { d: ScrubData }) {
+  const slopeFmt = d.gradient != null
+    ? (d.gradient >= 0 ? `+${d.gradient.toFixed(1)} %` : `${d.gradient.toFixed(1)} %`)
+    : '';
+  const slopeColor = (d.gradient ?? 0) >= 0 ? tokens.terra : tokens.blue;
+
+  const stats: { label: string; value: string; color: string }[] = [];
+  if (d.hr != null) stats.push({ label: 'FC',        value: `${Math.round(d.hr)} bpm`,         color: tokens.terra });
+  if (d.speed != null) stats.push({ label: 'VITESSE', value: `${d.speed.toFixed(1)} km/h`,      color: tokens.blue });
+  if (d.power != null && d.power > 0) stats.push({ label: 'PUISSANCE', value: `${d.power} W`,  color: tokens.green });
+  if (d.altitude != null) stats.push({ label: 'ALTITUDE', value: `${Math.round(d.altitude)} m`, color: tokens.terra });
+
+  return (
+    <div style={{
+      background: tokens.surface,
+      border: `1.5px solid ${tokens.terra}80`,
+      borderRadius: 6,
+      padding: '12px 14px',
+      display: 'flex', flexDirection: 'column', gap: 8,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <span style={{
+          fontFamily: "'Playfair Display'", fontSize: 24, fontWeight: 900,
+          color: tokens.ink, fontVariantNumeric: 'tabular-nums', lineHeight: 1,
+        }}>
+          {d.dist.toFixed(2)}
+        </span>
+        <span style={{ fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.inkLight }}>km</span>
+        <span style={{ flex: 1 }} />
+        {d.gradient != null && (
+          <span style={{
+            fontFamily: "'Playfair Display'", fontSize: 13, fontWeight: 700,
+            color: slopeColor, fontVariantNumeric: 'tabular-nums',
+          }}>
+            {slopeFmt}
+          </span>
+        )}
+      </div>
+      {stats.length > 0 && (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: `repeat(${Math.min(stats.length, 4)}, minmax(0, 1fr))`,
+          gap: 10,
+        }}>
+          {stats.map(s => (
+            <div key={s.label} style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+              <span style={{
+                fontFamily: "'Space Grotesk'", fontSize: 9, fontWeight: 700,
+                letterSpacing: '0.1em', color: tokens.inkLight,
+              }}>
+                {s.label}
+              </span>
+              <span style={{
+                fontFamily: "'Playfair Display'", fontSize: 16, fontWeight: 800,
+                color: s.color, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1,
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              }}>
+                {s.value}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
+
+type ChartKind = 'hr' | 'speed' | 'power' | 'altitude';
 
 export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack: () => void }) {
   const { t, lang } = useT();
@@ -268,6 +358,45 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
   const hasGPS = (activity.gps?.length ?? 0) > 1;
 
   const chartHeight = isMobile ? 260 : 300;
+
+  // Shared scrub state — which data index is hovered + which chart is
+  // the source of the hover. Mirrors the iOS @State pair (selectedDist
+  // + activeChart). Synced across all 4 charts via syncId="ride", but
+  // only the chart whose handlers fired most recently shows the scrub
+  // card so the readout sits next to the cursor, not on a random card.
+  const [scrubIndex, setScrubIndex] = useState<number | null>(null);
+  const [activeChart, setActiveChart] = useState<ChartKind | null>(null);
+
+  const scrubPoint = scrubIndex != null && scrubIndex >= 0 && scrubIndex < data.length
+    ? data[scrubIndex]
+    : null;
+
+  // Reusable handlers — every chart gets the same `onMouseMove` that
+  // updates the shared index + marks itself active, and the same
+  // `onMouseLeave` that clears the active chart (but keeps the index
+  // around for a beat so the card doesn't blink off when the cursor
+  // moves between two adjacent chart cards).
+  function chartHandlers(kind: ChartKind) {
+    return {
+      // Recharts passes a CategoricalChartState with activeTooltipIndex
+      // and isTooltipActive. Touch events on iOS Safari fire as
+      // synthetic mouse events here, so the same handlers work for
+      // mobile tap-and-drag too.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      onMouseMove: (state: any) => {
+        if (state?.isTooltipActive && typeof state.activeTooltipIndex === 'number') {
+          if (scrubIndex !== state.activeTooltipIndex) setScrubIndex(state.activeTooltipIndex);
+          if (activeChart !== kind) setActiveChart(kind);
+        }
+      },
+      onMouseLeave: () => {
+        // Clear the active chart so the scrub card disappears, but
+        // hold onto the index in case the cursor jumps to a different
+        // chart almost immediately — gives a smoother handoff.
+        if (activeChart === kind) setActiveChart(null);
+      },
+    };
+  }
 
   // HR Y-range, tight to the ride's actual data. Matches iOS commit
   // 253ae9b — Recharts' 'auto' tends to over-pad, which leaves dead
@@ -287,9 +416,9 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
   }, [data]);
 
   const hrGradChart = hasHR && mounted && (
-    <ChartCard title={t("charts.hrSlope")}>
+    <ChartCard title={t("charts.hrSlope")} scrub={activeChart === 'hr' && scrubPoint ? <ScrubCard d={scrubPoint} /> : null}>
       <ResponsiveContainer width="100%" height={chartHeight}>
-        <ComposedChart syncId="ride" data={data} margin={{ top: 4, right: 2, left: -10, bottom: 0 }}>
+        <ComposedChart syncId="ride" data={data} margin={{ top: 4, right: 2, left: -10, bottom: 0 }} {...chartHandlers('hr')}>
           <CartesianGrid strokeDasharray="3 3" stroke={tokens.creamBorder} />
           <XAxis dataKey="dist" tick={{ fontFamily: "'Space Grotesk'", fontSize: 10 }} tickFormatter={v => `${v}km`} />
           <YAxis yAxisId="hr"   orientation="left"  width={38} tick={{ fontFamily: "'Space Grotesk'", fontSize: 10 }} domain={[hrRange.min, hrRange.max]} allowDataOverflow />
@@ -309,9 +438,9 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
   );
 
   const speedChart = mounted && (
-    <ChartCard title={t("charts.speed")}>
+    <ChartCard title={t("charts.speed")} scrub={activeChart === 'speed' && scrubPoint ? <ScrubCard d={scrubPoint} /> : null}>
       <ResponsiveContainer width="100%" height={chartHeight}>
-        <AreaChart syncId="ride" data={data} margin={{ top: 4, right: 2, left: -10, bottom: 0 }}>
+        <AreaChart syncId="ride" data={data} margin={{ top: 4, right: 2, left: -10, bottom: 0 }} {...chartHandlers('speed')}>
           <defs>
             <linearGradient id="spdGrad" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%"   stopColor={tokens.blue} stopOpacity={0.35} />
@@ -329,9 +458,9 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
   );
 
   const powerChart = hasPow && mounted && (
-    <ChartCard title={t("charts.power")}>
+    <ChartCard title={t("charts.power")} scrub={activeChart === 'power' && scrubPoint ? <ScrubCard d={scrubPoint} /> : null}>
       <ResponsiveContainer width="100%" height={chartHeight}>
-        <AreaChart syncId="ride" data={data} margin={{ top: 4, right: 2, left: -10, bottom: 0 }}>
+        <AreaChart syncId="ride" data={data} margin={{ top: 4, right: 2, left: -10, bottom: 0 }} {...chartHandlers('power')}>
           <defs>
             <linearGradient id="powGrad" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%"   stopColor={tokens.green} stopOpacity={0.4} />
@@ -352,9 +481,9 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
   );
 
   const altChart = mounted && (
-    <ChartCard title={t("charts.elevProfile")}>
+    <ChartCard title={t("charts.elevProfile")} scrub={activeChart === 'altitude' && scrubPoint ? <ScrubCard d={scrubPoint} /> : null}>
       <ResponsiveContainer width="100%" height={chartHeight}>
-        <AreaChart syncId="ride" data={data} margin={{ top: 4, right: 2, left: -10, bottom: 0 }}>
+        <AreaChart syncId="ride" data={data} margin={{ top: 4, right: 2, left: -10, bottom: 0 }} {...chartHandlers('altitude')}>
           <defs>
             <linearGradient id="altGrad" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%"   stopColor={tokens.terra} stopOpacity={0.3} />
