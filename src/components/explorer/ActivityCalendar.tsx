@@ -115,8 +115,7 @@ export function ActivityCalendar({ activities }: { activities: Activity[] }) {
 
   // Memoise the grid so it doesn't get rebuilt every time the hover
   // state flips. With 140 cells × month-label string formatting, doing
-  // this on every render is what was making the cursor stutter / freeze
-  // while moving across the heatmap.
+  // this on every render was making the cursor stutter / freeze.
   const cells = useMemo(() => trimLeadingEmptyWeeks(buildCells(activities)), [activities]);
   const weeks = cells.length / 7;
 
@@ -125,6 +124,14 @@ export function ActivityCalendar({ activities }: { activities: Activity[] }) {
     for (let w = 0; w < weeks; w++) out.push(cells.slice(w * 7, w * 7 + 7));
     return out;
   }, [cells, weeks]);
+
+  // Lookup by isoDay so the delegated mouseover handler can resolve
+  // event.target → DayCell in O(1).
+  const cellsByIso = useMemo(() => {
+    const m = new Map<string, DayCell>();
+    for (const c of cells) m.set(c.iso, c);
+    return m;
+  }, [cells]);
 
   const monthLabels = useMemo(() => {
     const monthAt = cols.map(col => col[0]?.date.getMonth() ?? 0);
@@ -140,10 +147,19 @@ export function ActivityCalendar({ activities }: { activities: Activity[] }) {
   const dayLabelsEn = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
   const dayShort    = lang === 'en' ? dayLabelsEn : dayLabels;
 
-  // Stable hover handlers — each cell renders an onMouseEnter that
-  // captures the cell reference. We use useCallback for the leave
-  // handler so it's a single function reference across renders.
-  const handleLeave = useCallback(() => setHover(null), []);
+  // Event delegation: ONE handler on the grid wrapper instead of 140
+  // per-cell inline closures. Eliminates the per-render allocation
+  // of 140 new fn refs (which was forcing React to swap listeners
+  // on every cell on every hover flip → measurable jank on the home
+  // page where the heatmap sits above other heavy widgets).
+  const handleGridMouseOver = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    const iso = target?.getAttribute?.('data-iso');
+    if (!iso) return;
+    const cell = cellsByIso.get(iso);
+    if (cell) setHover(cell);
+  }, [cellsByIso]);
+  const handleGridMouseLeave = useCallback(() => setHover(null), []);
 
   const CELL    = 14;
   const GAP     = 3;
@@ -152,6 +168,7 @@ export function ActivityCalendar({ activities }: { activities: Activity[] }) {
   const CARD: CSSProperties = {
     background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
     borderRadius: 4, padding: '14px 16px', marginBottom: 24,
+    position: 'relative', // anchors the absolute-positioned tooltip
   };
 
   return (
@@ -171,7 +188,11 @@ export function ActivityCalendar({ activities }: { activities: Activity[] }) {
         </div>
       </div>
 
-      <div style={{ position: 'relative', display: 'inline-block' }}>
+      <div
+        style={{ position: 'relative', display: 'inline-block' }}
+        onMouseOver={handleGridMouseOver}
+        onMouseLeave={handleGridMouseLeave}
+      >
         <div style={{
           display: 'grid', gridTemplateColumns: `${LABEL_W}px repeat(${weeks}, ${CELL}px)`, gap: GAP,
           fontFamily: "'Space Grotesk'", fontSize: 9, color: tokens.inkLight,
@@ -195,8 +216,7 @@ export function ActivityCalendar({ activities }: { activities: Activity[] }) {
               const bg = intensityColor(c.totalKm, c.activities.length > 0);
               return (
                 <span key={w}
-                  onMouseEnter={() => setHover(c)}
-                  onMouseLeave={handleLeave}
+                  data-iso={c.iso}
                   style={{
                     width: CELL, height: CELL,
                     background: c.inFuture ? 'transparent' : bg,
@@ -210,7 +230,10 @@ export function ActivityCalendar({ activities }: { activities: Activity[] }) {
         ))}
       </div>
 
-      {/* Tooltip — 3-chip card matching the iOS DayCell hover popup. */}
+      {/* Tooltip slot — reserved height so the card stays at constant
+          size whether or not a cell is hovered. Eliminates the FeedPage
+          layout thrash that was the main source of jank. */}
+      <div style={{ position: 'relative', minHeight: 56 }}>
       {hover && (() => {
         const dateLbl = hover.date.toLocaleDateString(lang === 'en' ? 'en-US' : 'fr-FR',
           { weekday: 'short', day: 'numeric', month: 'short' });
@@ -218,9 +241,11 @@ export function ActivityCalendar({ activities }: { activities: Activity[] }) {
         const speed   = avgSpeedKmh(hover);
         return (
           <div style={{
-            marginTop: 10, padding: '8px 12px',
+            position: 'absolute', top: 8, left: 0,
+            padding: '8px 12px',
             background: tokens.creamDark, border: `1px solid ${tokens.creamBorder}`,
             borderRadius: 4, display: 'inline-block', minWidth: 240,
+            zIndex: 5,
           }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: empty ? 0 : 6 }}>
               <span style={{ fontFamily: "'Playfair Display'", fontWeight: 700, fontSize: 12, color: tokens.ink, textTransform: 'capitalize' }}>
@@ -250,6 +275,7 @@ export function ActivityCalendar({ activities }: { activities: Activity[] }) {
           </div>
         );
       })()}
+      </div>
     </div>
   );
 }
