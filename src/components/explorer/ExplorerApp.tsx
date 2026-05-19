@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Activity, GlobalStats, deriveStats, tokens } from './tokens';
-import { Sidebar, PageId, SportId, UserId } from './Sidebar';
+import { Sidebar, GlobalLangToggle, PageId, SportId, UserId } from './Sidebar';
 import { useT } from '@/i18n';
 import { useIsMobile } from './ui';
 import { FeedPage } from './pages/FeedPage';
@@ -78,7 +78,7 @@ export function ExplorerApp() {
   // reading dense ride-detail charts.
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const isMobile = useIsMobile();
-  const { t } = useT();
+  const { t, lang, setLang } = useT();
 
   // Dark mode + sport + user + sidebar persistence (localStorage — pas lié à l'URL)
   useEffect(() => {
@@ -287,6 +287,14 @@ export function ExplorerApp() {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}
           >›</button>
+        )}
+        {/* Floating language toggle — desktop only, top-right of the
+            content area. Mobile path has its own LangToggle in the
+            bottom-nav top row. */}
+        {!isMobile && (
+          <div style={{ position: 'absolute', top: 16, right: 16, zIndex: 1000 }}>
+            <GlobalLangToggle lang={lang} onChange={setLang} />
+          </div>
         )}
         {analysisActivity
           ? <AnalysisPage activity={analysisActivity} onBack={closeActivity} />
