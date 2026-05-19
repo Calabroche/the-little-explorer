@@ -163,9 +163,21 @@ export const dict = {
 
     // ── Planner page ─────────────────────────────────────────────────────────
     planner: {
-      sectionTag:    'PLANIFICATEUR DE PARCOURS',
+      sectionTag:    'PLANIFICATEUR',
       headline:      'Construis ta sortie.',
-      headlineEm:    'Boucles 100% Dardilly.',
+      headlineEm:    'Quatre outils, une page.',
+      tab: {
+        itinerary: 'Itinéraire',
+        plan:      'Plan d\'entraînement',
+        auto:      'Parcours auto',
+        proposals: 'Sorties suggérées',
+      },
+      sub: {
+        itinerary: 'Trace un parcours village par village (ou adresse précise), exporte en GPX, lance la navigation.',
+        plan:      'Construis ta progression jusqu\'à un objectif — semaine de récupération, montée en charge, taper avant la course.',
+        auto:      'Génère une boucle depuis Dardilly avec une distance + un dénivelé cibles. L\'algo te propose un tracé.',
+        proposals: 'Des sorties préfaites par typologie d\'effort (endurance, tempo, seuil, intervalles…).',
+      },
       tag:           '§ PLANIFICATEUR',
       label:         'CRÉE TON PROCHAIN PARCOURS',
       intro:         'Toutes les boucles partent & arrivent à Chemin du Manoir, Dardilly. Distance respectée à',
@@ -716,9 +728,21 @@ export const dict = {
 
     // ── Planner page ─────────────────────────────────────────────────────────
     planner: {
-      sectionTag:    'ROUTE PLANNER',
+      sectionTag:    'PLANNER',
       headline:      'Build your ride.',
-      headlineEm:    '100% Dardilly loops.',
+      headlineEm:    'Four tools, one page.',
+      tab: {
+        itinerary: 'Itinerary',
+        plan:      'Training plan',
+        auto:      'Auto route',
+        proposals: 'Suggested rides',
+      },
+      sub: {
+        itinerary: 'Trace a route village by village (or by precise address), export as GPX, launch navigation.',
+        plan:      'Build a progression toward a goal — recovery week, ramp-up, taper before race day.',
+        auto:      'Generate a Dardilly-anchored loop at a target distance + elevation. The algorithm proposes a route.',
+        proposals: 'Pre-made rides by effort type (endurance, tempo, threshold, intervals…).',
+      },
       tag:           '§ PLANNER',
       label:         'CREATE YOUR NEXT ROUTE',
       intro:         'All loops start & finish at Chemin du Manoir, Dardilly. Distance respected within',

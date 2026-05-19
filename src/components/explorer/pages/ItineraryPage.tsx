@@ -20,7 +20,13 @@ const CircleMarker = dynamic(() => import('react-leaflet').then(m => m.CircleMar
 const Tooltip      = dynamic(() => import('react-leaflet').then(m => m.Tooltip),      { ssr: false });
 const FitBounds    = dynamic(() => import('../itinerary/FitBounds').then(m => m.FitBounds), { ssr: false });
 
-interface Props { user: UserId }
+interface Props {
+  user: UserId;
+  // When rendered inside another page (e.g. PlannerPage as a tab),
+  // we skip the page-level wrapper (padding/scroll) and the
+  // SectionTag/headline — the host page handles those.
+  embedded?: boolean;
+}
 
 // ── Hooks ───────────────────────────────────────────────────────────────────
 
@@ -239,7 +245,7 @@ async function findDetour(
 
 // ── Main component ──────────────────────────────────────────────────────────
 
-export function ItineraryPage({ user }: Props) {
+export function ItineraryPage({ user, embedded }: Props) {
   const { t } = useT();
   const isMobile = useIsMobile();
   const dark = useDarkMode();
@@ -545,17 +551,29 @@ export function ItineraryPage({ user }: Props) {
 
   const canExtend = distanceKm != null && targetKm - distanceKm >= 3 && !extending && !routing;
 
+  // When embedded inside PlannerPage's tab system, the host page
+  // already provides the scroll container + section header — so we
+  // skip those and let the parent control the chrome.
+  const Outer = embedded ? 'div' : 'div';
+  const outerStyle: CSSProperties = embedded
+    ? {}
+    : { flex: 1, overflowY: 'auto', padding: isMobile ? '20px 16px' : '32px 40px' };
+
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '20px 16px' : '32px 40px' }}>
-      <SectionTag num={6} title={t('itinerary.tagTitle')} />
-      <h1 style={{
-        fontFamily: "'Playfair Display'",
-        fontSize: isMobile ? 28 : 40, fontWeight: 900, color: tokens.ink,
-        marginBottom: isMobile ? 20 : 32, lineHeight: 1.1,
-      }}>
-        {t('itinerary.headline')}<br />
-        <em style={{ color: tokens.terra, fontStyle: 'italic' }}>{t('itinerary.headlineEm')}</em>
-      </h1>
+    <Outer style={outerStyle}>
+      {!embedded && (
+        <>
+          <SectionTag num={6} title={t('itinerary.tagTitle')} />
+          <h1 style={{
+            fontFamily: "'Playfair Display'",
+            fontSize: isMobile ? 28 : 40, fontWeight: 900, color: tokens.ink,
+            marginBottom: isMobile ? 20 : 32, lineHeight: 1.1,
+          }}>
+            {t('itinerary.headline')}<br />
+            <em style={{ color: tokens.terra, fontStyle: 'italic' }}>{t('itinerary.headlineEm')}</em>
+          </h1>
+        </>
+      )}
 
       <div style={{ display: 'grid', gap: 24, gridTemplateColumns: isMobile ? '1fr' : '380px 1fr' }}>
         {/* ─── LEFT COLUMN: builder ─────────────────────────────────────── */}
@@ -918,7 +936,7 @@ export function ItineraryPage({ user }: Props) {
           </div>
         )}
       </div>
-    </div>
+    </Outer>
   );
 }
 
