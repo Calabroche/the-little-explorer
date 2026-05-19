@@ -524,14 +524,15 @@ export function ItineraryPage({ user, embedded }: Props) {
   const deltaKm           = distanceKm != null ? +(distanceKm - targetKm).toFixed(1) : null;
   const deltaPct          = distanceKm != null && targetKm > 0 ? ((distanceKm - targetKm) / targetKm) * 100 : 0;
 
-  // Light mode: OSM-FR (label-dense FR rendering).
-  // Dark mode:  CARTO Dark Matter base + CARTO labels overlay (the "D1"
-  //             option from the color-comparison preview the user picked).
-  //             Two layers stacked instead of `dark_all` so it's easy
-  //             to swap the labels overlay independently later if
-  //             needed. Same visual result as `dark_all`.
-  const lightUrl         = 'https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png';
-  const lightAttribution = '&copy; <a href="https://www.openstreetmap.fr/">OSM-FR</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>';
+  // Light mode: CARTO Positron — the "A5" option the user picked to
+  //             test. Very neutral, gray palette, sparse labels (good
+  //             when the route polyline + waypoint markers should
+  //             dominate the map visually).
+  // Dark mode:  CARTO Dark Matter base + CARTO labels overlay ("D1"),
+  //             two layers stacked instead of the merged `dark_all` so
+  //             we can swap the labels overlay independently later.
+  const lightUrl         = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+  const lightAttribution = '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap';
   const darkBaseUrl      = 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png';
   const darkLabelsUrl    = 'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png';
   const darkAttribution  = '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap';

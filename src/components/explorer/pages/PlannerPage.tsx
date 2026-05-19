@@ -28,7 +28,7 @@ const TABS: { id: PlannerTab; icon: string; labelKey: string }[] = [
   { id: 'proposals',  icon: '✺', labelKey: 'planner.tab.proposals'  },
 ];
 
-export function PlannerPage({ activities, user, initialTab = 'plan' }: Props) {
+export function PlannerPage({ activities, user, initialTab = 'itineraire' }: Props) {
   const isMobile = useIsMobile();
   const { t } = useT();
   const [tab, setTab] = useState<PlannerTab>(initialTab);
