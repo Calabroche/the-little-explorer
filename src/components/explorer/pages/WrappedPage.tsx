@@ -4,9 +4,15 @@ import { useState, useEffect, useMemo, useCallback, CSSProperties } from 'react'
 import { Activity, tokens } from '../tokens';
 import { useIsMobile } from '../ui';
 import { useT, formatDateLocale } from '@/i18n';
+import type { SportId } from '../Sidebar';
 
 interface Props {
   activities: Activity[];
+  // The currently-active sport. Caller already filtered `activities`
+  // to this sport, but we keep the prop so card render functions can
+  // tailor copy (e.g. the cover headline gets the sport name) and
+  // sport-aggregate cards can self-hide when only one type is present.
+  sport: SportId;
 }
 
 type YearStats = {
@@ -23,6 +29,7 @@ type YearStats = {
   fastest:        Activity | null;                         // highest avg speed (rides only)
   mostKudosed:    Activity | null;
   monthlyDist:    number[];                                // 12
+  distinctSports: number;                                  // # distinct sport types in this year's data
 };
 
 // Compute one year's recap from raw activities. Returns null if the year is empty.
@@ -77,9 +84,13 @@ function computeYear(acts: Activity[], year: number): YearStats | null {
     ? { idx: bestDowIdx, count: dowCount[bestDowIdx] }
     : null;
 
-  // Fastest (rides only — speed only meaningful where you carry momentum).
-  const rides = ofYear.filter(a => a.type === 'cycling' && a.speed != null);
-  const fastest = rides.reduce<Activity | null>(
+  // Fastest: any sport with a meaningful avg-speed reading. Used to be
+  // hard-restricted to cycling, but since the page is now filtered by
+  // sport at the call site (e.g. user on running → only running here),
+  // we let cycling / running / ski all surface their fastest entry.
+  // Floor of 4 km/h drops walking / very-low-speed outliers.
+  const speedy  = ofYear.filter(a => a.speed != null && (a.speed ?? 0) >= 4);
+  const fastest = speedy.reduce<Activity | null>(
     (best, a) => (!best || (a.speed ?? 0) > (best.speed ?? 0) ? a : best), null,
   );
 
@@ -90,6 +101,7 @@ function computeYear(acts: Activity[], year: number): YearStats | null {
     longest, biggestClimb, topSport,
     bestMonth, bestDow, fastest, mostKudosed: null,
     monthlyDist: monthlyDist.map(v => +v.toFixed(0)),
+    distinctSports: Object.keys(sportAgg).length,
   };
 }
 
@@ -294,12 +306,16 @@ const CARDS: Card[] = [
   },
 
   // 6 — Top sport
+  // Hidden when the data only contains one sport — e.g. the page was
+  // filtered to cycling at the call site, so showing "top sport: Vélo"
+  // would just restate what the user already knows. Stays useful in
+  // any future call site that passes mixed-sport data.
   {
     key: 'topSport',
     bg: `linear-gradient(135deg, ${tokens.blue} 0%, ${tokens.creamDark} 100%)`,
     accent: '#fff', fg: '#fff',
     render: (s, t, _l, isMobile) => {
-      if (!s.topSport) return null;
+      if (!s.topSport || s.distinctSports < 2) return null;
       const labelKey = SPORT_NAME_KEY[s.topSport.id] ?? 'common.cycling';
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 720 }}>
