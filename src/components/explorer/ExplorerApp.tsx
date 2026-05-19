@@ -7,7 +7,6 @@ import { useT } from '@/i18n';
 import { useIsMobile } from './ui';
 import { FeedPage } from './pages/FeedPage';
 import { MapPage } from './pages/MapPage';
-import { StatsPage } from './pages/StatsPage';
 import { PhotosPage } from './pages/PhotosPage';
 import { PlannerPage } from './pages/PlannerPage';
 import { FtpPage } from './pages/FtpPage';
@@ -23,7 +22,6 @@ const PAGE_PATHS: Record<PageId, string> = {
   itinerary: '/itineraire',
   compare:   '/comparer',
   map:       '/carte',
-  stats:     '/stats',
   wrapped:   '/bilan',
   ftp:       '/ftp',
   photos:    '/photos',
@@ -34,10 +32,11 @@ function pathToPage(pathname: string): PageId {
   if (pathname.startsWith('/itineraire'))    return 'itinerary';
   if (pathname.startsWith('/comparer'))      return 'compare';
   if (pathname.startsWith('/carte'))         return 'map';
-  if (pathname.startsWith('/stats'))         return 'stats';
   if (pathname.startsWith('/bilan'))         return 'wrapped';
   if (pathname.startsWith('/ftp'))           return 'ftp';
   if (pathname.startsWith('/photos'))        return 'photos';
+  // /stats route is gone — the standalone Stats page was removed.
+  // Anyone hitting /stats falls through to the feed.
   return 'feed';
 }
 
@@ -262,7 +261,6 @@ export function ExplorerApp() {
     itinerary: <PlannerPage activities={filteredActivities} user={user} initialTab="itineraire" />,
     compare:   <ComparePage   activities={filteredActivities} />,
     map:       <MapPage       activities={activities} selectedActivity={selectedActivityForMap} />,
-    stats:     <StatsPage     activities={filteredActivities} stats={filteredStats!} />,
     wrapped:   <WrappedPage   activities={filteredActivities} sport={sport} />,
     ftp:       <FtpPage       activities={filteredActivities} />,
     photos:    <PhotosPage    activities={filteredActivities} />,
