@@ -258,7 +258,7 @@ export function ExplorerApp() {
     // still resolves but routes into PlannerPage with the itinerary
     // tab pre-selected — same destination, sidebar declutters down
     // to one nav item.
-    planner:   <PlannerPage activities={filteredActivities} user={user} initialTab="plan" />,
+    planner:   <PlannerPage activities={filteredActivities} user={user} initialTab="itineraire" />,
     itinerary: <PlannerPage activities={filteredActivities} user={user} initialTab="itineraire" />,
     compare:   <ComparePage   activities={filteredActivities} />,
     map:       <MapPage       activities={activities} selectedActivity={selectedActivityForMap} />,
