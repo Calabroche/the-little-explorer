@@ -259,7 +259,7 @@ export function ExplorerApp() {
     compare:   <ComparePage   activities={filteredActivities} />,
     map:       <MapPage       activities={activities} selectedActivity={selectedActivityForMap} />,
     stats:     <StatsPage     activities={filteredActivities} stats={filteredStats!} />,
-    wrapped:   <WrappedPage   activities={activities} />,
+    wrapped:   <WrappedPage   activities={filteredActivities} sport={sport} />,
     ftp:       <FtpPage       activities={filteredActivities} />,
     photos:    <PhotosPage    activities={filteredActivities} />,
   };
