@@ -16,7 +16,9 @@ export type UserId  = 'florian' | 'helena';
 const ALL_SPORTS: SportId[] = ['cycling', 'running', 'hiking', 'ski', 'snowshoe', 'walking', 'swim'];
 const ALL_NAV_ITEMS: { id: PageId; icon: string; label: string; sports: SportId[] }[] = [
   { id: 'feed',      icon: '◎', label: 'Activités',     sports: ALL_SPORTS },
-  { id: 'itinerary', icon: '⤳', label: 'Itinéraire',    sports: ['cycling'] },
+  // 'itinerary' is no longer a top-level destination — it lives as a
+  // tab inside Planner. Kept as a PageId for backward-compat URLs
+  // (/itineraire still works and lands on the itinerary tab).
   { id: 'planner',   icon: '✦', label: 'Planificateur', sports: ['cycling'] },
   { id: 'compare', icon: '⇄', label: 'Comparer',      sports: ALL_SPORTS },
   { id: 'stats',   icon: '▬', label: 'Stats',         sports: ALL_SPORTS },

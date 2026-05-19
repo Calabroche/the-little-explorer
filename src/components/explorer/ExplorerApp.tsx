@@ -13,7 +13,6 @@ import { PlannerPage } from './pages/PlannerPage';
 import { FtpPage } from './pages/FtpPage';
 import { ComparePage } from './pages/ComparePage';
 import { WrappedPage } from './pages/WrappedPage';
-import { ItineraryPage } from './pages/ItineraryPage';
 import { AnalysisPage } from './AnalysisPage';
 
 // ── URL <-> state helpers ────────────────────────────────────────────────────
@@ -254,8 +253,13 @@ export function ExplorerApp() {
 
   const pageContent: Record<PageId, React.ReactNode> = {
     feed:      <FeedPage      activities={filteredActivities} stats={filteredStats!} sport={sport} onSelect={openActivity} />,
-    planner:   <PlannerPage   activities={filteredActivities} />,
-    itinerary: <ItineraryPage user={user} />,
+    // Planner is now a tabbed hub for: itinerary, training plan,
+    // auto-route, route proposals. The standalone /itineraire URL
+    // still resolves but routes into PlannerPage with the itinerary
+    // tab pre-selected — same destination, sidebar declutters down
+    // to one nav item.
+    planner:   <PlannerPage activities={filteredActivities} user={user} initialTab="plan" />,
+    itinerary: <PlannerPage activities={filteredActivities} user={user} initialTab="itineraire" />,
     compare:   <ComparePage   activities={filteredActivities} />,
     map:       <MapPage       activities={activities} selectedActivity={selectedActivityForMap} />,
     stats:     <StatsPage     activities={filteredActivities} stats={filteredStats!} />,
