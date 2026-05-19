@@ -524,19 +524,17 @@ export function ItineraryPage({ user, embedded }: Props) {
   const deltaKm           = distanceKm != null ? +(distanceKm - targetKm).toFixed(1) : null;
   const deltaPct          = distanceKm != null && targetKm > 0 ? ((distanceKm - targetKm) / targetKm) * 100 : 0;
 
-  // OpenStreetMap-FR (light) / CARTO dark (dark mode).
-  //
-  // OSM-FR for both light and dark mode — the user explicitly wants
-  // every commune / hamlet labelled, and CARTO's dark_all variant was
-  // way too sparse on labels (only Lyon, Villefranche, etc., none of
-  // Tassin / Dardilly / Caluire visible). In dark mode we keep the
-  // same OSM-FR raster and apply a CSS invert filter (see the
-  // .tile-dark-invert rule in globals.css) so the user gets the same
-  // label density with a dark-ink-on-light-bg → light-ink-on-dark-bg
-  // colour treatment. No API key, no extra tile request, identical
-  // road & label coverage between modes.
-  const tileUrl         = 'https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png';
-  const tileAttribution = '&copy; <a href="https://www.openstreetmap.fr/">OSM-FR</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>';
+  // Light mode: OSM-FR (label-dense FR rendering).
+  // Dark mode:  CARTO Dark Matter base + CARTO labels overlay (the "D1"
+  //             option from the color-comparison preview the user picked).
+  //             Two layers stacked instead of `dark_all` so it's easy
+  //             to swap the labels overlay independently later if
+  //             needed. Same visual result as `dark_all`.
+  const lightUrl         = 'https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png';
+  const lightAttribution = '&copy; <a href="https://www.openstreetmap.fr/">OSM-FR</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>';
+  const darkBaseUrl      = 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png';
+  const darkLabelsUrl    = 'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png';
+  const darkAttribution  = '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap';
 
   // Map grew by +200px vs the previous V1 to leave room for the
   // elevation chart underneath without scrolling pressure.
@@ -824,17 +822,33 @@ export function ItineraryPage({ user, embedded }: Props) {
               maxZoom={20}
               minZoom={4}
             >
-              <TileLayer
-                // `key` forces a remount when the mode flips so the CSS
-                // filter applies cleanly to freshly-painted tiles.
-                key={`${tileUrl}|${dark ? 'dark' : 'light'}`}
-                url={tileUrl}
-                attribution={tileAttribution}
-                className={dark ? 'tile-dark-invert' : undefined}
-                // osm-fr renders up to zoom 20.
-                maxZoom={20}
-                maxNativeZoom={20}
-              />
+              {dark ? (
+                <>
+                  {/* Dark: CARTO Dark Matter base (no labels) +
+                      CARTO labels overlay. Two TileLayers stacked. */}
+                  <TileLayer
+                    key="dark-base"
+                    url={darkBaseUrl}
+                    attribution={darkAttribution}
+                    maxZoom={20}
+                    maxNativeZoom={19}
+                  />
+                  <TileLayer
+                    key="dark-labels"
+                    url={darkLabelsUrl}
+                    maxZoom={20}
+                    maxNativeZoom={19}
+                  />
+                </>
+              ) : (
+                <TileLayer
+                  key="light"
+                  url={lightUrl}
+                  attribution={lightAttribution}
+                  maxZoom={20}
+                  maxNativeZoom={20}
+                />
+              )}
               {polylinePositions && polylinePositions.length > 1 && (
                 <Polyline positions={polylinePositions} pathOptions={{ color: tokens.terra, weight: 4, opacity: 0.85 }} />
               )}
