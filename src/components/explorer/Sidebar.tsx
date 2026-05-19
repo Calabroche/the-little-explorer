@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
 import { tokens, GlobalStats } from './tokens';
 import { Label } from './ui';
 import { useT } from '@/i18n';
@@ -154,6 +155,140 @@ function LangToggle({ lang, onChange, compact }: { lang: Lang; onChange: (l: Lan
             background: active ? tokens.terra : 'transparent',
             color: active ? '#fff' : tokens.inkMid,
             fontFamily: "'Space Grotesk'", fontSize: compact ? 10 : 11,
+            fontWeight: active ? 700 : 500, letterSpacing: '0.1em',
+            transition: 'all 0.12s',
+          }}>
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Desktop-only collapsed sport picker. Shows only the active sport
+// with a chevron; click to expand a panel listing the other available
+// sports. Mobile keeps the horizontally-scrolling chip-bar (better for
+// thumb access on a narrow screen).
+function SportDropdown({ sport, onChange, available }: {
+  sport: SportId;
+  onChange: (s: SportId) => void;
+  available: SportId[];
+}) {
+  const { t } = useT();
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // Click outside / ESC closes.
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  if (available.length === 0) return null;
+  const currentMeta = SPORT_META[sport] ?? SPORT_META.cycling;
+  // Filter out the currently-selected sport from the panel — the user
+  // doesn't need to "re-pick" what's already active.
+  const others = available.filter(s => s !== sport);
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        style={{
+          width: '100%', padding: '8px 10px',
+          display: 'flex', alignItems: 'center', gap: 8,
+          background: tokens.creamDark,
+          border: `1px solid ${tokens.creamBorder}`,
+          borderRadius: 4,
+          fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.ink, fontWeight: 600,
+          cursor: 'pointer', textAlign: 'left',
+          transition: 'background 0.12s',
+        }}
+        onMouseEnter={e => (e.currentTarget.style.background = tokens.cream)}
+        onMouseLeave={e => (e.currentTarget.style.background = tokens.creamDark)}
+      >
+        <span style={{ fontSize: 14, color: tokens.terra }}>{currentMeta.icon}</span>
+        <span style={{ flex: 1 }}>{t(currentMeta.labelKey)}</span>
+        <span style={{ fontSize: 10, color: tokens.inkLight, transition: 'transform 0.15s', transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}>▾</span>
+      </button>
+
+      {open && others.length > 0 && (
+        <div
+          role="listbox"
+          style={{
+            position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 50,
+            background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
+            borderRadius: 4, overflow: 'hidden',
+            boxShadow: '0 6px 20px rgba(0,0,0,0.08)',
+          }}
+        >
+          {others.map(s => {
+            const meta = SPORT_META[s];
+            return (
+              <button
+                key={s}
+                type="button"
+                role="option"
+                onClick={() => { onChange(s); setOpen(false); }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                  padding: '8px 10px', textAlign: 'left',
+                  background: 'transparent', border: 'none', cursor: 'pointer',
+                  fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.inkMid, fontWeight: 500,
+                  borderBottom: `1px solid ${tokens.creamBorder}`,
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = tokens.creamDark)}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              >
+                <span style={{ fontSize: 14 }}>{meta.icon}</span>
+                <span>{t(meta.labelKey)}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Public, reusable lang toggle (used by the desktop floating chip in
+// ExplorerApp and by the mobile bottom bar below). Local LangToggle
+// above remains for backward-compat with the mobile compact mode.
+export function GlobalLangToggle({ lang, onChange }: { lang: Lang; onChange: (l: Lang) => void }) {
+  const opts: { id: Lang; label: string }[] = [
+    { id: 'fr', label: 'FR' },
+    { id: 'en', label: 'EN' },
+  ];
+  return (
+    <div style={{
+      display: 'flex', gap: 3, padding: 3,
+      background: tokens.surface,
+      border: `1px solid ${tokens.creamBorder}`,
+      borderRadius: 18,
+      boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+    }}>
+      {opts.map(o => {
+        const active = lang === o.id;
+        return (
+          <button key={o.id} type="button" onClick={() => onChange(o.id)} style={{
+            padding: '4px 10px',
+            border: 'none', cursor: 'pointer', borderRadius: 14,
+            background: active ? tokens.terra : 'transparent',
+            color: active ? '#fff' : tokens.inkMid,
+            fontFamily: "'Space Grotesk'", fontSize: 10,
             fontWeight: active ? 700 : 500, letterSpacing: '0.1em',
             transition: 'all 0.12s',
           }}>
@@ -322,13 +457,12 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
 
       <div style={{ padding: '10px 12px 4px' }}>
         <Label style={{ display: 'block', marginBottom: 6 }}>{t('common.sport')}</Label>
-        <SportToggle sport={sport} onChange={onSportChange} available={availableSports} />
+        <SportDropdown sport={sport} onChange={onSportChange} available={availableSports} />
       </div>
 
-      <div style={{ padding: '10px 12px 4px' }}>
-        <Label style={{ display: 'block', marginBottom: 6 }}>{t('common.language')}</Label>
-        <LangToggle lang={lang} onChange={setLang} />
-      </div>
+      {/* Language toggle moved out of the sidebar to the top-right
+          floating chip in ExplorerApp. Mobile keeps its own LangToggle
+          in the bottom-bar header below (thumb-accessible there). */}
 
       <nav style={{ padding: '12px 12px', flex: 1 }}>
         {navItems.map(item => {
