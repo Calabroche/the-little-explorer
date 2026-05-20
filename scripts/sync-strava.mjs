@@ -26,7 +26,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT      = path.resolve(__dirname, '..');
 
 const argUser   = (process.argv.find(a => a.startsWith('--user=')) || '').replace('--user=', '');
-const USER      = (argUser || process.env.USER_ID || process.env.USER || 'florian').toLowerCase();
+// Don't fall back to process.env.USER — that's the OS shell username
+// on local runs (e.g. "alice"), which fails validation below and
+// confuses contributors. Stick with explicit CLI flag or USER_ID env.
+const USER      = (argUser || process.env.USER_ID || 'florian').toLowerCase();
 const VALID     = ['florian', 'helena'];
 if (!VALID.includes(USER)) {
   console.error(`Unknown user "${USER}". Valid: ${VALID.join(', ')}`);

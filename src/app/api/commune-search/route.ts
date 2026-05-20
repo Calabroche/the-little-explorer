@@ -51,13 +51,15 @@ export async function GET(req: NextRequest) {
   const exclude = new Set(exRaw.split(',').filter(Boolean));
 
   let url: string;
-  if (lat && lng && Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) {
-    // Reverse mode: returns the place at the given point. We bias to
-    // street-level results (`type=street`) so auto-extend's detour
-    // suggestions are anchored on a real road rather than a polygon
-    // centroid. BAN falls back to the municipality if no street is
-    // close enough.
-    url = `https://api-adresse.data.gouv.fr/reverse/?lat=${lat}&lon=${lng}&limit=1`;
+  const latN = Number(lat);
+  const lngN = Number(lng);
+  if (lat && lng && Number.isFinite(latN) && Number.isFinite(lngN) &&
+      Math.abs(latN) <= 90 && Math.abs(lngN) <= 180) {
+    // Reverse mode. We coerce both params back to numbers + bound-
+    // check + re-stringify via .toFixed before interpolation — raw
+    // strings from query params could otherwise pass `Number.isFinite`
+    // check while carrying whitespace or other chars into the URL.
+    url = `https://api-adresse.data.gouv.fr/reverse/?lat=${latN.toFixed(6)}&lon=${lngN.toFixed(6)}&limit=1`;
   } else if (q.length >= 2) {
     url = `https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(q)}&limit=10&autocomplete=1`;
   } else {

@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
 import { Lang, translate } from './dictionaries';
 
 interface LangCtx {
@@ -24,14 +24,24 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const setLang = (l: Lang) => {
+  // Stable refs for setLang + t so the Provider's `value` object only
+  // changes when `lang` actually changes. Before this fix, every parent
+  // re-render created a fresh `value` object and every `useT()`
+  // consumer in the tree re-rendered (FeedPage, ComparePage, all the
+  // cards, all the tooltips). Big-pages win.
+  const setLang = useCallback((l: Lang) => {
     setLangState(l);
     if (typeof window !== 'undefined') localStorage.setItem('tle_lang', l);
-  };
+  }, []);
 
-  const t = (key: string, vars?: Record<string, string | number>) => translate(lang, key, vars);
+  const t = useCallback(
+    (key: string, vars?: Record<string, string | number>) => translate(lang, key, vars),
+    [lang],
+  );
 
-  return <Ctx.Provider value={{ lang, setLang, t }}>{children}</Ctx.Provider>;
+  const value = useMemo<LangCtx>(() => ({ lang, setLang, t }), [lang, setLang, t]);
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
 export function useT() {

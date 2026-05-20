@@ -350,7 +350,9 @@ function transform(
     elevation:   raw.elevation_m,
     descent:     raw.elevation_m,
     photos:      [] as string[],
-    gps:         (raw.gps as [number, number][]).map(([lat, lng]) => ({ lat, lng })),
+    // Null-guard: older / partial-sync rides can be missing the gps
+    // field entirely. Empty array is safer than 500ing the route.
+    gps:         ((raw.gps as [number, number][] | undefined) ?? []).map(([lat, lng]) => ({ lat, lng })),
     max_speed:   raw.max_speed_kmh   as number,
     max_incline, min_incline,
     avg_hr:      raw.avg_hr          as number | null,
@@ -382,10 +384,26 @@ export async function GET(req: NextRequest) {
     },
   });
 
+  // Defensive parse — a single truncated/malformed JSON file (e.g. a
+  // half-written sync) used to bring down the whole `/api/activities`
+  // endpoint and blank the entire feed. Now we log the bad file and
+  // skip it so the rest of the user's history still loads.
   const raws = fs
     .readdirSync(dataDir)
     .filter(f => f.endsWith('.json'))
-    .map(f => JSON.parse(fs.readFileSync(path.join(dataDir, f), 'utf8')));
+    .map(f => {
+      try {
+        return JSON.parse(fs.readFileSync(path.join(dataDir, f), 'utf8'));
+      } catch (err) {
+        console.warn(`[activities] skip malformed ${f}: ${(err as Error).message}`);
+        return null;
+      }
+    })
+    // Cast back to the raw activity shape used downstream — the
+    // try/catch above guarantees we don't keep nulls, the actual
+    // field-level typing is enforced by the consuming code.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .filter((x): x is any => x != null);
 
   raws.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 

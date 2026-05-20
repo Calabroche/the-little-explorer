@@ -480,7 +480,10 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
           { label: 'Z4 — Seuil',        bpm: '163–175 bpm',   val: activity.hrZones.z4, color: '#e07030'     },
           { label: 'Z5 — VO₂max',       bpm: '> 176 bpm',     val: activity.hrZones.z5, color: '#cc3333'     },
         ];
-        const total = zones.reduce((s, z) => s + z.val, 0);
+        // Coalesce — older JSON files can have undefined z* fields,
+        // which would propagate NaN through `pct` and collapse every
+        // bar to 0% width.
+        const total = zones.reduce((s, z) => s + (z.val ?? 0), 0);
         return (
           <div style={{ ...CARD_STYLE, marginBottom: 20 }}>
             <Label style={{ display: 'block', marginBottom: 14 }}>ZONES FC — TEMPS PASSÉ</Label>
