@@ -228,24 +228,29 @@ export function ActivityCalendar({ activities }: { activities: Activity[] }) {
             })}
           </div>
         ))}
-      </div>
 
-      {/* Tooltip slot — reserved height so the card stays at constant
-          size whether or not a cell is hovered. Eliminates the FeedPage
-          layout thrash that was the main source of jank. */}
-      <div style={{ position: 'relative', minHeight: 56 }}>
-      {hover && (() => {
+        {/* Tooltip: absolutely positioned just below the grid, OVERLAYS
+            whatever sits in the card's margin / next widget area for
+            the duration of the hover. The card itself stays at its
+            natural compact height when no cell is hovered (no more
+            56px dead space), and crucially no layout reflow happens
+            on hover transitions — the FeedPage widgets downstream
+            don't get touched. */}
+        {hover && (() => {
         const dateLbl = hover.date.toLocaleDateString(lang === 'en' ? 'en-US' : 'fr-FR',
           { weekday: 'short', day: 'numeric', month: 'short' });
         const empty   = hover.activities.length === 0;
         const speed   = avgSpeedKmh(hover);
         return (
           <div style={{
-            position: 'absolute', top: 8, left: 0,
-            padding: '8px 12px',
-            background: tokens.creamDark, border: `1px solid ${tokens.creamBorder}`,
-            borderRadius: 4, display: 'inline-block', minWidth: 240,
-            zIndex: 5,
+            position: 'absolute', top: 'calc(100% + 8px)', left: 0,
+            padding: '10px 14px',
+            background: tokens.surface,
+            border: `1px solid ${tokens.creamBorder}`,
+            boxShadow: '0 6px 20px rgba(0,0,0,0.10)',
+            borderRadius: 6, minWidth: 240, zIndex: 5,
+            // Tiny fade-in so the tooltip doesn't pop in like a jumpscare.
+            animation: 'tle-cal-tooltip-in 110ms ease-out',
           }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: empty ? 0 : 6 }}>
               <span style={{ fontFamily: "'Playfair Display'", fontWeight: 700, fontSize: 12, color: tokens.ink, textTransform: 'capitalize' }}>
