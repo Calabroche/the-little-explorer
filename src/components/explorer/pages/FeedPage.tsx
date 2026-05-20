@@ -433,7 +433,10 @@ export function FeedPage({ activities, stats, sport, onSelect }: Props) {
         gap: 16,
       }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <TrainingProgram activities={activities} />
+          {/* Swapped — used to host TrainingProgram. User wanted the
+              average-of-last-5 block up here next to the right-column
+              calendar + goals. */}
+          <Last5Stats activities={activities} />
         </div>
         <div style={{ flexShrink: 0, alignSelf: isMobile ? 'auto' : 'flex-start', display: 'flex', flexDirection: 'column' }}>
           <ActivityCalendar activities={activities} />
@@ -442,7 +445,8 @@ export function FeedPage({ activities, stats, sport, onSelect }: Props) {
       </div>
       <PersonalRecords activities={activities} sport={sport} />
       {sport === 'running' && <RunPaceZones activities={activities} />}
-      <Last5Stats activities={activities} />
+      {/* Swapped down — TrainingProgram now lives where Last5Stats was. */}
+      <TrainingProgram activities={activities} />
 
       {activities.map(a => <ActivityCard key={a.id} activity={a} onClick={onSelect} />)}
     </div>
