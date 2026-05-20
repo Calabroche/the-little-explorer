@@ -3,18 +3,21 @@
 /**
  * Public login page.
  *
- * Why POST forms instead of `<a href>` to /api/auth/signin/<provider> :
- * NextAuth v4's signin route only redirects to the OAuth provider when the
- * request is a POST with a valid CSRF token. A GET silently 302's back to
- * /login?error=<provider> (the generic fallback) — which is exactly the
- * bug we hit on the first attempt.
+ * Uses next-auth/react's `signIn()` helper instead of hand-rolling a
+ * CSRF + POST form. The helper:
+ *   - fetches /api/auth/csrf internally
+ *   - POSTs to /api/auth/signin/<provider> with the token
+ *   - follows the 302 to the provider's authorization URL
  *
- * We fetch the CSRF token on mount and inject it into two hidden forms,
- * one per provider. Submitting the form does the POST + cookie roundtrip
- * that NextAuth expects.
+ * Much simpler and avoids the timing race where the button was disabled
+ * waiting for our manual CSRF fetch to complete.
+ *
+ * Errors in the URL (?error=OAuthCallback / OAuthCreateAccount / …) are
+ * surfaced in a red banner so the user knows when something failed.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { signIn } from 'next-auth/react';
 import { tokens } from '@/components/explorer/tokens';
 
 const CARD: React.CSSProperties = {
@@ -46,22 +49,28 @@ const BUTTON: React.CSSProperties = {
 };
 
 export default function LoginPage() {
-  const [csrf, setCsrf]     = useState<string>('');
-  const [error, setError]   = useState<string>('');
-  const callbackRef         = useRef<string>('https://the-little-explorer-app.vercel.app');
+  const [error, setError] = useState<string>('');
+  const [busy, setBusy]   = useState<'' | 'google' | 'strava'>('');
 
   useEffect(() => {
-    fetch('/api/auth/csrf', { credentials: 'include' })
-      .then(r => r.json())
-      .then((d: { csrfToken?: string }) => setCsrf(d.csrfToken ?? ''))
-      .catch(() => setCsrf(''));
-
-    // Surface the real NextAuth error code if the URL has one
     const url = new URL(window.location.href);
     const err = url.searchParams.get('error');
     if (err) setError(err);
-    callbackRef.current = window.location.origin;
   }, []);
+
+  const onClick = (provider: 'google' | 'strava') => {
+    setBusy(provider);
+    setError('');
+    // callbackUrl defaults to the page the user was originally trying to
+    // reach (preserved by NextAuth via cookie); we let it pick that.
+    signIn(provider).catch(() => {
+      // signIn() returns a promise that only rejects on network failure;
+      // OAuth-level errors come back as ?error=... in the URL after the
+      // redirect roundtrip. Either way, show something to the user.
+      setBusy('');
+      setError('signIn failed');
+    });
+  };
 
   return (
     <main style={{
@@ -104,29 +113,22 @@ export default function LoginPage() {
           </div>
         )}
 
-        <form method="POST" action="/api/auth/signin/google">
-          <input type="hidden" name="csrfToken"   value={csrf} />
-          <input type="hidden" name="callbackUrl" value={callbackRef.current} />
-          <button type="submit" style={BUTTON} disabled={!csrf}>
-            <span style={{ fontSize: 16 }}>G</span>
-            Continuer avec Google
-          </button>
-        </form>
+        <button type="button" onClick={() => onClick('google')} disabled={busy !== ''} style={BUTTON}>
+          <span style={{ fontSize: 16 }}>G</span>
+          {busy === 'google' ? 'Connexion…' : 'Continuer avec Google'}
+        </button>
 
         <div style={{ height: 12 }} />
 
-        <form method="POST" action="/api/auth/signin/strava">
-          <input type="hidden" name="csrfToken"   value={csrf} />
-          <input type="hidden" name="callbackUrl" value={callbackRef.current} />
-          <button
-            type="submit"
-            disabled={!csrf}
-            style={{ ...BUTTON, background: '#FC4C02', color: '#fff', borderColor: '#FC4C02' }}
-          >
-            <span style={{ fontSize: 16, fontWeight: 800 }}>S</span>
-            Continuer avec Strava
-          </button>
-        </form>
+        <button
+          type="button"
+          onClick={() => onClick('strava')}
+          disabled={busy !== ''}
+          style={{ ...BUTTON, background: '#FC4C02', color: '#fff', borderColor: '#FC4C02' }}
+        >
+          <span style={{ fontSize: 16, fontWeight: 800 }}>S</span>
+          {busy === 'strava' ? 'Connexion…' : 'Continuer avec Strava'}
+        </button>
 
         <p style={{
           marginTop: 24,
