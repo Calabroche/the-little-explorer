@@ -126,19 +126,27 @@ const STYLES = `
 `;
 
 export default function LoginPage() {
-  const [error, setError] = useState<string>('');
-  const [busy, setBusy]   = useState<'' | 'google' | 'strava'>('');
+  const [error, setError]             = useState<string>('');
+  const [busy, setBusy]               = useState<'' | 'google' | 'strava'>('');
+  const [callbackUrl, setCallbackUrl] = useState<string>('/');
 
   useEffect(() => {
     const url = new URL(window.location.href);
     const err = url.searchParams.get('error');
     if (err) setError(err);
+    // Honour the ?callbackUrl=... param so native clients (iOS app
+    // opening this page via ASWebAuthenticationSession) can route the
+    // user to /auth/native-done after OAuth completes. Hardcoding to
+    // '/' was breaking the iOS handoff — the app would land on the
+    // web home instead of getting the bearer-token redirect.
+    const cb = url.searchParams.get('callbackUrl');
+    if (cb && cb.startsWith('/')) setCallbackUrl(cb);
   }, []);
 
   const onClick = (provider: 'google' | 'strava') => {
     setBusy(provider);
     setError('');
-    signIn(provider, { callbackUrl: '/' }).catch(err => {
+    signIn(provider, { callbackUrl }).catch(err => {
       setBusy('');
       setError('signIn failed: ' + (err?.message ?? 'unknown'));
     });
