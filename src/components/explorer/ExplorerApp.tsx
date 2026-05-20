@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useSession } from 'next-auth/react';
 import { Activity, GlobalStats, deriveStats, tokens } from './tokens';
 import { Sidebar, GlobalLangToggle, PageId, SportId, UserId } from './Sidebar';
 import { useT } from '@/i18n';
@@ -143,20 +144,66 @@ export function ExplorerApp() {
     localStorage.setItem('tle_dark', next ? '1' : '0');
   };
 
-  // Recharge les activités quand l'utilisateur change.
+  // Track whether we've already attempted a Strava auto-sync this mount.
+  // Without this guard, a failed sync (404, 502, etc.) would loop: empty
+  // feed → trigger sync → still empty → trigger sync → …
+  const autoSyncAttempted = useRef(false);
+  const { data: session } = useSession();
+  const [syncing, setSyncing] = useState(false);
+
+  // Load activities. With multi-user the API ignores ?user= and derives
+  // the user from the NextAuth session cookie — but we keep the query
+  // param so cache busts when toggling (legacy state).
+  //
+  // Auto-sync trigger: if the user has Strava linked (session.user.athleteId)
+  // but the feed is empty, kick off /api/strava/sync once and refetch on
+  // success. Covers the "new user just signed up with Strava" path.
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     fetch(`/api/activities?user=${user}`)
       .then(r => r.json())
-      .then((data: Activity[]) => {
+      .then(async (data: Activity[]) => {
         if (cancelled) return;
         setActivities(data);
         setStats(deriveStats(data));
+
+        // Auto-sync condition: signed in, Strava linked, empty feed,
+        // first attempt this mount. Fires asynchronously so the empty
+        // feed renders immediately and the activities pop in once the
+        // sync POST completes.
+        const athleteId = (session?.user as { athleteId?: number | null } | undefined)?.athleteId;
+        if (
+          !autoSyncAttempted.current
+          && Array.isArray(data) && data.length === 0
+          && athleteId
+        ) {
+          autoSyncAttempted.current = true;
+          setSyncing(true);
+          try {
+            const res = await fetch('/api/strava/sync', { method: 'POST' });
+            if (res.ok && !cancelled) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const j = await res.json() as { ok?: boolean; count?: number };
+              if (j.ok && (j.count ?? 0) > 0) {
+                const r2 = await fetch(`/api/activities?user=${user}`);
+                if (!cancelled && r2.ok) {
+                  const fresh = await r2.json() as Activity[];
+                  setActivities(fresh);
+                  setStats(deriveStats(fresh));
+                }
+              }
+            }
+          } catch (err) {
+            console.error('[explorer] auto-sync failed:', err);
+          } finally {
+            if (!cancelled) setSyncing(false);
+          }
+        }
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [user]);
+  }, [user, session]);
 
   // If the current sport isn't in the active user's data (e.g. just switched
   // from Florian-cycling to Helena who has no cycling), bounce to the first
@@ -248,10 +295,17 @@ export function ExplorerApp() {
     return SPORT_ORDER.filter(s => presentSports.has(s));
   }, [activities]);
 
-  if (loading) {
+  if (loading || syncing) {
     return (
-      <div style={{ display: 'flex', height: '100dvh', alignItems: 'center', justifyContent: 'center', background: tokens.cream }}>
-        <p style={{ fontFamily: "'Space Grotesk'", color: tokens.inkLight, letterSpacing: 2 }}>{t('common.loading')}</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100dvh', alignItems: 'center', justifyContent: 'center', background: tokens.cream }}>
+        <p style={{ fontFamily: "'Space Grotesk'", color: tokens.inkLight, letterSpacing: 2 }}>
+          {syncing ? 'Récupération de tes activités Strava…' : t('common.loading')}
+        </p>
+        {syncing && (
+          <p style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight, maxWidth: 360, textAlign: 'center', lineHeight: 1.5 }}>
+            On synchronise tes sorties depuis Strava. Première connexion = ça peut prendre 5-10 secondes.
+          </p>
+        )}
       </div>
     );
   }

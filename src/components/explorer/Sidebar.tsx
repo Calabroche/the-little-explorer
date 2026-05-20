@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useSession, signOut } from 'next-auth/react';
+import { useSession, signIn, signOut } from 'next-auth/react';
 import { tokens, GlobalStats } from './tokens';
 import { Label } from './ui';
 import { useT } from '@/i18n';
@@ -501,11 +501,18 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
 
 /**
  * Bottom-of-sidebar profile section. Shows the signed-in user's name +
- * avatar + a "Se déconnecter" button.
+ * avatar + (Connect Strava | Synced) + a "Se déconnecter" button.
  *
  * `signOut({ callbackUrl: '/login' })` ends the NextAuth session and
- * redirects to /login — middleware then keeps the user there until they
+ * redirects to /login — middleware keeps the user there until they
  * sign in again.
+ *
+ * "Connecter Strava" only appears when the session has no athleteId —
+ * i.e. the user signed up with Google and hasn't linked Strava yet.
+ * Clicking it kicks off the Strava OAuth flow via signIn('strava'),
+ * which the Supabase adapter auto-links to the existing user row by
+ * matching the email — so they end up with both Google and Strava
+ * accounts pointing at the same TLE user.
  */
 function ProfileSection() {
   const { data: session, status } = useSession();
@@ -515,6 +522,7 @@ function ProfileSection() {
   const displayName = u.name || u.email || 'Account';
   const initials = (u.name || u.email || '?')
     .split(/\s+/).map(s => s[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
+  const stravaLinked = Boolean(u.athleteId);
 
   return (
     <div style={{
@@ -547,6 +555,27 @@ function ProfileSection() {
           )}
         </div>
       </div>
+
+      {!stravaLinked && (
+        <button
+          onClick={() => signIn('strava', { callbackUrl: '/' })}
+          style={{
+            width: '100%',
+            padding: '8px 10px',
+            marginBottom: 8,
+            background: '#FC4C02',
+            border: '1px solid #FC4C02',
+            borderRadius: 3,
+            color: '#fff',
+            fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 700,
+            letterSpacing: '0.04em',
+            cursor: 'pointer',
+          }}
+        >
+          + CONNECTER STRAVA
+        </button>
+      )}
+
       <button
         onClick={() => signOut({ callbackUrl: '/login' })}
         style={{
