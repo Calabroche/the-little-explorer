@@ -19,6 +19,36 @@ permissions:
   contents: write
 
 jobs:
+  # ── New multi-user path: reads athletes from next_auth.accounts and
+  # writes activities + streams to public.activities. Used by anyone
+  # who connected Strava through the production app's OAuth flow.
+  # Independent of the legacy florian/helena matrix below; both jobs
+  # can run side-by-side until the legacy path is retired.
+  sync-supabase:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Sync all Supabase-linked athletes
+        env:
+          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          STRAVA_CLIENT_ID:          ${{ secrets.STRAVA_CLIENT_ID }}
+          STRAVA_CLIENT_SECRET:      ${{ secrets.STRAVA_CLIENT_SECRET }}
+        run: |
+          if [[ -z "$SUPABASE_URL" || -z "$SUPABASE_SERVICE_ROLE_KEY" ]]; then
+            echo "Supabase secrets missing — skipping multi-user sync."
+            exit 0
+          fi
+          node scripts/sync-strava-supabase.mjs
+
+  # ── Legacy per-user-JSON path. Kept around until Florian + Helena
+  # have linked Strava via the production OAuth flow (which creates
+  # rows in next_auth.accounts that sync-supabase reads). At that
+  # point this whole job can be deleted and the env-var refresh
+  # tokens removed from GitHub Secrets.
   sync:
     runs-on: ubuntu-latest
     strategy:
