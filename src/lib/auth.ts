@@ -31,6 +31,10 @@
  * is done the type errors here go away.
  */
 
+// Polyfill WebSocket on Node < 22 BEFORE the supabase adapter pulls in
+// supabase-js (which otherwise throws at construction on local dev).
+import './polyfill-ws';
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AuthOptions = any;
 

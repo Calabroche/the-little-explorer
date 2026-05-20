@@ -25,6 +25,11 @@
  * working until Supabase is wired up.
  */
 
+// Must come BEFORE the supabase-js import — sets globalThis.WebSocket
+// on Node < 22 so the supabase-js RealtimeClient constructor doesn't
+// throw at module load. No-op on Vercel / Node 18+.
+import './polyfill-ws';
+
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 let _admin:  SupabaseClient | null = null;
