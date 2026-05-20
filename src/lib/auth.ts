@@ -117,7 +117,11 @@ export function buildAuthOptions(): AuthOptions {
         if (!athleteId) return true;
 
         try {
+          // Users live in the `next_auth` schema (where the adapter put them),
+          // not in `public`. Without the .schema() call the update silently
+          // misses and the webhook can't route Strava events to this user.
           await supabaseAdmin()
+            .schema('next_auth')
             .from('users')
             .update({ athlete_id: athleteId, strava_scope: account.scope ?? null })
             .eq('id', user.id);

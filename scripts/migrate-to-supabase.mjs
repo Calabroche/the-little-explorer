@@ -57,6 +57,10 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
+// Users live in the `next_auth` schema (managed by @next-auth/supabase-adapter).
+// activities is in `public`. Pick the right client per table.
+const authDb = supabase.schema('next_auth');
+
 // ── Sport mapping (mirrors src/app/api/activities/route.ts) ─────────────────
 const CYCLING = new Set(['Ride', 'VirtualRide', 'EBikeRide', 'MountainBikeRide', 'GravelRide', 'Velomobile', 'Handcycle']);
 const RUNNING = new Set(['Run', 'TrailRun', 'VirtualRun']);
@@ -74,7 +78,7 @@ function sport(rawType) {
 }
 
 // ── Resolve user_id from email ──────────────────────────────────────────────
-const { data: userRow, error: userErr } = await supabase
+const { data: userRow, error: userErr } = await authDb
   .from('users')
   .select('id, email')
   .eq('email', EMAIL)
