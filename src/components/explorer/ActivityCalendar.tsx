@@ -281,6 +281,25 @@ export function ActivityCalendar({ activities }: { activities: Activity[] }) {
         );
       })()}
       </div>
+
+      {/* Spacer that grows the card downward when a cell is hovered,
+          so the tooltip fits INSIDE the card instead of overlapping
+          the next widget. Height transitions over 180ms — smooth
+          enough to feel deliberate, fast enough to not feel laggy.
+          Critically, the height is keyed on `!!hover` (boolean), not
+          on the specific cell, so moving the cursor across cells
+          doesn't re-trigger the transition: the spacer stays open
+          for the whole grid-hover session and the cell change only
+          updates the tooltip's content. ONE reflow on grid-enter,
+          ONE on grid-leave — no per-cell thrash. */}
+      <div
+        aria-hidden
+        style={{
+          height: hover ? 70 : 0,
+          transition: 'height 180ms ease',
+          marginTop: hover ? 8 : 0,
+        }}
+      />
     </div>
   );
 }
