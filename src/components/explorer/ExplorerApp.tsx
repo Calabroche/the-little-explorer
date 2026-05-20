@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Activity, GlobalStats, deriveStats, tokens } from './tokens';
 import { Sidebar, GlobalLangToggle, PageId, SportId, UserId } from './Sidebar';
 import { useT } from '@/i18n';
@@ -237,33 +237,44 @@ export function ExplorerApp() {
     );
   }
 
-  // Activités filtrées par le sport courant.
-  // Les stats "En un coup d'œil" sont aussi recalculées sur cet ensemble
-  // pour que la sidebar reflète le couple utilisateur + sport sélectionné.
-  const filteredActivities = activities.filter(a => a.type === sport);
-  const filteredStats = deriveStats(filteredActivities);
+  // Activités filtrées par le sport courant. Memoised so the side-
+  // bar collapse toggle (which only flips a local boolean) doesn't
+  // re-filter the 53-activity / 17-MB dataset on every render.
+  const filteredActivities = useMemo(
+    () => activities.filter(a => a.type === sport),
+    [activities, sport],
+  );
+  const filteredStats = useMemo(() => deriveStats(filteredActivities), [filteredActivities]);
 
   // Sports actually present in this user's data → drives which toggle
-  // buttons appear in the sidebar. Computed below the early return because
-  // it's a derived value, not a hook.
-  const SPORT_ORDER: SportId[] = ['cycling', 'running', 'hiking', 'ski', 'snowshoe', 'walking', 'swim'];
-  const presentSports = new Set(activities.map(a => a.type as SportId));
-  const availableSports: SportId[] = SPORT_ORDER.filter(s => presentSports.has(s));
+  // buttons appear in the sidebar.
+  const availableSports = useMemo<SportId[]>(() => {
+    const SPORT_ORDER: SportId[] = ['cycling', 'running', 'hiking', 'ski', 'snowshoe', 'walking', 'swim'];
+    const presentSports = new Set(activities.map(a => a.type as SportId));
+    return SPORT_ORDER.filter(s => presentSports.has(s));
+  }, [activities]);
 
-  const pageContent: Record<PageId, React.ReactNode> = {
-    feed:      <FeedPage      activities={filteredActivities} stats={filteredStats!} sport={sport} onSelect={openActivity} />,
-    // Planner is now a tabbed hub for: itinerary, training plan,
-    // auto-route, route proposals. The standalone /itineraire URL
-    // still resolves but routes into PlannerPage with the itinerary
-    // tab pre-selected — same destination, sidebar declutters down
-    // to one nav item.
-    planner:   <PlannerPage activities={filteredActivities} user={user} initialTab="itineraire" />,
-    itinerary: <PlannerPage activities={filteredActivities} user={user} initialTab="itineraire" />,
-    compare:   <ComparePage   activities={filteredActivities} />,
-    map:       <MapPage       activities={activities} selectedActivity={selectedActivityForMap} />,
-    wrapped:   <WrappedPage   activities={filteredActivities} sport={sport} />,
-    ftp:       <FtpPage       activities={filteredActivities} />,
-    photos:    <PhotosPage    activities={filteredActivities} />,
+  // Lazily render ONLY the active page. The previous implementation
+  // instantiated JSX for all 8 pages on every render, which made
+  // sidebar toggles and language switches mount every page's tree
+  // (and re-fire their useEffect chains). Now only the current
+  // `page` is constructed.
+  const renderPage = () => {
+    switch (page) {
+      case 'feed':      return <FeedPage      activities={filteredActivities} stats={filteredStats!} sport={sport} onSelect={openActivity} />;
+      // Planner is now a tabbed hub for: itinerary, training plan,
+      // auto-route, route proposals. The standalone /itineraire URL
+      // still resolves but routes into PlannerPage with the itinerary
+      // tab pre-selected — same destination, sidebar declutters down
+      // to one nav item.
+      case 'planner':   return <PlannerPage activities={filteredActivities} user={user} initialTab="itineraire" />;
+      case 'itinerary': return <PlannerPage activities={filteredActivities} user={user} initialTab="itineraire" />;
+      case 'compare':   return <ComparePage activities={filteredActivities} />;
+      case 'map':       return <MapPage     activities={activities} selectedActivity={selectedActivityForMap} />;
+      case 'wrapped':   return <WrappedPage activities={filteredActivities} sport={sport} />;
+      case 'ftp':       return <FtpPage     activities={filteredActivities} />;
+      case 'photos':    return <PhotosPage  activities={filteredActivities} />;
+    }
   };
 
   return (
@@ -316,7 +327,7 @@ export function ExplorerApp() {
         )}
         {analysisActivity
           ? <AnalysisPage activity={analysisActivity} onBack={closeActivity} />
-          : pageContent[page]
+          : renderPage()
         }
       </main>
       {isMobile && (

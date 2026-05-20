@@ -51,6 +51,11 @@ function useWakeLock(active: boolean) {
       try {
         const lock = await nav.wakeLock.request('screen');
         if (cancelled) { lock.release(); return; }
+        // Race guard — if a previous acquire() raced ahead (e.g. user
+        // toggled active rapidly, or visibilitychange fired before
+        // the first request resolved), release the older sentinel
+        // before overwriting the ref so we never leak a lock.
+        if (lockRef.current) lockRef.current.release().catch(() => {});
         lockRef.current = lock;
       } catch { /* user denied or unavailable — silent */ }
     };
@@ -192,8 +197,14 @@ export function NavigatePage({ itineraryId }: Props) {
       const d = distanceAlongTo(polyline, progress.segIdx, progress.t, s.start);
       if (d > 1) return { step: s, idx: i, distM: d };
     }
-    // Past the last maneuver — surface the arrival step.
-    const arriveIdx = steps.findLastIndex(s => s.type === 'arrive');
+    // Past the last maneuver — surface the arrival step. (Reverse
+    // for-loop instead of Array.prototype.findLastIndex which is
+    // ES2023 — Safari < 16 and older Firefox/Chrome would throw a
+    // TypeError mid-navigation.)
+    let arriveIdx = -1;
+    for (let i = steps.length - 1; i >= 0; i--) {
+      if (steps[i].type === 'arrive') { arriveIdx = i; break; }
+    }
     if (arriveIdx >= 0) {
       return { step: steps[arriveIdx], idx: arriveIdx, distM: distRemainingM ?? 0 };
     }

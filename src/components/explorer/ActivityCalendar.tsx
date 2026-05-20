@@ -12,8 +12,18 @@ import { useT } from '@/i18n';
 const WEEKS_MAX = 20;
 const DAYS_MAX  = WEEKS_MAX * 7;
 
+// LOCAL-TZ iso day formatter — was using d.toISOString() which converts
+// to UTC and silently dropped activities into the wrong cell when the
+// browser TZ ≠ UTC and the activity timestamp was near midnight
+// (e.g. an evening ride at 23:30 local → 21:30 UTC the same day, fine;
+// but an evening ride at 00:30 local → 22:30 UTC the *previous* day,
+// landing in the wrong cell). Now both the grid keys AND the activity
+// keys (which come from a.rawDate.slice(0,10) — already local) align.
 function isoDay(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  const y  = d.getFullYear();
+  const m  = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
 }
 
 function startOfMonday(d: Date): Date {
