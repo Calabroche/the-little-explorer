@@ -53,6 +53,10 @@ export default function LoginPage() {
   const [busy, setBusy]   = useState<'' | 'google' | 'strava'>('');
 
   useEffect(() => {
+    // Hydration smoke-test — if you don't see this in the console, React
+    // never hydrated on /login and onClick can't fire.
+    console.log('[login] hydrated, useEffect ran');
+    document.title = 'TLE Login (hydrated)';
     const url = new URL(window.location.href);
     const err = url.searchParams.get('error');
     if (err) setError(err);
