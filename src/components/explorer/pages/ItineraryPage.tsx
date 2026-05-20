@@ -500,13 +500,14 @@ export function ItineraryPage({ user, embedded }: Props) {
   };
 
   // ── Map data ─────────────────────────────────────────────────────────────
-  // Default view: anchored on Dardilly with enough zoom to see the
-  // useful neighbourhood (Tassin, Charbonnières, La Tour-de-Salvagny,
-  // Lyon at the corner) — the area where Florian's rides actually
-  // start. Switches to the first waypoint once the user adds one.
+  // Default view: shifted slightly NW of Dardilly so the frame
+  // covers the bike-friendly Beaujolais piedmont (Chazay, Lozanne,
+  // Chasselay) up top and still has Tassin / Écully visible at the
+  // bottom. Centre ~ Lentilly / Dommartin axis. Switches to the
+  // first waypoint as soon as the user adds one.
   const mapCenter = useMemo<[number, number]>(() => {
     if (waypoints.length > 0) return [waypoints[0].lat, waypoints[0].lng];
-    return [45.81, 4.78];
+    return [45.85, 4.74];
   }, [waypoints]);
 
   const polylinePositions = geometry ?? null;
