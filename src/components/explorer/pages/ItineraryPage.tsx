@@ -500,9 +500,13 @@ export function ItineraryPage({ user, embedded }: Props) {
   };
 
   // ── Map data ─────────────────────────────────────────────────────────────
+  // Default view: anchored on Dardilly with enough zoom to see the
+  // useful neighbourhood (Tassin, Charbonnières, La Tour-de-Salvagny,
+  // Lyon at the corner) — the area where Florian's rides actually
+  // start. Switches to the first waypoint once the user adds one.
   const mapCenter = useMemo<[number, number]>(() => {
     if (waypoints.length > 0) return [waypoints[0].lat, waypoints[0].lng];
-    return [45.75, 4.85];
+    return [45.81, 4.78];
   }, [waypoints]);
 
   const polylinePositions = geometry ?? null;
@@ -817,7 +821,7 @@ export function ItineraryPage({ user, embedded }: Props) {
           <div style={{ ...CARD, padding: 0, overflow: 'hidden', minHeight: mapHeight, position: 'relative' }}>
             <MapContainer
               center={mapCenter}
-              zoom={waypoints.length > 0 ? 12 : 10}
+              zoom={waypoints.length > 0 ? 12 : 11}
               scrollWheelZoom={true}
               style={{ height: mapHeight, width: '100%' }}
               maxZoom={20}
