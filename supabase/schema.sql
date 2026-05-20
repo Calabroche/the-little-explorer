@@ -49,10 +49,19 @@ create table if not exists next_auth.users (
   -- completes Strava OAuth — nullable because Google-first sign-in skips this)
   athlete_id      bigint,
   strava_scope    text,
+  -- Track signup time so the admin dashboard can sort users by recency.
+  -- NextAuth's default adapter schema doesn't ship this; we add it as
+  -- our own extension column.
+  created_at      timestamp with time zone default now(),
   constraint users_pkey      primary key (id),
   constraint email_unique    unique (email),
   constraint athlete_unique  unique (athlete_id)
 );
+
+-- Re-runnable migration for existing installs that ran the schema
+-- before created_at was added.
+alter table if exists next_auth.users
+  add column if not exists created_at timestamp with time zone default now();
 
 grant all on table next_auth.users to postgres;
 grant all on table next_auth.users to service_role;

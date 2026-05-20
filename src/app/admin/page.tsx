@@ -23,7 +23,8 @@ interface AdminUser {
   name:       string | null;
   image:      string | null;
   athleteId:  number | null;
-  createdAt:  string;
+  // Null on rows that pre-date the created_at ALTER TABLE migration.
+  createdAt:  string | null;
   activities: number;
   providers:  string[];
 }
@@ -59,7 +60,8 @@ const TD: React.CSSProperties = {
   verticalAlign: 'middle',
 };
 
-function formatDate(iso: string): string {
+function formatDate(iso: string | null): string {
+  if (!iso) return '—';
   return new Date(iso).toLocaleDateString('fr-FR', {
     day: '2-digit', month: 'short', year: 'numeric',
   });

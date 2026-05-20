@@ -24,12 +24,15 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 interface UserRow {
-  id:         string;
-  email:      string | null;
-  name:       string | null;
-  image:      string | null;
-  athlete_id: number | null;
-  created_at: string;
+  id:          string;
+  email:       string | null;
+  name:        string | null;
+  image:       string | null;
+  athlete_id:  number | null;
+  // created_at is added via ALTER TABLE in the latest schema.sql, but
+  // existing prod rows have NULL since they were inserted before the
+  // column existed. UI tolerates null gracefully.
+  created_at:  string | null;
 }
 
 export async function GET() {
@@ -45,18 +48,37 @@ export async function GET() {
   // Pull every user row from the next_auth schema. With a 5-10 user
   // family-and-friends scope this is fine to fetch in one go; if it
   // ever needs paging we'd switch to range() here.
-  const { data: users, error: usersErr } = await supabaseAdmin()
-    .schema('next_auth')
-    .from('users')
-    .select('id, email, name, image, athlete_id, created_at')
-    .order('created_at', { ascending: false });
+  // NOTE: NextAuth's default users schema doesn't include created_at —
+  // we add it via ALTER TABLE in supabase/schema.sql. If the column is
+  // missing, fall back to a query without it so the admin page still
+  // works on installs that haven't run the ALTER yet.
+  let users: UserRow[] = [];
+  let usersErr: { message: string } | null = null;
+  {
+    const r1 = await supabaseAdmin()
+      .schema('next_auth')
+      .from('users')
+      .select('id, email, name, image, athlete_id, created_at')
+      .order('created_at', { ascending: false });
+    if (r1.error && /created_at/.test(r1.error.message)) {
+      const r2 = await supabaseAdmin()
+        .schema('next_auth')
+        .from('users')
+        .select('id, email, name, image, athlete_id');
+      users = (r2.data ?? []) as UserRow[];
+      usersErr = r2.error as { message: string } | null;
+    } else {
+      users = (r1.data ?? []) as UserRow[];
+      usersErr = r1.error as { message: string } | null;
+    }
+  }
 
   if (usersErr) {
     console.error('[admin/users] users query failed:', usersErr.message);
     return NextResponse.json({ error: 'db_error', detail: usersErr.message }, { status: 500 });
   }
 
-  const userRows = (users ?? []) as UserRow[];
+  const userRows = users;
 
   // Count activities per user. One COUNT(*) GROUP BY would be cleaner,
   // but PostgREST exposes aggregations differently and the loop here
@@ -96,7 +118,7 @@ export async function GET() {
     name:        u.name,
     image:       u.image,
     athleteId:   u.athlete_id,
-    createdAt:   u.created_at,
+    createdAt:   u.created_at ?? null,
     activities:  counts[u.id] ?? 0,
     providers:   providersByUser[u.id] ?? [],
   }));
