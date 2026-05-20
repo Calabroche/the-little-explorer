@@ -174,16 +174,39 @@ export function buildAuthOptions(): AuthOptions {
       /**
        * Called whenever a JWT is created (sign-in) or read (subsequent
        * requests). On first sign-in, `user` is populated and we copy the
-       * DB user id + athlete_id into the token. On every later request
-       * only `token` is present, so we just return it unchanged.
+       * DB user id into the token. On every later request only `token`
+       * is present, so we just return it unchanged.
+       *
+       * athleteId resolution: we set it on first sign-in regardless of
+       * which provider was used. If the user signs in directly with
+       * Strava, we get the id from `profile.id`. If they sign in with
+       * Google but already have Strava linked, we query
+       * next_auth.users.athlete_id to fill it in — otherwise the
+       * sidebar's "+ CONNECTER STRAVA" button would re-appear on every
+       * Google login (because session.user.athleteId would be null).
        */
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       async jwt({ token, user, account, profile }: any) {
         if (user) {
           token.uid = user.id;
-        }
-        if (account?.provider === 'strava' && profile?.id) {
-          token.athleteId = Number(profile.id);
+          if (account?.provider === 'strava' && profile?.id) {
+            token.athleteId = Number(profile.id);
+          } else {
+            // Google (or any other provider) sign-in for a user who may
+            // already have Strava linked. Look up the stored athlete_id.
+            try {
+              const { data } = await supabaseAdmin()
+                .schema('next_auth')
+                .from('users')
+                .select('athlete_id')
+                .eq('id', user.id)
+                .maybeSingle();
+              token.athleteId = data?.athlete_id ?? null;
+            } catch (err) {
+              console.error('[auth] athlete_id lookup failed:', err);
+              token.athleteId = null;
+            }
+          }
         }
         return token;
       },
