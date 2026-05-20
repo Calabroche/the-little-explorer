@@ -11,11 +11,14 @@
     "sync": "node scripts/sync-strava.mjs"
   },
   "dependencies": {
+    "@next-auth/supabase-adapter": "^0.2.1",
+    "@supabase/supabase-js": "^2.106.0",
     "@types/leaflet": "^1.9.21",
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
     "leaflet": "^1.9.4",
     "next": "13.5.11",
+    "next-auth": "^4.24.14",
     "react": "^18",
     "react-dom": "^18",
     "react-leaflet": "^4.2.1",
