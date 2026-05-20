@@ -203,12 +203,30 @@ export function buildAuthOptions(): AuthOptions {
       // banner on /login can show a useful message.
       error:  '/login',
     },
-    // Quiet error-only logger. Errors still land in Vercel Functions logs;
-    // we no longer flood prod with DEBUG_ENABLED noise on every request.
+    // Temporary verbose logging for the Strava OAuth callback debug.
+    // Drop once Strava signin lands cleanly.
+    debug: true,
     logger: {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       error(code: string, ...message: any[]) {
-        console.error(`[next-auth] ${code}`, JSON.stringify(message));
+        // Surface the cause field of any nested Error so the stack is
+        // not swallowed by JSON.stringify (which omits message/stack).
+        const safe = message.map(m => {
+          if (m instanceof Error) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            return { name: m.name, message: m.message, stack: m.stack, cause: (m as any).cause };
+          }
+          return m;
+        });
+        console.error(`[next-auth ERROR] ${code}`, JSON.stringify(safe, null, 2));
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      warn(code: string, ...message: any[]) {
+        console.warn(`[next-auth WARN] ${code}`, JSON.stringify(message));
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      debug(code: string, ...message: any[]) {
+        console.log(`[next-auth DEBUG] ${code}`, JSON.stringify(message));
       },
     },
   };
