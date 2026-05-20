@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession, signIn, signOut } from 'next-auth/react';
 import { isAdminEmail } from '@/lib/admin';
 import { tokens, GlobalStats } from './tokens';
@@ -517,6 +517,27 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
  */
 function ProfileSection() {
   const { data: session, status } = useSession();
+  const [resyncState, setResyncState] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
+
+  // POST /api/strava/sync, then reload the page so /api/activities
+  // re-fetches with the freshly inserted rows. We could do a softer
+  // refetch via a parent callback, but a full reload is simpler and
+  // matches what the auto-sync useEffect does after a first connection.
+  const resync = useCallback(async () => {
+    if (resyncState === 'busy') return;
+    setResyncState('busy');
+    try {
+      const r = await fetch('/api/strava/sync', { method: 'POST' });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setResyncState('done');
+      // Reload so all the cached activities + stats pick up the new data.
+      window.location.reload();
+    } catch (err) {
+      console.error('[resync] failed:', err);
+      setResyncState('error');
+    }
+  }, [resyncState]);
+
   if (status !== 'authenticated' || !session?.user) return null;
 
   const u = session.user;
@@ -574,6 +595,32 @@ function ProfileSection() {
           }}
         >
           + CONNECTER STRAVA
+        </button>
+      )}
+
+      {stravaLinked && (
+        <button
+          onClick={resync}
+          disabled={resyncState === 'busy'}
+          title="Forcer une synchro Strava si une nouvelle sortie n'apparaît pas"
+          style={{
+            width: '100%',
+            padding: '8px 10px',
+            marginBottom: 8,
+            background: resyncState === 'error' ? '#FEE' : tokens.creamDark,
+            border: `1px solid ${resyncState === 'error' ? '#FCC' : tokens.creamBorder}`,
+            borderRadius: 3,
+            color: resyncState === 'error' ? '#A00' : tokens.inkMid,
+            fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 600,
+            letterSpacing: '0.04em',
+            cursor: resyncState === 'busy' ? 'wait' : 'pointer',
+          }}
+        >
+          {resyncState === 'busy'
+            ? 'SYNCHRO…'
+            : resyncState === 'error'
+              ? '✗ ÉCHEC — RÉESSAYER'
+              : '↻ RE-SYNCER STRAVA'}
         </button>
       )}
 

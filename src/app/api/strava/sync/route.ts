@@ -141,19 +141,35 @@ export async function POST() {
       .eq('provider', 'strava');
   }
 
-  // ── 3. Fetch summary list of activities ──
-  // 200 is the per-page max. For users with >200 activities we'd want
-  // pagination; for the MVP one page covers ~6 months of typical riders.
-  const actRes = await fetch(`${STRAVA_ACTIVITIES_URL}?per_page=200&page=1`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (!actRes.ok) {
-    const txt = await actRes.text();
-    console.error('[strava-sync] activities fetch failed:', actRes.status, txt.slice(0, 200));
-    return NextResponse.json({ error: 'activities_fetch_failed' }, { status: 502 });
-  }
+  // ── 3. Fetch full list of activities (paginated) ──
+  // Strava caps per_page at 200. Loop until we get a short page (= last
+  // one) or hit the MAX_PAGES safety cap. 10 pages = 2000 activities,
+  // ~5 years for a typical rider — beyond that the Strava 200-req/15min
+  // rate limit becomes a concern and we'd want a background queue.
+  const MAX_PAGES = 10;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const activities = await actRes.json() as any[];
+  const activities: any[] = [];
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const r = await fetch(`${STRAVA_ACTIVITIES_URL}?per_page=200&page=${page}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!r.ok) {
+      const txt = await r.text();
+      console.error(`[strava-sync] page ${page} fetch failed:`, r.status, txt.slice(0, 200));
+      // On the very first page we have nothing to return; on later pages
+      // we keep what we already pulled and stop.
+      if (page === 1) {
+        return NextResponse.json({ error: 'activities_fetch_failed' }, { status: 502 });
+      }
+      break;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const batch = await r.json() as any[];
+    activities.push(...batch);
+    // Strava returns fewer than per_page when we hit the end. No need
+    // to ask for the next page — it'd be empty.
+    if (batch.length < 200) break;
+  }
 
   // ── 4. Filter to supported activity types + build rows ──
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
