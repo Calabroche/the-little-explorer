@@ -229,6 +229,25 @@ export function ExplorerApp() {
     navTo(PAGE_PATHS[page]);
   };
 
+  // Hooks MUST be called ABOVE the early `if (loading) return ...`
+  // below — otherwise React sees a different hook count between the
+  // loading and post-loading renders and throws "Rendered more hooks
+  // than during the previous render". Memoise the sport-filtered
+  // dataset + derived stats + present-sports list so a sidebar
+  // collapse / language toggle doesn't re-filter the 53-activity /
+  // 17-MB dataset.
+  const filteredActivities = useMemo(
+    () => activities.filter(a => a.type === sport),
+    [activities, sport],
+  );
+  const filteredStats = useMemo(() => deriveStats(filteredActivities), [filteredActivities]);
+
+  const availableSports = useMemo<SportId[]>(() => {
+    const SPORT_ORDER: SportId[] = ['cycling', 'running', 'hiking', 'ski', 'snowshoe', 'walking', 'swim'];
+    const presentSports = new Set(activities.map(a => a.type as SportId));
+    return SPORT_ORDER.filter(s => presentSports.has(s));
+  }, [activities]);
+
   if (loading) {
     return (
       <div style={{ display: 'flex', height: '100dvh', alignItems: 'center', justifyContent: 'center', background: tokens.cream }}>
@@ -236,23 +255,6 @@ export function ExplorerApp() {
       </div>
     );
   }
-
-  // Activités filtrées par le sport courant. Memoised so the side-
-  // bar collapse toggle (which only flips a local boolean) doesn't
-  // re-filter the 53-activity / 17-MB dataset on every render.
-  const filteredActivities = useMemo(
-    () => activities.filter(a => a.type === sport),
-    [activities, sport],
-  );
-  const filteredStats = useMemo(() => deriveStats(filteredActivities), [filteredActivities]);
-
-  // Sports actually present in this user's data → drives which toggle
-  // buttons appear in the sidebar.
-  const availableSports = useMemo<SportId[]>(() => {
-    const SPORT_ORDER: SportId[] = ['cycling', 'running', 'hiking', 'ski', 'snowshoe', 'walking', 'swim'];
-    const presentSports = new Set(activities.map(a => a.type as SportId));
-    return SPORT_ORDER.filter(s => presentSports.has(s));
-  }, [activities]);
 
   // Lazily render ONLY the active page. The previous implementation
   // instantiated JSX for all 8 pages on every render, which made
