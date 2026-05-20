@@ -19,7 +19,15 @@ import { LanguageProvider } from '@/i18n';
 
 export function Providers({ children }: { children: ReactNode }) {
   return (
-    <SessionProvider>
+    // `refetchOnWindowFocus={false}` — NextAuth's default refetches the
+    // session every time the browser tab regains focus. With a JWT
+    // session strategy, the cookie doesn't change between requests, so
+    // these refetches are pure overhead AND they change the session
+    // object reference, which retriggers any useEffect downstream that
+    // depends on `session` (in our case, the /api/activities loader).
+    // Result before this flag: every Cmd-Tab triggered a full feed
+    // reload spinner. Disabling fixes that.
+    <SessionProvider refetchOnWindowFocus={false}>
       <LanguageProvider>{children}</LanguageProvider>
     </SessionProvider>
   );

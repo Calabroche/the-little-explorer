@@ -151,14 +151,26 @@ export function ExplorerApp() {
   const { data: session } = useSession();
   const [syncing, setSyncing] = useState(false);
 
+  // Pull stable primitives out of the session object so the useEffect
+  // below doesn't fire just because SessionProvider re-rendered. The
+  // session OBJECT reference changes on every refetch, but these two
+  // strings are stable for the life of a sign-in.
+  const sessionUserId  = session?.user?.id;
+  const sessionAthleteId = (session?.user as { athleteId?: number | null } | undefined)?.athleteId ?? null;
+
   // Load activities. With multi-user the API ignores ?user= and derives
   // the user from the NextAuth session cookie — but we keep the query
   // param so cache busts when toggling (legacy state).
   //
-  // Auto-sync trigger: if the user has Strava linked (session.user.athleteId)
-  // but the feed is empty, kick off /api/strava/sync once and refetch on
-  // success. Covers the "new user just signed up with Strava" path.
+  // Auto-sync trigger: if the user has Strava linked (athleteId set)
+  // but the feed is empty, kick off /api/strava/sync once and refetch
+  // on success. Covers the "new user just signed up with Strava" path.
   useEffect(() => {
+    // Wait until SessionProvider has actually loaded a session — without
+    // this guard we'd hit /api/activities with no cookie and get a 401
+    // on the very first render.
+    if (!sessionUserId) return;
+
     let cancelled = false;
     setLoading(true);
     fetch(`/api/activities?user=${user}`)
@@ -168,15 +180,10 @@ export function ExplorerApp() {
         setActivities(data);
         setStats(deriveStats(data));
 
-        // Auto-sync condition: signed in, Strava linked, empty feed,
-        // first attempt this mount. Fires asynchronously so the empty
-        // feed renders immediately and the activities pop in once the
-        // sync POST completes.
-        const athleteId = (session?.user as { athleteId?: number | null } | undefined)?.athleteId;
         if (
           !autoSyncAttempted.current
           && Array.isArray(data) && data.length === 0
-          && athleteId
+          && sessionAthleteId
         ) {
           autoSyncAttempted.current = true;
           setSyncing(true);
@@ -203,7 +210,7 @@ export function ExplorerApp() {
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [user, session]);
+  }, [user, sessionUserId, sessionAthleteId]);
 
   // If the current sport isn't in the active user's data (e.g. just switched
   // from Florian-cycling to Helena who has no cycling), bounce to the first
