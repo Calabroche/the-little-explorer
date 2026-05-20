@@ -326,16 +326,15 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
         paddingBottom: 'env(safe-area-inset-bottom)',
       }}>
         {/* ── Top toggle strip ──────────────────────────────────────
-            User + Sport + Lang on a single line. Sport row scrolls
-            horizontally if it has >3 options. Dark mode is a small
-            icon button on the right, no longer competing for nav
-            real estate at the bottom. */}
+            Sport + Lang on a single line. Dark mode is a small icon
+            button on the right. The UserToggle that used to live here
+            (Florian/Helena switch) is gone — multi-user auth means
+            each session sees only their own data. */}
         <div style={{
           padding: '6px 8px',
           borderBottom: `1px solid ${tokens.creamBorder}`,
           display: 'flex', gap: 6, alignItems: 'center',
         }}>
-          <div style={{ flex: '0 0 auto' }}><UserToggle user={user} onChange={onUserChange} compact /></div>
           <div style={{ flex: '1 1 0%', minWidth: 0 }}><SportToggle sport={sport} onChange={onSportChange} available={availableSports} compact /></div>
           <div style={{ flex: '0 0 auto' }}><LangToggle lang={lang} onChange={setLang} compact /></div>
           <button
@@ -437,15 +436,14 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
             </button>
           )}
         </div>
-        <Label style={{ marginTop: 6, display: 'block' }}>{user === 'helena' ? 'Helena' : 'Florian Calabrese'}</Label>
+        {/* Username is now shown in the ProfileSection at the bottom of
+            the sidebar (where the logout button lives). The old static
+            "Florian / Helena" label + the PROFIL switch block are gone —
+            multi-user means each session sees only their own data, so
+            switching users from the sidebar no longer makes sense. */}
       </div>
 
       <div style={{ padding: '14px 12px 4px' }}>
-        <Label style={{ display: 'block', marginBottom: 6 }}>PROFIL</Label>
-        <UserToggle user={user} onChange={onUserChange} />
-      </div>
-
-      <div style={{ padding: '10px 12px 4px' }}>
         <Label style={{ display: 'block', marginBottom: 6 }}>{t('common.sport')}</Label>
         <SportDropdown sport={sport} onChange={onSportChange} available={availableSports} />
       </div>

@@ -2,32 +2,25 @@
 /**
  * One-shot migration: data/users/<user>/activities/*.json → Supabase activities table.
  *
+ * Why no @supabase/supabase-js: the v2.106+ client requires Node 20+
+ * (uses global fetch / Headers / WebSocket). This project runs on Node
+ * 16.15.1, so we hit PostgREST directly via the native `https` module.
+ *
  * Usage:
  *
- *   # 1. Make sure these are exported in your shell:
- *   #      SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
- *   #
- *   # 2. The two seed users (Florian + Helena) must already exist in the
- *   #    `users` table. Easiest path: sign in to the deployed app once
- *   #    with each Google account, then run:
- *   #
- *   #      psql ... -c "UPDATE users SET athlete_id=… WHERE email='florian@…';"
- *   #
- *   #    (or do it through the Supabase Table editor)
- *   #
- *   # 3. Run:
- *   #
- *   #      node scripts/migrate-to-supabase.mjs --user=florian --email=florian.calabrese@gmail.com
- *   #      node scripts/migrate-to-supabase.mjs --user=helena   --email=<helena's email>
- *   #
- *   # 4. Pass --dry to preview without writing.
+ *   export SUPABASE_URL=https://<project>.supabase.co
+ *   export SUPABASE_SERVICE_ROLE_KEY=<service_role JWT>
  *
- * Idempotent: uses upsert on the activity id, so re-running is safe.
+ *   node scripts/migrate-to-supabase.mjs --user=florian --email=florian.calabrese@gmail.com --dry
+ *   node scripts/migrate-to-supabase.mjs --user=florian --email=florian.calabrese@gmail.com
+ *
+ * Idempotent: upserts on activity id. Re-run is safe.
  */
 
-import fs   from 'node:fs';
-import path from 'node:path';
-import { createClient } from '@supabase/supabase-js';
+import fs    from 'node:fs';
+import path  from 'node:path';
+import https from 'node:https';
+import { URL } from 'node:url';
 
 // ── Arg parsing ──────────────────────────────────────────────────────────────
 const args = Object.fromEntries(
@@ -53,13 +46,42 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
   process.exit(1);
 }
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
+// ── PostgREST helper (native https, no SDK) ─────────────────────────────────
+function pgrest(method, pathAndQuery, { body, schema, prefer } = {}) {
+  const u = new URL(SUPABASE_URL.replace(/\/+$/, '') + '/rest/v1' + pathAndQuery);
+  const headers = {
+    'apikey':         SUPABASE_KEY,
+    'Authorization':  `Bearer ${SUPABASE_KEY}`,
+    'Content-Type':   'application/json',
+    'Accept':         'application/json',
+  };
+  if (schema) headers['Accept-Profile'] = schema;
+  if (schema && (method === 'POST' || method === 'PATCH')) headers['Content-Profile'] = schema;
+  if (prefer) headers['Prefer']     = prefer;
 
-// Users live in the `next_auth` schema (managed by @next-auth/supabase-adapter).
-// activities is in `public`. Pick the right client per table.
-const authDb = supabase.schema('next_auth');
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: u.hostname,
+      port:     u.port || 443,
+      path:     u.pathname + u.search,
+      method,
+      headers,
+    }, res => {
+      let buf = '';
+      res.on('data', chunk => buf += chunk);
+      res.on('end',  () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          resolve(buf ? JSON.parse(buf) : null);
+        } else {
+          reject(new Error(`PostgREST ${method} ${pathAndQuery} → ${res.statusCode}: ${buf.slice(0, 300)}`));
+        }
+      });
+    });
+    req.on('error', reject);
+    if (body) req.write(JSON.stringify(body));
+    req.end();
+  });
+}
 
 // ── Sport mapping (mirrors src/app/api/activities/route.ts) ─────────────────
 const CYCLING = new Set(['Ride', 'VirtualRide', 'EBikeRide', 'MountainBikeRide', 'GravelRide', 'Velomobile', 'Handcycle']);
@@ -77,20 +99,18 @@ function sport(rawType) {
   return 'cycling';
 }
 
-// ── Resolve user_id from email ──────────────────────────────────────────────
-const { data: userRow, error: userErr } = await authDb
-  .from('users')
-  .select('id, email')
-  .eq('email', EMAIL)
-  .maybeSingle();
-
-if (userErr) { console.error('lookup failed:', userErr); process.exit(1); }
-if (!userRow) {
-  console.error(`No user with email "${EMAIL}" in the users table.`);
+// ── Resolve user_id from email (in next_auth schema) ────────────────────────
+const users = await pgrest(
+  'GET',
+  `/users?email=eq.${encodeURIComponent(EMAIL)}&select=id,email`,
+  { schema: 'next_auth' },
+);
+if (!users.length) {
+  console.error(`No user with email "${EMAIL}" in next_auth.users.`);
   console.error('Sign in to the deployed app first so NextAuth creates the row, then re-run.');
   process.exit(1);
 }
-const userId = userRow.id;
+const userId = users[0].id;
 console.log(`✓ resolved ${EMAIL} → ${userId}`);
 
 // ── Load JSON files ─────────────────────────────────────────────────────────
@@ -102,8 +122,8 @@ if (!fs.existsSync(dir)) {
 const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
 console.log(`✓ ${files.length} activity files found in ${dir}`);
 
-// ── Insert in batches ───────────────────────────────────────────────────────
-const BATCH = 50;
+// ── Build rows + upsert in batches ──────────────────────────────────────────
+const BATCH = 25;
 let ok = 0, skipped = 0;
 
 for (let i = 0; i < files.length; i += BATCH) {
@@ -118,6 +138,10 @@ for (let i = 0; i < files.length; i += BATCH) {
       skipped++;
       continue;
     }
+    // duration_min and elevation_m can be floats in the JSON (e.g. 12.3 m),
+    // but the activities table types them as integers. Round to nearest
+    // for the indexed columns — full-precision values are preserved in
+    // payload for any UI that wants them.
     rows.push({
       id:            raw.id,
       user_id:       userId,
@@ -125,26 +149,31 @@ for (let i = 0; i < files.length; i += BATCH) {
       original_type: raw.type ?? null,
       title:         raw.name ?? null,
       start_date:    raw.date,
-      duration_min:  raw.duration_min ?? null,
+      duration_min:  raw.duration_min != null ? Math.round(raw.duration_min) : null,
       distance_km:   raw.distance_km ?? null,
-      elevation_m:   raw.elevation_m ?? null,
-      payload:       raw, // full raw blob — streams + everything
+      elevation_m:   raw.elevation_m != null ? Math.round(raw.elevation_m) : null,
+      payload:       raw,
     });
   }
 
   if (DRY) {
-    console.log(`  [dry] batch ${i / BATCH + 1}: would upsert ${rows.length} rows`);
+    console.log(`  [dry] batch ${Math.floor(i / BATCH) + 1}: would upsert ${rows.length} rows`);
     ok += rows.length;
     continue;
   }
 
-  const { error } = await supabase.from('activities').upsert(rows, { onConflict: 'id' });
-  if (error) {
-    console.error(`  batch ${i / BATCH + 1} failed:`, error);
+  try {
+    // PostgREST upsert: POST with Prefer: resolution=merge-duplicates
+    await pgrest('POST', '/activities', {
+      body:   rows,
+      prefer: 'resolution=merge-duplicates,return=minimal',
+    });
+    ok += rows.length;
+    console.log(`  ✓ batch ${Math.floor(i / BATCH) + 1}: ${rows.length} rows`);
+  } catch (err) {
+    console.error(`  batch ${Math.floor(i / BATCH) + 1} failed:`, err.message);
     process.exit(1);
   }
-  ok += rows.length;
-  console.log(`  ✓ batch ${i / BATCH + 1}: ${rows.length} rows`);
 }
 
 console.log(`\nDone. inserted=${ok}  skipped=${skipped}  user=${USER}  ${DRY ? '(dry run)' : ''}`);

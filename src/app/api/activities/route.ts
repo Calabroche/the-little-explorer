@@ -1,24 +1,35 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import { getServerSession } from 'next-auth/next';
+import { buildAuthOptions } from '@/lib/auth';
+import { supabaseAdmin, isSupabaseConfigured } from '@/lib/db';
 
-// Force dynamic rendering : la route lit `data/users/<user>/activities/` à
-// chaque requête (sinon Next.js 13 app-router la rend statique au build et le
-// CDN sert un résultat figé même après ajout de nouveaux fichiers).
+// Force dynamic rendering : the route reads from Supabase (or legacy JSON
+// for users not yet migrated). Next.js 13 app-router would otherwise
+// statically render this at build time and the CDN would serve a frozen
+// response.
 export const dynamic = 'force-dynamic';
 
 const DATA_BASE     = path.join(process.cwd(), 'data', 'users');
-const VALID_USERS   = new Set(['florian', 'helena']);
 const WEATHER_CACHE = path.join(process.cwd(), 'data', 'weather_cache.json'); // read-only on serverless
 
 // ── Physics & training constants ──────────────────────────────────────────────
-// Profil par utilisateur : poids du coureur + poids du vélo. Tout le reste
-// (gravité, Crr, CdA, densité de l'air) est partagé — pas d'estimation
-// mesurée de la CdA d'Helena, on garde la valeur générique.
+// Per-user profile: rider weight + bike weight. Keyed by email (the session
+// identifier). New users not in this map get the DEFAULT_PROFILE; they can
+// override it later via a settings page (not built yet).
 const G = 9.81, CRR = 0.004, CDA = 0.3, RHO = 1.225;
-const PROFILES: Record<string, { riderKg: number; bikeKg: number; mass: number }> = {
-  florian: { riderKg: 66, bikeKg: 8.18, mass: 74.18 },
-  helena:  { riderKg: 63, bikeKg: 16,   mass: 79 },
+type Profile = { riderKg: number; bikeKg: number; mass: number };
+const PROFILES_BY_EMAIL: Record<string, Profile> = {
+  'florian.calabrese@gmail.com': { riderKg: 66, bikeKg: 8.18, mass: 74.18 },
+  // Helena's email tbd — once she signs in we'll grab it from next_auth.users
+};
+// Sensible default for first-time users: 70kg rider, 9kg bike.
+const DEFAULT_PROFILE: Profile = { riderKg: 70, bikeKg: 9, mass: 79 };
+
+// Legacy mapping for the JSON fallback (when a user has no Supabase rows).
+const EMAIL_TO_USER_SLUG: Record<string, string> = {
+  'florian.calabrese@gmail.com': 'florian',
 };
 // FTP fallback si aucune donnée exploitable (rule of thumb poids × 2.205 × 2).
 const FTP_FALLBACK = 291;
@@ -370,25 +381,29 @@ function transform(
   };
 }
 
-// ── API handler ───────────────────────────────────────────────────────────────
-export async function GET(req: NextRequest) {
-  const userParam = req.nextUrl.searchParams.get('user') ?? 'florian';
-  const user = VALID_USERS.has(userParam) ? userParam : 'florian';
-  const profile = PROFILES[user] ?? PROFILES.florian;
-  const dataDir = path.join(DATA_BASE, user, 'activities');
-  if (!fs.existsSync(dataDir)) return NextResponse.json([], {
-    headers: {
-      'Cache-Control': 'no-store, must-revalidate',
-      'CDN-Cache-Control': 'no-store',
-      'Vercel-CDN-Cache-Control': 'no-store',
-    },
-  });
+// ── Data loaders ──────────────────────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function loadFromSupabase(userId: string): Promise<any[]> {
+  const { data, error } = await supabaseAdmin()
+    .from('activities')
+    .select('payload')
+    .eq('user_id', userId)
+    .order('start_date', { ascending: false });
+  if (error) {
+    console.error('[activities] supabase error:', error.message);
+    return [];
+  }
+  // Each row's `payload` JSONB column holds the original raw activity
+  // (same shape as the legacy JSON files), so downstream code is unchanged.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data ?? []).map(r => r.payload as any);
+}
 
-  // Defensive parse — a single truncated/malformed JSON file (e.g. a
-  // half-written sync) used to bring down the whole `/api/activities`
-  // endpoint and blank the entire feed. Now we log the bad file and
-  // skip it so the rest of the user's history still loads.
-  const raws = fs
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function loadFromJsonFiles(userSlug: string): any[] {
+  const dataDir = path.join(DATA_BASE, userSlug, 'activities');
+  if (!fs.existsSync(dataDir)) return [];
+  return fs
     .readdirSync(dataDir)
     .filter(f => f.endsWith('.json'))
     .map(f => {
@@ -399,22 +414,48 @@ export async function GET(req: NextRequest) {
         return null;
       }
     })
-    // Cast back to the raw activity shape used downstream — the
-    // try/catch above guarantees we don't keep nulls, the actual
-    // field-level typing is enforced by the consuming code.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .filter((x): x is any => x != null);
+}
+
+// ── API handler ───────────────────────────────────────────────────────────────
+export async function GET() {
+  // Require an authenticated session — middleware already gates the app,
+  // but defense-in-depth here means a stale client can't read someone
+  // else's activities by hammering /api/activities directly.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const session: any = await getServerSession(buildAuthOptions());
+  if (!session?.user?.id || !session.user.email) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+
+  const email   = session.user.email as string;
+  const userId  = session.user.id    as string;
+  const profile = PROFILES_BY_EMAIL[email] ?? DEFAULT_PROFILE;
+
+  // Prefer Supabase. Fall back to legacy JSON files if the user hasn't been
+  // migrated yet (e.g., Helena before her first sign-in) — driven by the
+  // EMAIL_TO_USER_SLUG map. New users get an empty feed until they connect
+  // Strava (Stage 3 will trigger the auto-sync at that point).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let raws: any[] = [];
+  if (isSupabaseConfigured()) {
+    raws = await loadFromSupabase(userId);
+  }
+  if (raws.length === 0) {
+    const slug = EMAIL_TO_USER_SLUG[email];
+    if (slug) raws = loadFromJsonFiles(slug);
+  }
 
   raws.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  // Pass 1 : calculer les power streams + bestEfforts pour chaque sortie,
-  // en utilisant la masse spécifique à l'utilisateur (rider + vélo).
+  // Pass 1: power streams + bestEfforts per activity, using the user's mass.
   const enriched = raws.map(raw => ({ raw, ...computeStreamsAndBests(raw, profile.mass) }));
 
-  // Pass 2 : dériver la FTP à partir des best 20 min sur sorties non assistées.
+  // Pass 2: derive FTP from best 20-min on non-assisted rides.
   const ftp = deriveFtpFromBests(enriched);
 
-  // Pass 3 : transformer chaque sortie en passant la FTP dynamique + le profil.
+  // Pass 3: transform each activity with the dynamic FTP + profile.
   const activities = await Promise.all(
     enriched.map(async ({ raw, powerStream, bestEfforts }) => {
       const act    = transform(raw, ftp, powerStream, bestEfforts, profile.riderKg, profile.mass);
@@ -427,10 +468,10 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json(activities, {
     headers: {
-      // Forcer l'invalidation au niveau CDN edge (Vercel) — sinon une réponse
-      // précédemment baked au build reste servie en HIT pendant des jours.
-      'Cache-Control': 'no-store, must-revalidate',
-      'CDN-Cache-Control': 'no-store',
+      // Force CDN invalidation — otherwise a previously baked response can
+      // be served HIT for days even after new rides arrive.
+      'Cache-Control':            'no-store, must-revalidate',
+      'CDN-Cache-Control':        'no-store',
       'Vercel-CDN-Cache-Control': 'no-store',
     },
   });
