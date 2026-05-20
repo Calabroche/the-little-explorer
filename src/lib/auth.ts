@@ -142,26 +142,17 @@ export function buildAuthOptions(): AuthOptions {
     },
     pages: {
       signIn: '/login',
-      // Send errors to the same page but with a real error code in the URL
-      // (?error=OAuthCallback / OAuthCreateAccount / Callback / …) instead
-      // of the generic provider-name fallback.
+      // Send errors to the login page with the real error code in the URL
+      // (?error=OAuthCallback / OAuthCreateAccount / Callback / …) so the
+      // banner on /login can show a useful message.
       error:  '/login',
     },
-    // Verbose logging so Vercel Functions captures every step of the OAuth
-    // exchange + adapter calls. Remove once auth is stable.
-    debug: true,
+    // Quiet error-only logger. Errors still land in Vercel Functions logs;
+    // we no longer flood prod with DEBUG_ENABLED noise on every request.
     logger: {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       error(code: string, ...message: any[]) {
-        console.error(`[next-auth ERROR] ${code}`, JSON.stringify(message));
-      },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      warn(code: string, ...message: any[]) {
-        console.warn(`[next-auth WARN] ${code}`, JSON.stringify(message));
-      },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      debug(code: string, ...message: any[]) {
-        console.log(`[next-auth DEBUG] ${code}`, JSON.stringify(message));
+        console.error(`[next-auth] ${code}`, JSON.stringify(message));
       },
     },
   };

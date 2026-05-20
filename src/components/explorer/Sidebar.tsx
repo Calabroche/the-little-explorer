@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useSession, signOut } from 'next-auth/react';
 import { tokens, GlobalStats } from './tokens';
 import { Label } from './ui';
 import { useT } from '@/i18n';
@@ -494,6 +495,78 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
           </div>
         </div>
       )}
+
+      <ProfileSection />
+    </div>
+  );
+}
+
+/**
+ * Bottom-of-sidebar profile section. Shows the signed-in user's name +
+ * avatar + a "Se déconnecter" button.
+ *
+ * `signOut({ callbackUrl: '/login' })` ends the NextAuth session and
+ * redirects to /login — middleware then keeps the user there until they
+ * sign in again.
+ */
+function ProfileSection() {
+  const { data: session, status } = useSession();
+  if (status !== 'authenticated' || !session?.user) return null;
+
+  const u = session.user;
+  const displayName = u.name || u.email || 'Account';
+  const initials = (u.name || u.email || '?')
+    .split(/\s+/).map(s => s[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
+
+  return (
+    <div style={{
+      margin: '12px 12px 0', padding: 12,
+      background: tokens.creamDark, borderRadius: 4,
+      border: `1px solid ${tokens.creamBorder}`,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        {u.image ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={u.image} alt="" width={32} height={32} style={{ borderRadius: '50%', flexShrink: 0 }} />
+        ) : (
+          <div style={{
+            width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+            background: tokens.terra, color: '#fff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontFamily: "'Space Grotesk'", fontSize: 12, fontWeight: 700,
+          }}>{initials}</div>
+        )}
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{
+            fontFamily: "'Space Grotesk'", fontSize: 12, fontWeight: 600,
+            color: tokens.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>{displayName}</div>
+          {u.email && u.email !== displayName && (
+            <div style={{
+              fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight,
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}>{u.email}</div>
+          )}
+        </div>
+      </div>
+      <button
+        onClick={() => signOut({ callbackUrl: '/login' })}
+        style={{
+          width: '100%',
+          padding: '8px 10px',
+          background: tokens.surface,
+          border: `1px solid ${tokens.creamBorder}`,
+          borderRadius: 3,
+          color: tokens.inkMid,
+          fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 600,
+          letterSpacing: '0.04em',
+          cursor: 'pointer',
+        }}
+        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = tokens.terra; }}
+        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = tokens.inkMid; }}
+      >
+        SE DÉCONNECTER
+      </button>
     </div>
   );
 }

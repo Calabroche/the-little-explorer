@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { LanguageProvider } from "@/i18n";
+import { Providers } from "./providers";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
@@ -30,7 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
-        <LanguageProvider>{children}</LanguageProvider>
+        <Providers>{children}</Providers>
         {/* Vercel Analytics + Speed Insights — both free for personal
             projects, surface in the Vercel dashboard within a few
             minutes of the next deploy + some traffic. Analytics tracks
