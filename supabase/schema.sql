@@ -146,6 +146,30 @@ create table if not exists next_auth.verification_tokens (
 grant all on table next_auth.verification_tokens to postgres;
 grant all on table next_auth.verification_tokens to service_role;
 
+-- ── API tokens (for native clients like the iOS app) ───────────────────────
+-- One row per long-lived bearer token. Issued by /auth/native-done after
+-- the user completes Google/Strava OAuth via ASWebAuthenticationSession.
+-- The token itself (a 43-char base64url string) is stored in cleartext
+-- because we need to look it up by exact match on every API request.
+-- `label` is a human-readable hint ("iPhone 14", "Apple Watch") so the
+-- user can revoke an individual device from /settings later.
+create table if not exists next_auth.api_tokens (
+  id            uuid primary key default uuid_generate_v4(),
+  user_id       uuid not null references next_auth.users(id) on delete cascade,
+  token         text not null unique,
+  label         text,
+  created_at    timestamp with time zone not null default now(),
+  last_used_at  timestamp with time zone,
+  revoked_at    timestamp with time zone
+);
+create index if not exists api_tokens_user_idx on next_auth.api_tokens (user_id);
+
+-- Re-runnable for existing installs.
+alter table if exists next_auth.api_tokens
+  add column if not exists last_used_at timestamp with time zone;
+alter table if exists next_auth.api_tokens
+  add column if not exists revoked_at   timestamp with time zone;
+
 -- ── Activities (our own table, our own conventions) ─────────────────────────
 create table if not exists public.activities (
   id              bigint primary key,                  -- Strava activity id

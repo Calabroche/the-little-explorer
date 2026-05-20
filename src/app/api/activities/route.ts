@@ -1,9 +1,8 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
-import { getServerSession } from 'next-auth/next';
-import { buildAuthOptions } from '@/lib/auth';
 import { supabaseAdmin, isSupabaseConfigured } from '@/lib/db';
+import { getAuthedUser } from '@/lib/api-auth';
 
 // Force dynamic rendering : the route reads from Supabase (or legacy JSON
 // for users not yet migrated). Next.js 13 app-router would otherwise
@@ -423,18 +422,17 @@ function loadFromJsonFiles(userSlug: string): any[] {
 }
 
 // ── API handler ───────────────────────────────────────────────────────────────
-export async function GET() {
-  // Require an authenticated session — middleware already gates the app,
-  // but defense-in-depth here means a stale client can't read someone
-  // else's activities by hammering /api/activities directly.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const session: any = await getServerSession(buildAuthOptions());
-  if (!session?.user?.id || !session.user.email) {
+export async function GET(req: NextRequest) {
+  // Auth: either NextAuth session cookie (web) or Authorization: Bearer
+  // (iOS app, watchOS app, future Raspberry Pi dashboard…). One helper
+  // handles both — see lib/api-auth.ts.
+  const authed = await getAuthedUser(req);
+  if (!authed?.email) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  const email  = session.user.email as string;
-  const userId = session.user.id    as string;
+  const email  = authed.email;
+  const userId = authed.id;
 
   // Resolve the per-user profile: DB override > legacy hardcoded by
   // email > global default. customFtp is null when the user hasn't set

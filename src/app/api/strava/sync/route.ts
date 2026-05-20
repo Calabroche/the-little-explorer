@@ -28,10 +28,9 @@
  *     from request body.
  */
 
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth/next';
-import { buildAuthOptions } from '@/lib/auth';
+import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/db';
+import { getAuthedUser } from '@/lib/api-auth';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -71,13 +70,12 @@ function sportFromType(t: string): string {
   return 'cycling';
 }
 
-export async function POST() {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const session: any = await getServerSession(buildAuthOptions());
-  if (!session?.user?.id) {
+export async function POST(req: NextRequest) {
+  const authed = await getAuthedUser(req);
+  if (!authed?.id) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
-  const userId = session.user.id as string;
+  const userId = authed.id;
 
   // ── 1. Fetch the user's Strava refresh_token from next_auth.accounts ──
   const { data: accountRows, error: accErr } = await supabaseAdmin()

@@ -16,9 +16,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth/next';
-import { buildAuthOptions } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/db';
+import { getAuthedUser } from '@/lib/api-auth';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -60,17 +59,16 @@ interface MeResponse {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function loadCurrentUser(): Promise<{ session: any; row: any } | NextResponse> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const session: any = await getServerSession(buildAuthOptions());
-  if (!session?.user?.id) {
+async function loadCurrentUser(req: NextRequest | null): Promise<{ row: any } | NextResponse> {
+  const authed = await getAuthedUser(req);
+  if (!authed?.id) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
   const { data, error } = await supabaseAdmin()
     .schema('next_auth')
     .from('users')
     .select('id, email, name, athlete_id, rider_kg, bike_kg, custom_ftp')
-    .eq('id', session.user.id)
+    .eq('id', authed.id)
     .maybeSingle();
   if (error) {
     console.error('[me] user query failed:', error.message);
@@ -79,7 +77,7 @@ async function loadCurrentUser(): Promise<{ session: any; row: any } | NextRespo
   if (!data) {
     return NextResponse.json({ error: 'user_not_found' }, { status: 404 });
   }
-  return { session, row: data };
+  return { row: data };
 }
 
 function effective(email: string | null, row: { rider_kg: number | null; bike_kg: number | null; custom_ftp: number | null }) {
@@ -91,8 +89,8 @@ function effective(email: string | null, row: { rider_kg: number | null; bike_kg
   };
 }
 
-export async function GET() {
-  const res = await loadCurrentUser();
+export async function GET(req: NextRequest) {
+  const res = await loadCurrentUser(req);
   if (res instanceof NextResponse) return res;
   const { row } = res;
 
@@ -112,7 +110,7 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
-  const res = await loadCurrentUser();
+  const res = await loadCurrentUser(req);
   if (res instanceof NextResponse) return res;
   const { row } = res;
 

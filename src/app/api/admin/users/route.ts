@@ -14,11 +14,10 @@
  * touch it from a middleware or auth callback.
  */
 
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth/next';
-import { buildAuthOptions } from '@/lib/auth';
+import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/db';
 import { isAdminEmail } from '@/lib/admin';
+import { getAuthedUser } from '@/lib/api-auth';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -35,13 +34,12 @@ interface UserRow {
   created_at:  string | null;
 }
 
-export async function GET() {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const session: any = await getServerSession(buildAuthOptions());
-  if (!session?.user?.email) {
+export async function GET(req: NextRequest) {
+  const authed = await getAuthedUser(req);
+  if (!authed?.email) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
-  if (!isAdminEmail(session.user.email)) {
+  if (!isAdminEmail(authed.email)) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 
