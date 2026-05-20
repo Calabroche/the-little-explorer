@@ -53,28 +53,18 @@ export default function LoginPage() {
   const [busy, setBusy]   = useState<'' | 'google' | 'strava'>('');
 
   useEffect(() => {
-    // Hydration smoke-test — if you don't see this in the console, React
-    // never hydrated on /login and onClick can't fire.
-    console.log('[login] hydrated, useEffect ran');
-    document.title = 'TLE Login (hydrated)';
     const url = new URL(window.location.href);
     const err = url.searchParams.get('error');
     if (err) setError(err);
   }, []);
 
   const onClick = (provider: 'google' | 'strava') => {
-    // Diagnostic logs — if you don't see "[login] click X" in the
-    // console, the React onClick never fired (hydration broken).
-    console.log(`[login] click ${provider}`);
     setBusy(provider);
     setError('');
-    signIn(provider, { callbackUrl: '/' })
-      .then(res => console.log('[login] signIn returned', res))
-      .catch(err => {
-        console.error('[login] signIn threw', err);
-        setBusy('');
-        setError('signIn failed: ' + (err?.message ?? 'unknown'));
-      });
+    signIn(provider, { callbackUrl: '/' }).catch(err => {
+      setBusy('');
+      setError('signIn failed: ' + (err?.message ?? 'unknown'));
+    });
   };
 
   return (

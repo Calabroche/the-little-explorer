@@ -100,7 +100,13 @@ export function buildAuthOptions(): AuthOptions {
       }),
       stravaProvider(),
     ],
-    session: { strategy: 'database' as const },
+    // JWT strategy (not 'database') — so the session payload lives in the
+    // cookie and the NextAuth middleware can decode it at the edge without
+    // a DB roundtrip. Database strategy would force a Postgres call on
+    // every request, which Edge runtime can't do (no fs/network in V8
+    // isolates). The Supabase adapter is still used to PERSIST users +
+    // accounts; only the session itself lives in the JWT now.
+    session: { strategy: 'jwt' as const },
     secret:  process.env.NEXTAUTH_SECRET,
     callbacks: {
       /**
@@ -131,11 +137,31 @@ export function buildAuthOptions(): AuthOptions {
         }
         return true;
       },
+      /**
+       * Called whenever a JWT is created (sign-in) or read (subsequent
+       * requests). On first sign-in, `user` is populated and we copy the
+       * DB user id + athlete_id into the token. On every later request
+       * only `token` is present, so we just return it unchanged.
+       */
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      async session({ session, user }: any) {
+      async jwt({ token, user, account, profile }: any) {
+        if (user) {
+          token.uid = user.id;
+        }
+        if (account?.provider === 'strava' && profile?.id) {
+          token.athleteId = Number(profile.id);
+        }
+        return token;
+      },
+      /**
+       * Surface the DB user id + athlete_id from the JWT into the session
+       * object that client components see via useSession().
+       */
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      async session({ session, token }: any) {
         if (session.user) {
-          session.user.id = user.id;
-          session.user.athleteId = user.athlete_id ?? null;
+          session.user.id        = token.uid       as string;
+          session.user.athleteId = (token.athleteId as number) ?? null;
         }
         return session;
       },
