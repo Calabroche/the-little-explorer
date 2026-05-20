@@ -97,6 +97,14 @@ export function buildAuthOptions(): AuthOptions {
       GoogleProvider({
         clientId:     process.env.GOOGLE_CLIENT_ID,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        // Force Google to always show the account picker, even when the
+        // user is already signed into one Google account in the browser.
+        // Without this, repeated visits auto-pick the same account and
+        // there's no way to create a fresh TLE account from a different
+        // Google identity, or to switch between accounts.
+        authorization: {
+          params: { prompt: 'select_account' },
+        },
       }),
       stravaProvider(),
     ],

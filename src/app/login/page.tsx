@@ -86,11 +86,22 @@ export default function LoginPage() {
         <p style={{
           fontFamily: "'Space Grotesk'",
           fontSize: 13, color: tokens.inkLight,
-          marginBottom: 28,
+          marginBottom: 12,
           lineHeight: 1.5,
         }}>
           Connecte-toi pour retrouver tes sorties Strava, ton calendrier
           d&apos;activités et tes objectifs.
+        </p>
+        <p style={{
+          fontFamily: "'Space Grotesk'",
+          fontSize: 11, color: tokens.inkLight,
+          marginBottom: 24,
+          lineHeight: 1.5,
+          fontStyle: 'italic',
+        }}>
+          Première fois ici ? Clique l&apos;un des boutons ci-dessous —
+          ton compte sera créé automatiquement avec ton email Google ou
+          Strava. Aucune inscription manuelle.
         </p>
 
         {error && (
