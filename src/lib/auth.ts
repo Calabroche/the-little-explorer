@@ -40,9 +40,26 @@ const STRAVA_AUTH_URL  = 'https://www.strava.com/oauth/authorize';
 const STRAVA_TOKEN_URL = 'https://www.strava.com/oauth/token';
 
 /**
- * Hand-rolled Strava OAuth2 provider. NextAuth's "OAuth2Provider" interface
- * is flexible enough; we just need to point it at Strava's endpoints and
- * map the non-standard response shape into NextAuth's user profile.
+ * Hand-rolled Strava OAuth2 provider.
+ *
+ * Strava deviates from the standard OAuth2 spec in a couple of ways that
+ * NextAuth/openid-client trips over with default settings — this config
+ * is the result of a debugging session where signin worked through
+ * Strava's authorize page but failed with ?error=OAuthCallback on the
+ * way back. Fixes baked in here:
+ *
+ *   - `client.token_endpoint_auth_method = 'client_secret_post'` —
+ *     Strava expects the client_secret in the POST body of the token
+ *     exchange, not as HTTP Basic auth (the openid-client default).
+ *
+ *   - `checks: ['state']` — Strava doesn't speak PKCE (it ignores the
+ *     code_challenge and the matching code_verifier on token exchange
+ *     comes back as "invalid"). Drop to plain state-based CSRF only.
+ *
+ *   - Real userinfo endpoint (`/api/v3/athlete`) instead of trying to
+ *     extract `tokens.athlete` from the token response. openid-client
+ *     strips non-standard fields, so the inline athlete object never
+ *     made it through.
  */
 function stravaProvider() {
   return {
@@ -59,22 +76,27 @@ function stravaProvider() {
       },
     },
     token:    STRAVA_TOKEN_URL,
-    // Strava returns the athlete inline with the token response, so there's
-    // no separate userinfo call. We synthesise it from the token payload.
-    userinfo: {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      async request({ tokens }: { tokens: any }) {
-        return tokens.athlete ?? {};
-      },
+    userinfo: 'https://www.strava.com/api/v3/athlete',
+    // Strava expects client_secret in the POST body, not in the
+    // Authorization header. Without this NextAuth's token exchange
+    // 400s with "invalid client".
+    client: {
+      token_endpoint_auth_method: 'client_secret_post' as const,
     },
+    // Skip PKCE — Strava doesn't support it. Keep state-based CSRF.
+    checks: ['state' as const],
     clientId:     process.env.STRAVA_CLIENT_ID,
     clientSecret: process.env.STRAVA_CLIENT_SECRET,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     profile(athlete: any) {
       return {
         id:     String(athlete.id),
-        name:   [athlete.firstname, athlete.lastname].filter(Boolean).join(' ') || athlete.username,
-        email:  null, // Strava doesn't expose email in OAuth — we'll prompt the user later if needed
+        name:   [athlete.firstname, athlete.lastname].filter(Boolean).join(' ') || athlete.username || `strava-${athlete.id}`,
+        // Strava doesn't expose email on /api/v3/athlete. Synthesise a
+        // unique placeholder so the Supabase adapter's UNIQUE(email)
+        // constraint accepts the row. User can update later via a
+        // settings page (not built yet).
+        email:  `strava-${athlete.id}@strava.local`,
         image:  athlete.profile,
       };
     },
