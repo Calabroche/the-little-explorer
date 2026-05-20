@@ -361,9 +361,13 @@ function Last5Stats({ activities }: { activities: Activity[] }) {
   if (s.last5.length < 2) return null;
   const { last5, dur, dist, elev, speed, hr, np, avgPower, tss, wkg, cal } = s;
 
+  // marginBottom is 16 (not 32) to match Goals card on the right
+  // column — so when this card sits next to the Calendar+Goals
+  // stack with flex `alignItems: stretch`, both visible bottoms
+  // land at the same Y.
   const CARD: React.CSSProperties = {
     background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
-    borderRadius: 4, padding: 24, marginBottom: 32,
+    borderRadius: 4, padding: 24, marginBottom: 16,
   };
 
   return (
@@ -438,7 +442,18 @@ export function FeedPage({ activities, stats, sport, onSelect }: Props) {
               calendar + goals. */}
           <Last5Stats activities={activities} />
         </div>
-        <div style={{ flexShrink: 0, alignSelf: isMobile ? 'auto' : 'flex-start', display: 'flex', flexDirection: 'column' }}>
+        {/* Right column inherits the parent's alignItems: stretch (no
+            more alignSelf: flex-start), so it grows to match the
+            taller Last5Stats card on the left. justify-content:
+            space-between pushes Calendar to the top and Goals to the
+            bottom — visually aligning the bottoms of both columns
+            without compressing the Last5Stats content. */}
+        <div style={{
+          flexShrink: 0,
+          alignSelf: isMobile ? 'auto' : 'auto',
+          display: 'flex', flexDirection: 'column',
+          justifyContent: isMobile ? 'flex-start' : 'space-between',
+        }}>
           <ActivityCalendar activities={activities} />
           <Goals activities={activities} />
         </div>
