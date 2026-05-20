@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useSession, signIn, signOut } from 'next-auth/react';
+import { isAdminEmail } from '@/lib/admin';
 import { tokens, GlobalStats } from './tokens';
 import { Label } from './ui';
 import { useT } from '@/i18n';
@@ -574,6 +575,28 @@ function ProfileSection() {
         >
           + CONNECTER STRAVA
         </button>
+      )}
+
+      {isAdminEmail(u.email) && (
+        <a
+          href="/admin"
+          style={{
+            display: 'block',
+            textAlign: 'center',
+            padding: '8px 10px',
+            marginBottom: 8,
+            background: tokens.creamDark,
+            border: `1px dashed ${tokens.creamBorder}`,
+            borderRadius: 3,
+            color: tokens.inkMid,
+            fontFamily: "'Space Grotesk'", fontSize: 10, fontWeight: 600,
+            letterSpacing: '0.06em',
+            textDecoration: 'none',
+            textTransform: 'uppercase',
+          }}
+        >
+          ⚙ Admin
+        </a>
       )}
 
       <button
