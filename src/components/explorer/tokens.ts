@@ -1,3 +1,5 @@
+import type { CSSProperties } from 'react';
+
 export const tokens = {
   cream:       'var(--bg)',
   creamDark:   'var(--bg-dark)',
@@ -12,6 +14,22 @@ export const tokens = {
   greenLight:  'var(--green-light)',
   blue:        'var(--blue)',
 } as const;
+
+// Shared "card" style — was duplicated inline across 12 files.
+// Default values match the most common usage (padding 24, marginBottom
+// 32, radius 4). Sites with a different layout (tighter padding, no
+// bottom margin, smaller radius) spread + override:
+//
+//   <div style={CARD_STYLE} />                             // default
+//   <div style={{ ...CARD_STYLE, marginBottom: 24 }} />    // tighter
+//   <div style={{ ...CARD_STYLE, padding: 20 }} />         // compact
+export const CARD_STYLE: CSSProperties = {
+  background:   tokens.surface,
+  border:       `1px solid ${tokens.creamBorder}`,
+  borderRadius: 4,
+  padding:      24,
+  marginBottom: 32,
+};
 
 export interface Activity {
   id: number;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { tokens, Activity } from './tokens';
 import { Label, useIsMobile } from './ui';
 import { RouteModal, Proposal } from './RouteModal';
@@ -206,15 +206,35 @@ export function RouteBuilder({ activities }: { activities: Activity[] }) {
   const isMobile = useIsMobile();
   const { t } = useT();
 
-  const sorted = [...activities].sort((a, b) => new Date(b.rawDate).getTime() - new Date(a.rawDate).getTime());
-  const last5  = sorted.slice(0, 5);
-  const avgDist = last5.length ? Math.round(last5.reduce((s, a) => s + a.distance, 0) / last5.length) : 25;
-  const avgElev = last5.length ? Math.round(last5.reduce((s, a) => s + a.elevation, 0) / last5.length) : 300;
-  const tssVals = last5.map(a => a.tss).filter((t): t is number => t != null);
-  const avgTSS  = tssVals.length ? Math.round(tssVals.reduce((s, v) => s + v, 0) / tssVals.length) : 80;
+  // Memoised — the 5-activity recent-history aggregates feed the
+  // slider defaults below. They're cheap (5×reduce) but recomputing
+  // on every render is wasted. More importantly: when the parent
+  // user (Florian → Helena) flips, `activities` changes → memo
+  // recomputes → useEffect below resets the sliders to Helena's
+  // averages.
+  const { avgDist, avgElev, avgTSS } = useMemo(() => {
+    const sorted = [...activities].sort((a, b) => new Date(b.rawDate).getTime() - new Date(a.rawDate).getTime());
+    const last5  = sorted.slice(0, 5);
+    const dist = last5.length ? Math.round(last5.reduce((s, a) => s + a.distance, 0) / last5.length) : 25;
+    const elev = last5.length ? Math.round(last5.reduce((s, a) => s + a.elevation, 0) / last5.length) : 300;
+    const tssVals = last5.map(a => a.tss).filter((t): t is number => t != null);
+    const tss = tssVals.length ? Math.round(tssVals.reduce((s, v) => s + v, 0) / tssVals.length) : 80;
+    return { avgDist: dist, avgElev: elev, avgTSS: tss };
+  }, [activities]);
 
   const [targetDist, setTargetDist] = useState(avgDist);
   const [targetElev, setTargetElev] = useState(avgElev);
+
+  // BUG FIX — useState only captures `avgDist`/`avgElev` on first
+  // mount. Switching user (Florian → Helena) used to leave the
+  // sliders stuck on Florian's averages. Reset when the averages
+  // change underneath. We only reset to AUTO defaults — manual
+  // slider drags during the same user-session are preserved by
+  // touching the sliders directly (handlers below).
+  useEffect(() => {
+    setTargetDist(avgDist);
+    setTargetElev(avgElev);
+  }, [avgDist, avgElev]);
   const [direction, setDirection]   = useState<Direction | 'any'>('any');
   const [terrain, setTerrain]       = useState<'any' | 'flat' | 'hilly'>('any');
   const [hasGenerated, setHasGenerated] = useState(false);
