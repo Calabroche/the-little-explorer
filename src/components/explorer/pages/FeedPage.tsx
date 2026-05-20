@@ -361,13 +361,17 @@ function Last5Stats({ activities }: { activities: Activity[] }) {
   if (s.last5.length < 2) return null;
   const { last5, dur, dist, elev, speed, hr, np, avgPower, tss, wkg, cal } = s;
 
-  // marginBottom is 16 (not 32) to match Goals card on the right
-  // column — so when this card sits next to the Calendar+Goals
-  // stack with flex `alignItems: stretch`, both visible bottoms
-  // land at the same Y.
+  // - marginBottom: 16 to match Goals card's bottom margin.
+  // - flex: 1 so the card stretches to fill its parent flex column
+  //   (set by the wrapper in FeedPage). The right column's Calendar
+  //   + Goals stack is usually taller than this card's natural
+  //   content height, so without `flex: 1` we'd see a misaligned
+  //   bottom edge. Empty space lands below the chip row inside the
+  //   card — acceptable visual cost for the alignment.
   const CARD: React.CSSProperties = {
     background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
     borderRadius: 4, padding: 24, marginBottom: 16,
+    flex: 1,
   };
 
   return (
@@ -436,10 +440,11 @@ export function FeedPage({ activities, stats, sport, onSelect }: Props) {
         alignItems: 'stretch',
         gap: 16,
       }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          {/* Swapped — used to host TrainingProgram. User wanted the
-              average-of-last-5 block up here next to the right-column
-              calendar + goals. */}
+        {/* Left wrapper is now a flex column so the Last5Stats card
+            inside can `flex: 1` and stretch to the row's full height
+            — which is driven by the taller right column (Calendar +
+            Goals). Result: card grows downward to match Goals' bottom. */}
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
           <Last5Stats activities={activities} />
         </div>
         {/* Right column inherits the parent's alignItems: stretch (no
