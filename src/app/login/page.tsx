@@ -59,17 +59,18 @@ export default function LoginPage() {
   }, []);
 
   const onClick = (provider: 'google' | 'strava') => {
+    // Diagnostic logs — if you don't see "[login] click X" in the
+    // console, the React onClick never fired (hydration broken).
+    console.log(`[login] click ${provider}`);
     setBusy(provider);
     setError('');
-    // callbackUrl defaults to the page the user was originally trying to
-    // reach (preserved by NextAuth via cookie); we let it pick that.
-    signIn(provider).catch(() => {
-      // signIn() returns a promise that only rejects on network failure;
-      // OAuth-level errors come back as ?error=... in the URL after the
-      // redirect roundtrip. Either way, show something to the user.
-      setBusy('');
-      setError('signIn failed');
-    });
+    signIn(provider, { callbackUrl: '/' })
+      .then(res => console.log('[login] signIn returned', res))
+      .catch(err => {
+        console.error('[login] signIn threw', err);
+        setBusy('');
+        setError('signIn failed: ' + (err?.message ?? 'unknown'));
+      });
   };
 
   return (
