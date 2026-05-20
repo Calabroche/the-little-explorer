@@ -94,12 +94,23 @@ create table if not exists next_auth.accounts (
   session_state       text,
   oauth_token_secret  text,
   oauth_token         text,
+  -- Strava-specific: its /oauth/token response ships an `athlete` JSON
+  -- object alongside the standard OAuth fields. NextAuth's adapter
+  -- writes the whole token payload into this table verbatim, so we
+  -- need a column to hold it — otherwise the insert 400s with
+  -- PGRST204 ("column not in schema cache") and signin fails with
+  -- ?error=Callback.
+  athlete             jsonb,
   "userId"            uuid,
   constraint accounts_pkey        primary key (id),
   constraint provider_unique      unique (provider, "providerAccountId"),
   constraint "accounts_userId_fkey" foreign key ("userId")
     references next_auth.users (id) on delete cascade
 );
+
+-- Re-runnable migration of athlete column for existing installs that
+-- ran the original schema.sql before this fix landed.
+alter table if exists next_auth.accounts add column if not exists athlete jsonb;
 
 grant all on table next_auth.accounts to postgres;
 grant all on table next_auth.accounts to service_role;
