@@ -290,11 +290,27 @@ export function ExplorerApp() {
             }}
           >›</button>
         )}
-        {/* Floating language toggle — desktop only, top-right of the
-            content area. Mobile path has its own LangToggle in the
+        {/* Floating language + dark-mode toggles — desktop only,
+            top-right of the content area. Always visible (works even
+            when the sidebar is collapsed, which used to hide the
+            dark-mode button). Mobile path has its own pair in the
             bottom-nav top row. */}
         {!isMobile && (
-          <div style={{ position: 'absolute', top: 16, right: 16, zIndex: 1000 }}>
+          <div style={{ position: 'absolute', top: 16, right: 16, zIndex: 1000, display: 'flex', gap: 6, alignItems: 'center' }}>
+            <button
+              onClick={toggleDark}
+              title={darkMode ? 'Mode clair' : 'Mode sombre'}
+              aria-label="Toggle dark mode"
+              style={{
+                width: 32, height: 32, borderRadius: 16,
+                background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
+                color: tokens.inkMid, fontSize: 16, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+              }}
+            >
+              {darkMode ? '◑' : '◐'}
+            </button>
             <GlobalLangToggle lang={lang} onChange={setLang} />
           </div>
         )}

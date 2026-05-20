@@ -417,35 +417,24 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
             The Little<br />
             <em style={{ color: tokens.terra }}>Explorer</em>
           </button>
-          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+          {/* Dark-mode toggle was here but moved to the floating
+              top-right chip in ExplorerApp so it stays reachable when
+              the sidebar is collapsed. The collapse-button stays. */}
+          {onToggleCollapse && (
             <button
-              onClick={onToggleDark}
-              title={darkMode ? 'Mode clair' : 'Mode sombre'}
+              onClick={onToggleCollapse}
+              title="Replier le menu (plus de place pour les graphes)"
+              aria-label="Collapse sidebar"
               style={{
                 background: tokens.creamDark, border: `1px solid ${tokens.creamBorder}`,
                 borderRadius: 20, padding: '4px 10px', cursor: 'pointer',
                 fontFamily: "'Space Grotesk'", fontSize: 13, color: tokens.inkMid,
-                lineHeight: 1,
+                lineHeight: 1, fontWeight: 700, flexShrink: 0,
               }}
             >
-              {darkMode ? '◑' : '◐'}
+              ‹
             </button>
-            {onToggleCollapse && (
-              <button
-                onClick={onToggleCollapse}
-                title="Replier le menu (plus de place pour les graphes)"
-                aria-label="Collapse sidebar"
-                style={{
-                  background: tokens.creamDark, border: `1px solid ${tokens.creamBorder}`,
-                  borderRadius: 20, padding: '4px 10px', cursor: 'pointer',
-                  fontFamily: "'Space Grotesk'", fontSize: 13, color: tokens.inkMid,
-                  lineHeight: 1, fontWeight: 700,
-                }}
-              >
-                ‹
-              </button>
-            )}
-          </div>
+          )}
         </div>
         <Label style={{ marginTop: 6, display: 'block' }}>{user === 'helena' ? 'Helena' : 'Florian Calabrese'}</Label>
       </div>
