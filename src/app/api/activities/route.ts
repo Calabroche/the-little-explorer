@@ -15,17 +15,21 @@ const DATA_BASE     = path.join(process.cwd(), 'data', 'users');
 const WEATHER_CACHE = path.join(process.cwd(), 'data', 'weather_cache.json'); // read-only on serverless
 
 // ── Physics & training constants ──────────────────────────────────────────────
-// Per-user profile: rider weight + bike weight. Keyed by email (the session
-// identifier). New users not in this map get the DEFAULT_PROFILE; they can
-// override it later via a settings page (not built yet).
+// Profile resolution ladder (first non-null wins):
+//   1. next_auth.users.{rider_kg, bike_kg, custom_ftp}  — user override
+//      via /settings (Stage #3)
+//   2. PROFILES_BY_EMAIL                                — legacy
+//      hardcoded values for the first two users (Florian + Helena
+//      tbd). Will be deleted once they've set their values via the
+//      settings page.
+//   3. DEFAULT_PROFILE                                  — global
+//      default for fresh signups.
 const G = 9.81, CRR = 0.004, CDA = 0.3, RHO = 1.225;
-type Profile = { riderKg: number; bikeKg: number; mass: number };
-const PROFILES_BY_EMAIL: Record<string, Profile> = {
-  'florian.calabrese@gmail.com': { riderKg: 66, bikeKg: 8.18, mass: 74.18 },
-  // Helena's email tbd — once she signs in we'll grab it from next_auth.users
+type Profile = { riderKg: number; bikeKg: number; mass: number; customFtp: number | null };
+const PROFILES_BY_EMAIL: Record<string, { riderKg: number; bikeKg: number }> = {
+  'florian.calabrese@gmail.com': { riderKg: 66, bikeKg: 8.18 },
 };
-// Sensible default for first-time users: 70kg rider, 9kg bike.
-const DEFAULT_PROFILE: Profile = { riderKg: 70, bikeKg: 9, mass: 79 };
+const DEFAULT_PROFILE = { riderKg: 70, bikeKg: 9 };
 
 // Legacy mapping for the JSON fallback (when a user has no Supabase rows).
 const EMAIL_TO_USER_SLUG: Record<string, string> = {
@@ -429,9 +433,31 @@ export async function GET() {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  const email   = session.user.email as string;
-  const userId  = session.user.id    as string;
-  const profile = PROFILES_BY_EMAIL[email] ?? DEFAULT_PROFILE;
+  const email  = session.user.email as string;
+  const userId = session.user.id    as string;
+
+  // Resolve the per-user profile: DB override > legacy hardcoded by
+  // email > global default. customFtp is null when the user hasn't set
+  // one; downstream code falls back to the derived FTP in that case.
+  type DbProfile = { rider_kg: number | null; bike_kg: number | null; custom_ftp: number | null };
+  let dbOverride: DbProfile | null = null;
+  try {
+    const { data } = await supabaseAdmin()
+      .schema('next_auth')
+      .from('users')
+      .select('rider_kg, bike_kg, custom_ftp')
+      .eq('id', userId)
+      .maybeSingle();
+    if (data) dbOverride = data as DbProfile;
+  } catch (err) {
+    // Non-fatal — fall through to legacy/default profile.
+    console.warn('[activities] profile lookup failed:', (err as Error).message);
+  }
+  const legacy = PROFILES_BY_EMAIL[email];
+  const riderKg   = dbOverride?.rider_kg ?? legacy?.riderKg ?? DEFAULT_PROFILE.riderKg;
+  const bikeKg    = dbOverride?.bike_kg  ?? legacy?.bikeKg  ?? DEFAULT_PROFILE.bikeKg;
+  const customFtp = dbOverride?.custom_ftp ?? null;
+  const profile: Profile = { riderKg, bikeKg, mass: riderKg + bikeKg, customFtp };
 
   // Prefer Supabase. Fall back to legacy JSON files if the user hasn't been
   // migrated yet (e.g., Helena before her first sign-in) — driven by the
@@ -452,8 +478,11 @@ export async function GET() {
   // Pass 1: power streams + bestEfforts per activity, using the user's mass.
   const enriched = raws.map(raw => ({ raw, ...computeStreamsAndBests(raw, profile.mass) }));
 
-  // Pass 2: derive FTP from best 20-min on non-assisted rides.
-  const ftp = deriveFtpFromBests(enriched);
+  // Pass 2: derive FTP from best 20-min on non-assisted rides — unless
+  // the user has set a custom FTP override in their settings, in which
+  // case we use that verbatim. Lets people lock in a measured value
+  // when their auto-derivation goes stale (e.g., after a long break).
+  const ftp = profile.customFtp ?? deriveFtpFromBests(enriched);
 
   // Pass 3: transform each activity with the dynamic FTP + profile.
   const activities = await Promise.all(

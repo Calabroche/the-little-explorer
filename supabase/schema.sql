@@ -58,10 +58,20 @@ create table if not exists next_auth.users (
   constraint athlete_unique  unique (athlete_id)
 );
 
--- Re-runnable migration for existing installs that ran the schema
--- before created_at was added.
+-- Re-runnable migrations for existing installs that ran the schema
+-- before these columns were added.
 alter table if exists next_auth.users
   add column if not exists created_at timestamp with time zone default now();
+-- Per-user training profile overrides. Default fallback ladder when
+-- these are null: PROFILES_BY_EMAIL (legacy hardcoded for Florian +
+-- Helena) → DEFAULT_PROFILE (70kg rider, 9kg bike). custom_ftp
+-- overrides the derived FTP that comes from best 20-min power.
+alter table if exists next_auth.users
+  add column if not exists rider_kg    numeric(5,2);
+alter table if exists next_auth.users
+  add column if not exists bike_kg     numeric(5,2);
+alter table if exists next_auth.users
+  add column if not exists custom_ftp  integer;
 
 grant all on table next_auth.users to postgres;
 grant all on table next_auth.users to service_role;

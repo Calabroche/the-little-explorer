@@ -624,6 +624,25 @@ function ProfileSection() {
         </button>
       )}
 
+      <a
+        href="/settings"
+        style={{
+          display: 'block',
+          textAlign: 'center',
+          padding: '8px 10px',
+          marginBottom: 8,
+          background: tokens.creamDark,
+          border: `1px solid ${tokens.creamBorder}`,
+          borderRadius: 3,
+          color: tokens.inkMid,
+          fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 600,
+          letterSpacing: '0.04em',
+          textDecoration: 'none',
+        }}
+      >
+        ⚙ PARAMÈTRES
+      </a>
+
       {isAdminEmail(u.email) && (
         <a
           href="/admin"
