@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { Activity, tokens } from './tokens';
 import { Label, useIsMobile } from './ui';
 import { useT, formatDateLocale } from '@/i18n';
@@ -82,12 +83,27 @@ export function PersonalRecords({ activities, sport }: {
     borderRadius: 4, padding: 24, marginBottom: 24,
   };
 
+  // Memoised — both helpers sweep through 1Hz GPS streams of every
+  // matching activity, which is O(N × stream-length). Without memo
+  // they ran on every parent re-render (sidebar toggles, language
+  // switches, hover state in siblings). Hooks MUST be called above
+  // any early return so the hook order stays stable.
+  const records = useMemo(
+    () => sport === 'cycling' ? pickBestPower(activities) : [],
+    [activities, sport],
+  );
+  const paces   = useMemo(
+    () => sport === 'running'
+      ? RUN_DISTANCES.map(d => pickBestPace(activities, d)).filter((p): p is PaceP => p !== null)
+      : [],
+    [activities, sport],
+  );
+
   // Records only make sense for cycling (power) and running (pace). For other
   // sports we don't have a comparable benchmark — skip the section entirely.
   if (sport !== 'cycling' && sport !== 'running') return null;
 
   if (sport === 'cycling') {
-    const records = pickBestPower(activities);
     return (
       <div style={CARD}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
@@ -122,8 +138,7 @@ export function PersonalRecords({ activities, sport }: {
     );
   }
 
-  // Running
-  const paces = RUN_DISTANCES.map(d => pickBestPace(activities, d)).filter((p): p is PaceP => p !== null);
+  // Running (paces is memoised above)
   return (
     <div style={CARD}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>

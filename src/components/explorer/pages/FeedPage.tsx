@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
@@ -47,51 +48,69 @@ function formatPredictedDate(iso: string) {
 function TrainingProgram({ activities }: { activities: Activity[] }) {
   const isMobile = useIsMobile();
   const { t } = useT();
-  const sorted = [...activities].sort((a, b) => new Date(b.rawDate).getTime() - new Date(a.rawDate).getTime());
-  const last5  = sorted.slice(0, 5);
-  const last10 = sorted.slice(0, 10);
-  if (last5.length < 2) return null;
 
-  // Gap moyen + prochaine sortie : basés sur les 5 dernières (tendance récente).
-  const gaps: number[] = [];
-  for (let i = 0; i < last5.length - 1; i++)
-    gaps.push(daysBetween(last5[i].rawDate, last5[i + 1].rawDate));
-  const avgGap = Math.round(gaps.reduce((s, v) => s + v, 0) / gaps.length);
+  // Memoised — was 6+ reduce()s, 2 sorts and a chartData rebuild on
+  // every render of this component (which is mounted on the feed
+  // page, the most-visited surface). Now recomputes only when
+  // activities actually change.
+  const stats = useMemo(() => {
+    const sorted = [...activities].sort((a, b) => new Date(b.rawDate).getTime() - new Date(a.rawDate).getTime());
+    const last5  = sorted.slice(0, 5);
+    const last10 = sorted.slice(0, 10);
+
+    const gaps: number[] = [];
+    for (let i = 0; i < last5.length - 1; i++)
+      gaps.push(daysBetween(last5[i].rawDate, last5[i + 1].rawDate));
+    const avgGap = gaps.length ? Math.round(gaps.reduce((s, v) => s + v, 0) / gaps.length) : 0;
+
+    const tssValues10 = last10.map(a => a.tss).filter((t): t is number => t != null);
+    const avgTSS10    = tssValues10.length ? Math.round(tssValues10.reduce((s, v) => s + v, 0) / tssValues10.length) : null;
+
+    const tssValuesAll = activities.map(a => a.tss).filter((t): t is number => t != null);
+    const avgTSSAll    = tssValuesAll.length ? Math.round(tssValuesAll.reduce((s, v) => s + v, 0) / tssValuesAll.length) : null;
+    const powerValuesAll = activities.map(a => a.avg_power).filter((p): p is number => p != null);
+    const avgPowerAll    = powerValuesAll.length ? Math.round(powerValuesAll.reduce((s, v) => s + v, 0) / powerValuesAll.length) : null;
+
+    const chartData = last10.slice().reverse().map(a => {
+      const d = new Date(a.rawDate);
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      return {
+        date:     `${dd}/${mm}`,
+        dateFull: d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'long' }),
+        tss:      a.tss ?? 0,
+        power:    a.avg_power ?? null,
+        distance: a.distance,
+        elev:     a.elevation,
+      };
+    });
+
+    const tssValues5 = last5.map(a => a.tss).filter((t): t is number => t != null);
+    const avgTSS5    = tssValues5.length ? Math.round(tssValues5.reduce((s, v) => s + v, 0) / tssValues5.length) : null;
+    const lastTSS    = tssValues5[0] ?? null;
+    const targetTSS  = avgTSS5 ? Math.round(avgTSS5 * 1.1) : null;
+
+    const avgDist = last5.length ? Math.round(last5.reduce((s, a) => s + a.distance, 0) / last5.length) : 0;
+    const avgElev = last5.length ? Math.round(last5.reduce((s, a) => s + a.elevation, 0) / last5.length) : 0;
+
+    return {
+      last5, last10, avgGap,
+      avgTSS10, avgTSSAll, avgPowerAll,
+      chartData, avgTSS5, lastTSS, targetTSS,
+      avgDist, avgElev,
+    };
+  }, [activities]);
+
+  if (stats.last5.length < 2) return null;
+
+  // Destructure for downstream JSX — keeps the diff minimal vs the
+  // pre-memo version.
+  const { last5, last10, avgGap, avgTSS10, avgTSSAll, avgPowerAll,
+          chartData, avgTSS5, lastTSS, targetTSS, avgDist, avgElev } = stats;
 
   const nextDate = new Date(last5[0].rawDate);
   nextDate.setDate(nextDate.getDate() + avgGap);
   const daysUntil = daysBetween(nextDate.toISOString(), new Date().toISOString());
-
-  // TSS chart : 10 sorties.
-  const tssValues10 = last10.map(a => a.tss).filter((t): t is number => t != null);
-  const avgTSS10    = tssValues10.length ? Math.round(tssValues10.reduce((s, v) => s + v, 0) / tssValues10.length) : null;
-
-  // Moyennes sur TOUTES les sorties (référence sur le graph).
-  const tssValuesAll = activities.map(a => a.tss).filter((t): t is number => t != null);
-  const avgTSSAll    = tssValuesAll.length ? Math.round(tssValuesAll.reduce((s, v) => s + v, 0) / tssValuesAll.length) : null;
-  const powerValuesAll = activities.map(a => a.avg_power).filter((p): p is number => p != null);
-  const avgPowerAll    = powerValuesAll.length ? Math.round(powerValuesAll.reduce((s, v) => s + v, 0) / powerValuesAll.length) : null;
-
-  // Données du graphique : ordre chronologique (ancien → récent).
-  const chartData = last10.slice().reverse().map(a => {
-    const d = new Date(a.rawDate);
-    const dd = String(d.getDate()).padStart(2, '0');
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    return {
-      date:     `${dd}/${mm}`,
-      dateFull: d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'long' }),
-      tss:      a.tss ?? 0,
-      power:    a.avg_power ?? null,
-      distance: a.distance,
-      elev:     a.elevation,
-    };
-  });
-
-  // Conseils + TSS cible : basés sur les 5 dernières (tendance récente).
-  const tssValues5 = last5.map(a => a.tss).filter((t): t is number => t != null);
-  const avgTSS5    = tssValues5.length ? Math.round(tssValues5.reduce((s, v) => s + v, 0) / tssValues5.length) : null;
-  const lastTSS    = tssValues5[0] ?? null;
-  const targetTSS  = avgTSS5 ? Math.round(avgTSS5 * 1.1) : null;
 
   let advice = t('program.adviceDefault');
   if (lastTSS && avgTSS5) {
@@ -99,9 +118,6 @@ function TrainingProgram({ activities }: { activities: Activity[] }) {
     else if (lastTSS < avgTSS5 * 0.7) advice = t('program.adviceLight');
     else if (avgTSS5 > 80)            advice = t('program.adviceHigh');
   }
-
-  const avgDist = Math.round(last5.reduce((s, a) => s + a.distance, 0) / last5.length);
-  const avgElev = Math.round(last5.reduce((s, a) => s + a.elevation, 0) / last5.length);
 
   const CARD: React.CSSProperties = {
     background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
@@ -321,20 +337,29 @@ function Stat({ label, value, unit, color }: { label: string; value: string | nu
 
 function Last5Stats({ activities }: { activities: Activity[] }) {
   const { t } = useT();
-  const sorted = [...activities].sort((a, b) => new Date(b.rawDate).getTime() - new Date(a.rawDate).getTime());
-  const last5  = sorted.slice(0, 5);
-  if (last5.length < 2) return null;
 
-  const dur      = formatAvgDuration(last5);
-  const dist     = avg(last5.map(a => a.distance));
-  const elev     = avgInt(last5.map(a => a.elevation));
-  const speed    = avg(last5.map(a => a.speed));
-  const hr       = avgInt(last5.map(a => a.avg_hr));
-  const np       = avgInt(last5.map(a => a.np));
-  const avgPower = avgInt(last5.map(a => a.avg_power));
-  const tss      = avgInt(last5.map(a => a.tss));
-  const wkg      = avg(last5.map(a => a.wkg));
-  const cal      = avgInt(last5.map(a => a.calories));
+  // Memoised — 10 .map + .avg* passes per render of the feed. Now
+  // recomputes only when activities change.
+  const s = useMemo(() => {
+    const sorted = [...activities].sort((a, b) => new Date(b.rawDate).getTime() - new Date(a.rawDate).getTime());
+    const last5  = sorted.slice(0, 5);
+    return {
+      last5,
+      dur:      formatAvgDuration(last5),
+      dist:     avg(last5.map(a => a.distance)),
+      elev:     avgInt(last5.map(a => a.elevation)),
+      speed:    avg(last5.map(a => a.speed)),
+      hr:       avgInt(last5.map(a => a.avg_hr)),
+      np:       avgInt(last5.map(a => a.np)),
+      avgPower: avgInt(last5.map(a => a.avg_power)),
+      tss:      avgInt(last5.map(a => a.tss)),
+      wkg:      avg(last5.map(a => a.wkg)),
+      cal:      avgInt(last5.map(a => a.calories)),
+    };
+  }, [activities]);
+
+  if (s.last5.length < 2) return null;
+  const { last5, dur, dist, elev, speed, hr, np, avgPower, tss, wkg, cal } = s;
 
   const CARD: React.CSSProperties = {
     background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
