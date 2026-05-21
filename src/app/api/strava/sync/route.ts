@@ -226,14 +226,47 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, count: 0 });
   }
 
-  // ── 5. Upsert into public.activities ──
-  const { error: upsertErr } = await supabaseAdmin()
+  // ── 5. INSERT-ONLY: never overwrite existing rows ──────────────────────
+  //
+  // The background GH Actions sync (scripts/sync-strava-supabase.mjs) is
+  // the only path that can write FULL payloads with streams (gps, hr,
+  // altitude, speed, distance, time). This endpoint only has activity
+  // SUMMARIES — its payload stub has empty arrays for every stream.
+  //
+  // Previously we ran a vanilla `upsert(rows, { onConflict: 'id' })`
+  // which clobbered any streamed payloads each time the user opened
+  // the iOS app and triggered the auto-sync. Result: maps and charts
+  // vanished on every Feed load.
+  //
+  // Fix: filter out IDs that are already in the table and only insert
+  // the genuinely new ones. The cron will fill in streams for those
+  // newcomers on its next pass. Existing rows are left untouched, so
+  // their already-fetched streams survive.
+  const ids = rows.map(r => r.id);
+  const { data: existingRows, error: existErr } = await supabaseAdmin()
     .from('activities')
-    .upsert(rows, { onConflict: 'id' });
-  if (upsertErr) {
-    console.error('[strava-sync] upsert failed:', upsertErr.message);
-    return NextResponse.json({ error: 'db_upsert_failed', detail: upsertErr.message }, { status: 500 });
+    .select('id')
+    .in('id', ids);
+  if (existErr) {
+    console.error('[strava-sync] existing-id query failed:', existErr.message);
+    return NextResponse.json({ error: 'db_query_failed', detail: existErr.message }, { status: 500 });
+  }
+  const existingIds = new Set((existingRows ?? []).map(r => Number(r.id)));
+  const newRows = rows.filter(r => !existingIds.has(Number(r.id)));
+
+  if (newRows.length === 0) {
+    // Nothing actually new — the cron has already inserted everything
+    // we know about (with streams), so we deliberately do nothing.
+    return NextResponse.json({ ok: true, count: 0 });
   }
 
-  return NextResponse.json({ ok: true, count: rows.length });
+  const { error: insertErr } = await supabaseAdmin()
+    .from('activities')
+    .insert(newRows);
+  if (insertErr) {
+    console.error('[strava-sync] insert failed:', insertErr.message);
+    return NextResponse.json({ error: 'db_insert_failed', detail: insertErr.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true, count: newRows.length });
 }
