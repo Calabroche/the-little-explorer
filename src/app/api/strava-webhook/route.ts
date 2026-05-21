@@ -14,18 +14,22 @@ import { NextRequest, NextResponse } from 'next/server';
 //   POST — Live event delivery (activity create / update / delete, athlete
 //          deauthorization). Fires within seconds of a Strava event. Strava
 //          retries with backoff if we don't 200 within ~2 s, so we MUST
-//          respond fast and offload the actual sync work to GitHub Actions
-//          via workflow_dispatch (fire-and-forget).
+//          respond fast and offload the actual sync work to a separate
+//          Vercel function (/api/strava/sync-one) via fire-and-forget fetch.
+//
+//          Previously this dispatched a GitHub Actions workflow_dispatch,
+//          which added 30-90 s of queue + boot lag. The new direct path
+//          gets the activity into Supabase within ~5 s of the Strava
+//          upload event. The 15-min cron is still there as a backstop in
+//          case the webhook delivery itself fails.
 //
 // Env required (set on Vercel):
-//   STRAVA_VERIFY_TOKEN   — random string we share with Strava at subscribe time
-//   GITHUB_PAT_DISPATCH   — GitHub token with `actions:write` on this repo
-//   GITHUB_REPO           — defaults to "Calabroche/the-little-explorer"
+//   STRAVA_VERIFY_TOKEN     — random string shared with Strava at subscribe time
+//   STRAVA_WEBHOOK_SECRET   — shared secret with /api/strava/sync-one
+//   VERCEL_URL              — set by Vercel automatically (no trailing slash)
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
-
-const REPO = process.env.GITHUB_REPO || 'Calabroche/the-little-explorer';
 
 // ── GET: Strava subscription handshake ─────────────────────────────────────
 export async function GET(req: NextRequest) {
@@ -76,10 +80,11 @@ export async function POST(req: NextRequest) {
     && (event.aspect_type === 'create' || event.aspect_type === 'update');
 
   if (isActivityEvent) {
-    // Fire-and-forget: Strava only allows ~2 s before retrying. The await
-    // chain is intentionally NOT awaited so the response goes out fast.
-    // Errors are logged but never break the ack.
-    void dispatchSyncWorkflow(event.owner_id ?? 0).catch(err => {
+    // Fire-and-forget: Strava only allows ~2 s before retrying. The
+    // sync-one fetch is intentionally NOT awaited so this response goes
+    // out fast. The downstream function still runs to completion on
+    // Vercel because it's a separate function invocation.
+    void dispatchSyncOne(event.owner_id ?? 0, event.object_id ?? 0, req).catch(err => {
       console.error('[strava-webhook] dispatch failed:', err);
     });
   }
@@ -96,31 +101,34 @@ function constantTimeEq(a: string, b: string): boolean {
   return diff === 0;
 }
 
-async function dispatchSyncWorkflow(ownerId: number): Promise<void> {
-  const pat = process.env.GITHUB_PAT_DISPATCH;
-  if (!pat) {
-    console.error('[strava-webhook] GITHUB_PAT_DISPATCH not set');
+async function dispatchSyncOne(ownerId: number, activityId: number, req: NextRequest): Promise<void> {
+  const secret = process.env.STRAVA_WEBHOOK_SECRET;
+  if (!secret) {
+    console.error('[strava-webhook] STRAVA_WEBHOOK_SECRET not set');
     return;
   }
-  const url = `https://api.github.com/repos/${REPO}/actions/workflows/strava-sync.yml/dispatches`;
+
+  // Build an absolute URL to our own /api/strava/sync-one. On Vercel we
+  // have VERCEL_URL ("my-app-abc.vercel.app", no scheme). Locally we
+  // fall back to the incoming request's origin. Either way the next
+  // fetch is a separate function invocation that survives this handler
+  // returning.
+  const host = process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : req.nextUrl.origin;
+  const url = `${host}/api/strava/sync-one`;
+
   const res = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${pat}`,
-      'Accept':        'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-      'Content-Type':  'application/json',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      ref: 'master',
-      // Pass the triggering Strava athlete id as a workflow input so the
-      // run can later be filtered by user. (Currently the workflow runs
-      // the full matrix, but the input is harmless and useful for logs.)
-      inputs: { strava_owner_id: String(ownerId) },
+      athleteId:  ownerId,
+      activityId,
+      secret,
     }),
   });
   if (!res.ok) {
     const txt = await res.text();
-    console.error(`[strava-webhook] github ${res.status}: ${txt.slice(0, 200)}`);
+    console.error(`[strava-webhook] sync-one ${res.status}: ${txt.slice(0, 200)}`);
   }
 }
