@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import { useSession, signIn } from 'next-auth/react';
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
@@ -13,6 +14,105 @@ import { PersonalRecords } from '../PersonalRecords';
 import { RunPaceZones } from '../RunPaceZones';
 import type { SportId } from '../Sidebar';
 import { useT } from '@/i18n';
+
+// ── Empty state ───────────────────────────────────────────────────────────────
+// Rendered when the user has 0 activities. Two paths:
+//   - Strava not linked yet (athleteId === null) → big invite to connect,
+//     with the quota-limit disclaimer so they understand it might block.
+//   - Strava linked but feed empty (athleteId set) → "your sync is fresh,
+//     try Re-syncer Strava or wait for the next cron pass."
+//
+// Both paths bypass the rest of the feed UI (charts, widgets, goals…)
+// which all look broken on an empty data set.
+function EmptyFeedState({ athleteId, displayName }: { athleteId: number | null; displayName: string }) {
+  const isMobile = useIsMobile();
+  return (
+    <div style={{
+      maxWidth: 720,
+      margin: '40px auto',
+      padding: isMobile ? '28px 22px' : '40px',
+      background: tokens.surface,
+      border: `1px solid ${tokens.creamBorder}`,
+      borderRadius: 4,
+      textAlign: 'left',
+    }}>
+      <SectionTag num={1} title="BIENVENUE" />
+      <h2 style={{
+        fontFamily: "'Playfair Display'",
+        fontSize: isMobile ? 26 : 34,
+        fontWeight: 800,
+        color: tokens.ink,
+        lineHeight: 1.15,
+        margin: '8px 0 14px',
+      }}>
+        Salut {displayName} !<br />
+        <em style={{ color: tokens.terra, fontStyle: 'italic', fontWeight: 700 }}>
+          {athleteId ? 'Synchronisation en cours…' : 'Ton compte est créé.'}
+        </em>
+      </h2>
+
+      {athleteId == null ? (
+        <>
+          <p style={{ fontFamily: "'Space Grotesk'", fontSize: 14, color: tokens.inkMid, lineHeight: 1.6, marginBottom: 16 }}>
+            Pour voir tes sorties, calendrier d&apos;activités, records personnels
+            et objectifs, il faut lier ton compte Strava à ton profil.
+          </p>
+
+          {/* The quota disclaimer — same wording as /login so users
+              who arrive here from email/share recognise the situation. */}
+          <div style={{
+            padding: '12px 14px',
+            marginBottom: 20,
+            background: '#FFF4E6',
+            border: '1px solid #FFD8A6',
+            borderRadius: 4,
+            fontFamily: "'Space Grotesk'",
+            fontSize: 12,
+            color: '#8A4A00',
+            lineHeight: 1.55,
+          }}>
+            ℹ️ <strong>Note importante</strong> — l&apos;API Strava plafonne
+            actuellement l&apos;app à <strong>1 athlète connecté</strong>.
+            Florian (le dev) a demandé l&apos;augmentation à Strava et attend
+            la validation. Si tu cliques le bouton ci-dessous et que ça
+            renvoie une erreur 403, c&apos;est normal — c&apos;est juste
+            que Strava n&apos;a pas encore activé ton accès.
+            <br /><br />
+            En attendant, tu peux explorer l&apos;app et tes données
+            apparaîtront dès que Strava t&apos;ajoute. Pour précipiter
+            les choses, ping Florian directement (florian.calabrese@gmail.com).
+          </div>
+
+          <button
+            onClick={() => signIn('strava', { callbackUrl: '/' })}
+            style={{
+              padding: '12px 22px',
+              background: '#FC4C02',
+              border: '1px solid #FC4C02',
+              borderRadius: 4,
+              color: '#fff',
+              fontFamily: "'Space Grotesk'",
+              fontSize: 13,
+              fontWeight: 700,
+              letterSpacing: '0.04em',
+              cursor: 'pointer',
+            }}
+          >
+            + CONNECTER STRAVA
+          </button>
+        </>
+      ) : (
+        <p style={{ fontFamily: "'Space Grotesk'", fontSize: 14, color: tokens.inkMid, lineHeight: 1.6 }}>
+          Ton Strava est lié mais on n&apos;a pas encore récupéré tes
+          sorties. Si rien n&apos;apparaît dans 1-2 minutes, clique
+          <strong> ↻ RE-SYNCER STRAVA </strong>
+          dans la sidebar (bloc Profil en bas à gauche) — ça force la
+          synchronisation immédiate.
+        </p>
+      )}
+    </div>
+  );
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function TssChartTooltip({ active, payload }: any) {
@@ -426,6 +526,24 @@ interface Props {
 export function FeedPage({ activities, stats, sport, onSelect }: Props) {
   const isMobile = useIsMobile();
   const { t } = useT();
+  const { data: session } = useSession();
+
+  // Empty state — used when a user has just signed up but Strava isn't
+  // linked yet (or the sync hasn't run). All the downstream widgets
+  // (charts, calendar, records, training program) look broken on an
+  // empty data set, so we show a focused onboarding card instead.
+  if (activities.length === 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const u = session?.user as any;
+    const firstName = (u?.name as string | undefined)?.split(/\s+/)[0] ?? 'à toi';
+    const athleteId = (u?.athleteId as number | null | undefined) ?? null;
+    return (
+      <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '20px 16px' : '32px 40px' }}>
+        <EmptyFeedState athleteId={athleteId} displayName={firstName} />
+      </div>
+    );
+  }
+
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '20px 16px' : '32px 40px' }}>
       <SectionTag num={1} title={t('feed.sectionTag')} />

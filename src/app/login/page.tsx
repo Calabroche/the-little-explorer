@@ -207,13 +207,33 @@ export default function LoginPage() {
               fontFamily: "'Space Grotesk'",
               fontSize:   11,
               color:      tokens.inkLight,
-              margin:     '0 0 24px',
+              margin:     '0 0 16px',
               lineHeight: 1.55,
               fontStyle:  'italic',
             }}>
               Première fois ici ? Clique l&apos;un des boutons ci-dessous —
               ton compte sera créé automatiquement.
             </p>
+
+            {/* Strava quota notice — visible until Strava grants the
+                multi-athlete quota increase. Removable once they reply. */}
+            <div style={{
+              padding:      '10px 12px',
+              marginBottom: 24,
+              background:   '#FFF4E6',
+              border:       '1px solid #FFD8A6',
+              borderRadius: 4,
+              fontFamily:   "'Space Grotesk'",
+              fontSize:     11,
+              color:        '#8A4A00',
+              lineHeight:   1.55,
+            }}>
+              ℹ️ <strong>Accès Strava temporairement limité</strong> — l&apos;API
+              Strava plafonne l&apos;app à 1 athlète connecté pour l&apos;instant.
+              On a demandé l&apos;augmentation à Strava, en attente de réponse.
+              Si tu n&apos;es pas Florian : signe en Google pour le moment,
+              il activera ton Strava dès que possible.
+            </div>
 
             {error && (
               <div style={{
