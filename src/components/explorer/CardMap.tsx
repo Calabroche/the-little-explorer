@@ -260,26 +260,37 @@ export function CardMap({
     return computeGradient(activity.altitude, activity.distance_m, len);
   }, [activity]);
 
-  if (!gps || gps.length < 2) return <div style={{ height, background: '#f0ece4', borderRadius: 4 }} />;
+  // CRITICAL perf: every render of CardMap was creating a fresh
+  // `positions` array reference, which triggered FitBounds' useEffect
+  // (deps: [map, positions]) on every hover frame → map.fitBounds()
+  // re-fit on EVERY mousemove → camera thrash + repaint storm. Memo
+  // the positions and everything derived from them so refs stay
+  // stable while hover state churns.
+  const positions = useMemo<[number, number][]>(() => {
+    if (!gps || gps.length < 2) return [];
+    return downsample(gps, 200).map(p => [p.lat, p.lng] as [number, number]);
+  }, [gps]);
 
-  const sampled   = downsample(gps, 200);
-  const positions = sampled.map(p => [p.lat, p.lng] as [number, number]);
-  const center    = positions[Math.floor(positions.length / 2)];
-  const segments  = speedKmh && speedKmh.length > 1
-    ? buildSegments(positions, speedKmh, 150)
-    : null;
+  const segments = useMemo(() => {
+    if (positions.length < 2) return null;
+    if (!speedKmh || speedKmh.length < 2) return null;
+    return buildSegments(positions, speedKmh, 150);
+  }, [positions, speedKmh]);
 
   // Hover overlay needs gradient sampled at the SAME index space as
   // `positions` (downsampled). Re-sample gradient onto the downsampled
   // grid so positions[i] ↔ gradientForHover[i].
   const gradientForHover = useMemo(() => {
-    if (!gradient) return null;
+    if (!gradient || positions.length < 2) return null;
     return positions.map((_, i) => {
       const srcIdx = Math.round((i / (positions.length - 1)) * (gradient.length - 1));
       return gradient[Math.max(0, Math.min(srcIdx, gradient.length - 1))];
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gradient, positions.length]);
+  }, [gradient, positions]);
+
+  if (positions.length < 2) return <div style={{ height, background: '#f0ece4', borderRadius: 4 }} />;
+
+  const center = positions[Math.floor(positions.length / 2)];
 
   // Clamp tooltip position so it never goes off-screen. With a 180×~xxx
   // map and a ~150px tooltip, hovering near a corner would otherwise
