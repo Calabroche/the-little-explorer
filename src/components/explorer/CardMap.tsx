@@ -3,11 +3,13 @@
 import { useEffect, useState } from 'react';
 import { MapContainer, Polyline, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { useBasemap, BasemapTiles } from './MapBasemap';
+import { useBasemap, BasemapTiles, BasemapToggle } from './MapBasemap';
 
-// CardMap is a tiny embedded preview inside ActivityCard — too small
-// to show a Plan/Sat toggle. It just follows whatever the user picked
-// on the larger maps (via the shared `useBasemap` localStorage hook).
+// CardMap is an embedded preview inside each ActivityCard on the feed.
+// It does carry a compact Plan/Sat toggle (top-right of the preview)
+// because users land here first — flipping a single card from the feed
+// also updates the global preference via `useBasemap`, so the activity
+// detail map opens in the same style afterwards.
 
 function useDarkMode() {
   const [dark, setDark] = useState(false);
@@ -74,7 +76,7 @@ export function CardMap({
   speedKmh?: number[];
 }) {
   const dark = useDarkMode();
-  const [basemap] = useBasemap();
+  const [basemap, setBasemap] = useBasemap();
   if (!gps || gps.length < 2) return <div style={{ height, background: '#f0ece4', borderRadius: 4 }} />;
 
   const sampled   = downsample(gps, 200);
@@ -85,25 +87,28 @@ export function CardMap({
     : null;
 
   return (
-    <MapContainer
-      center={center}
-      zoom={12}
-      style={{ height, width: '100%' }}
-      dragging={false}
-      zoomControl={false}
-      scrollWheelZoom={false}
-      doubleClickZoom={false}
-      touchZoom={false}
-      attributionControl={false}
-    >
-      <BasemapTiles basemap={basemap} darkMode={dark} />
-      {segments
-        ? segments.map((seg, i) => (
-            <Polyline key={i} positions={seg.pts} pathOptions={{ color: seg.color, weight: 3, opacity: 0.95 }} />
-          ))
-        : <Polyline positions={positions} pathOptions={{ color, weight: 3, opacity: 0.95 }} />
-      }
-      <FitBounds positions={positions} />
-    </MapContainer>
+    <div style={{ position: 'relative', height, width: '100%' }}>
+      <MapContainer
+        center={center}
+        zoom={12}
+        style={{ height: '100%', width: '100%' }}
+        dragging={false}
+        zoomControl={false}
+        scrollWheelZoom={false}
+        doubleClickZoom={false}
+        touchZoom={false}
+        attributionControl={false}
+      >
+        <BasemapTiles basemap={basemap} darkMode={dark} />
+        {segments
+          ? segments.map((seg, i) => (
+              <Polyline key={i} positions={seg.pts} pathOptions={{ color: seg.color, weight: 3, opacity: 0.95 }} />
+            ))
+          : <Polyline positions={positions} pathOptions={{ color, weight: 3, opacity: 0.95 }} />
+        }
+        <FitBounds positions={positions} />
+      </MapContainer>
+      <BasemapToggle basemap={basemap} onChange={setBasemap} compact />
+    </div>
   );
 }

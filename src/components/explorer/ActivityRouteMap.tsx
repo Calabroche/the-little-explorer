@@ -182,7 +182,11 @@ export function ActivityRouteMap({ activity }: { activity: Activity }) {
       <MapContainer
         center={center}
         zoom={12}
-        style={{ height: 540, width: '100%', borderRadius: 4 }}
+        // 540px was tight when looking at a long ride — bumped to 810
+        // (≈1.5×) per Florian's "agrandi de 0.5x" feedback. Visual
+        // breathing room without pushing the elevation/HR charts
+        // entirely below the fold.
+        style={{ height: 810, width: '100%', borderRadius: 4 }}
         scrollWheelZoom={false}
       >
         <BasemapTiles basemap={basemap} darkMode={dark} />

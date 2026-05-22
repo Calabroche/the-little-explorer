@@ -327,15 +327,17 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
         paddingBottom: 'env(safe-area-inset-bottom)',
       }}>
         {/* ── Top toggle strip ──────────────────────────────────────
-            Sport + Lang on a single line. Dark mode is a small icon
-            button on the right. The UserToggle that used to live here
-            (Florian/Helena switch) is gone — multi-user auth means
-            each session sees only their own data. */}
+            Profile avatar (links to /profil) + Sport + Lang + Dark.
+            The avatar is the mobile equivalent of the desktop
+            sidebar's ProfileSection — same destination data, just
+            on a separate route since the bottom-bar layout has no
+            room for the full profile card. */}
         <div style={{
           padding: '6px 8px',
           borderBottom: `1px solid ${tokens.creamBorder}`,
           display: 'flex', gap: 6, alignItems: 'center',
         }}>
+          <MobileProfileAvatar />
           <div style={{ flex: '1 1 0%', minWidth: 0 }}><SportToggle sport={sport} onChange={onSportChange} available={availableSports} compact /></div>
           <div style={{ flex: '0 0 auto' }}><LangToggle lang={lang} onChange={setLang} compact /></div>
           <button
@@ -684,5 +686,44 @@ function ProfileSection() {
         SE DÉCONNECTER
       </button>
     </div>
+  );
+}
+
+/**
+ * Mobile-only avatar button in the bottom-bar top strip. Tapping it
+ * navigates to /profil where the user gets the full profile UI
+ * (re-sync, settings, admin, sign out) — mirroring the iOS Profile
+ * tab. On desktop the sidebar already shows the ProfileSection card
+ * inline, so this component is only rendered from the mobile branch.
+ */
+function MobileProfileAvatar() {
+  const { data: session } = useSession();
+  if (!session?.user) {
+    // Not signed in (shouldn't normally happen since the middleware
+    // gates everything except /login + /privacy, but defensive).
+    return null;
+  }
+  const u = session.user;
+  const initials = (u.name || u.email || '?')
+    .split(/\s+/).map(s => s[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
+  return (
+    <a
+      href="/profil"
+      aria-label="Profil"
+      style={{
+        flex: '0 0 auto',
+        width: 32, height: 32, borderRadius: '50%',
+        background: tokens.terra, color: '#fff',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 700,
+        textDecoration: 'none', flexShrink: 0,
+        overflow: 'hidden',
+      }}
+    >
+      {u.image ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={u.image} alt="" width={32} height={32} style={{ borderRadius: '50%' }} />
+      ) : initials}
+    </a>
   );
 }
