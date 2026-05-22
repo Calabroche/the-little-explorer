@@ -118,18 +118,39 @@ interface HoverData {
 }
 
 /**
+ * Look up a value in `arr` by the *ratio* of the hover index inside
+ * the downsampled `positions` array. `positions` has been downsampled
+ * to ~200 points for rendering speed, but `activity.distance_m`,
+ * `heartrate`, etc. are full-resolution (often 1000+ samples) — so
+ * `arr[hoverIdx]` would return data from the WRONG km. Mapping by
+ * ratio fixes it: positions[i] is at fraction i/(L_pos-1) of the
+ * route, so the corresponding stream sample is at the same fraction
+ * of the stream.
+ *
+ * BUG previously: looked up by absolute index → hovering at km 20 of
+ * a 50km ride showed km 0.17 values, etc.
+ */
+function valueAtRatio<T>(arr: T[] | undefined | null, hoverIdx: number, posLen: number): T | null {
+  if (!arr || arr.length === 0 || posLen < 2) return null;
+  const ratio  = hoverIdx / (posLen - 1);
+  const srcIdx = Math.round(ratio * (arr.length - 1));
+  return arr[Math.max(0, Math.min(srcIdx, arr.length - 1))];
+}
+
+/**
  * Invisible-thick polyline that captures mousemove to surface
  * the point-by-point metrics in a Popup. Mirrors the activity-detail
  * map's hover behaviour so users get the same insight directly from
  * the feed card without drilling into the ride.
  *
- * Uses the original full-resolution streams from the activity (not
- * the downsampled positions array used for rendering), so the index
- * lookup picks the closest GPS point at native sample rate.
+ * Stream lookup goes through `valueAtRatio` so the metrics for the
+ * hovered position always match the actual km along the route, even
+ * though `positions` has been downsampled for rendering.
  */
 function HoverOverlay({ activity, positions, gradient }: {
   activity: Activity;
   positions: [number, number][];
+  /** Already re-sampled to positions.length — same index space. */
   gradient: number[];
 }) {
   const [info, setInfo] = useState<HoverData | null>(null);
@@ -150,16 +171,22 @@ function HoverOverlay({ activity, positions, gradient }: {
       const d = Math.hypot(positions[i][0] - lat, positions[i][1] - lng);
       if (d < minDist) { minDist = d; nearestIdx = i; }
     }
-    const speedKmh = activity.speed_kmh?.[nearestIdx] ?? 0;
+
+    const L = positions.length;
+    const speedKmh = valueAtRatio(activity.speed_kmh, nearestIdx, L) ?? 0;
     const speedMs  = speedKmh / 3.6;
-    const grad     = gradient[nearestIdx] ?? 0;
+    const grad     = gradient[nearestIdx] ?? 0;  // already in positions index space
+    const distM    = valueAtRatio(activity.distance_m, nearestIdx, L) ?? 0;
+    const hr       = valueAtRatio(activity.heartrate,  nearestIdx, L);
+    const alt      = valueAtRatio(activity.altitude,   nearestIdx, L);
+
     setInfo({
       latlng:   { lat: e.latlng.lat, lng: e.latlng.lng },
-      dist:     +((activity.distance_m?.[nearestIdx] ?? 0) / 1000).toFixed(2),
-      hr:       activity.heartrate?.[nearestIdx] ?? null,
+      dist:     +(distM / 1000).toFixed(2),
+      hr:       hr ?? null,
       speed:    +speedKmh.toFixed(1),
       power:    calcPowerAt(speedMs, grad),
-      altitude: activity.altitude?.[nearestIdx] != null ? Math.round(activity.altitude![nearestIdx]) : null,
+      altitude: alt != null ? Math.round(alt) : null,
       gradient: +grad.toFixed(1),
     });
   };
