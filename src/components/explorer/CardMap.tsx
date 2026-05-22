@@ -292,31 +292,60 @@ export function CardMap({
 
   const center = positions[Math.floor(positions.length / 2)];
 
-  // Clamp tooltip position so it never goes off-screen. With a 180×~xxx
-  // map and a ~150px tooltip, hovering near a corner would otherwise
-  // clip; nudge it inward.
-  const tooltipStyle: React.CSSProperties | null = hover ? {
-    position:   'absolute',
-    left:       hover.x,
-    top:        hover.y - 14,
-    transform:  'translate(-50%, -100%)',
-    pointerEvents: 'none',
-    zIndex:     500,
-    background: tokens.surface,
-    color:      tokens.ink,
-    border:     `1px solid ${tokens.creamBorder}`,
-    borderRadius: 4,
-    padding:    '6px 8px',
-    fontFamily: "'Space Grotesk', sans-serif",
-    fontSize:   11,
-    lineHeight: 1.5,
-    minWidth:   140,
-    boxShadow:  '0 4px 14px rgba(0,0,0,0.18)',
-    whiteSpace: 'nowrap',
-  } : null;
+  // Tooltip positioning: flip below cursor when there's no room above,
+  // and clamp horizontally so the box never extends past the map's
+  // bounding box. With a 180px-tall card map the upper-half cursor
+  // positions used to clip the tooltip — now we just swap the anchor.
+  //
+  // Estimated dimensions (no measurement needed for this size — the
+  // tooltip is 5 fixed lines of 11pt + 6px padding, comfortably
+  // ~106px tall and ~150px wide). Numbers are close enough; the
+  // 6px margin on top/bottom prevents grazing the edge.
+  const TT_H = 110;
+  const TT_W = 160;
+  const M    = 6;
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  const tooltipStyle: React.CSSProperties | null = (() => {
+    if (!hover || !containerRef.current) return null;
+    const cw = containerRef.current.clientWidth;
+    const ch = containerRef.current.clientHeight;
+    const showBelow = hover.y < TT_H + M;
+    let left = hover.x;
+    left = Math.max(TT_W / 2 + M, Math.min(cw - TT_W / 2 - M, left));
+    let top: number;
+    let transform: string;
+    if (showBelow) {
+      top = Math.min(ch - TT_H - M, hover.y + 14);
+      transform = 'translate(-50%, 0)';
+    } else {
+      top = hover.y - 14;
+      transform = 'translate(-50%, -100%)';
+    }
+    return {
+      position:   'absolute',
+      left,
+      top,
+      transform,
+      pointerEvents: 'none',
+      zIndex:     500,
+      background: tokens.surface,
+      color:      tokens.ink,
+      border:     `1px solid ${tokens.creamBorder}`,
+      borderRadius: 4,
+      padding:    '6px 8px',
+      fontFamily: "'Space Grotesk', sans-serif",
+      fontSize:   11,
+      lineHeight: 1.5,
+      minWidth:   140,
+      maxWidth:   TT_W,
+      boxShadow:  '0 4px 14px rgba(0,0,0,0.18)',
+      whiteSpace: 'nowrap',
+    };
+  })();
 
   return (
-    <div style={{ position: 'relative', height, width: '100%' }}>
+    <div ref={containerRef} style={{ position: 'relative', height, width: '100%' }}>
       <MapContainer
         center={center}
         zoom={12}
