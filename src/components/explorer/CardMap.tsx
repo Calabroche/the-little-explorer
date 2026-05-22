@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { MapContainer, Polyline, Popup, useMap } from 'react-leaflet';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { MapContainer, Polyline, useMap } from 'react-leaflet';
 import type { LeafletMouseEvent } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Activity, tokens } from './tokens';
@@ -9,20 +9,20 @@ import { useBasemap, BasemapTiles, BasemapToggle } from './MapBasemap';
 
 // CardMap is an embedded preview inside each ActivityCard on the feed.
 // It does carry a compact Plan/Sat toggle (top-right of the preview)
-// because users land here first — flipping a single card from the feed
-// also updates the global preference via `useBasemap`, so the activity
-// detail map opens in the same style afterwards.
+// and a custom hover tooltip that shows per-point ride metrics (dist
+// along route, slope, FC, speed, power, altitude) — same data the
+// activity-detail map shows, so the user can scan rides without
+// drilling in.
 //
-// When the parent passes the full `activity` prop, we also enable the
-// hover tooltip used on the activity-detail map (distance along route,
-// slope, speed, HR, power, altitude) — the user wanted the same data
-// reachable directly from the feed without clicking into the ride.
+// Tooltip impl note: we render the tooltip as a plain absolute-positioned
+// React div outside the MapContainer instead of a Leaflet <Popup>. The
+// Popup approach (with autoPan) was causing visible lag — Leaflet
+// re-rendered the popup + ran an autoPan animation on every mousemove
+// (60+/sec). The custom div is purely React state + CSS — no Leaflet
+// re-render on hover, no animation thrash, smooth even with multiple
+// cards visible at once.
 
 // ── Physics for power estimation at a point ──────────────────────────────
-// Same constants as ActivityRouteMap (kept inline to avoid a circular
-// import — both files use these but neither owns them). 74 kg total mass
-// is a reasonable middle ground; we can wire user.settings.totalMass
-// later if hover power becomes mission-critical.
 const G    = 9.81;
 const CRR  = 0.004;
 const CDA  = 0.3;
@@ -105,13 +105,15 @@ function downsample(pts: { lat: number; lng: number }[], max: number) {
   return pts.filter((_, i) => i % step === 0);
 }
 
-// ── Hover tooltip overlay (rendered only when `activity` is passed) ──────
+// ── Hover info ───────────────────────────────────────────────────────────
 
-interface HoverData {
-  latlng:   { lat: number; lng: number };
+interface HoverInfo {
+  /** Container-relative x/y (CSS pixels) where the tooltip anchors. */
+  x: number;
+  y: number;
   dist:     number;
   hr:       number | null;
-  speed:    number | null;
+  speed:    number;
   power:    number;
   altitude: number | null;
   gradient: number;
@@ -119,16 +121,10 @@ interface HoverData {
 
 /**
  * Look up a value in `arr` by the *ratio* of the hover index inside
- * the downsampled `positions` array. `positions` has been downsampled
- * to ~200 points for rendering speed, but `activity.distance_m`,
- * `heartrate`, etc. are full-resolution (often 1000+ samples) — so
- * `arr[hoverIdx]` would return data from the WRONG km. Mapping by
- * ratio fixes it: positions[i] is at fraction i/(L_pos-1) of the
- * route, so the corresponding stream sample is at the same fraction
- * of the stream.
- *
- * BUG previously: looked up by absolute index → hovering at km 20 of
- * a 50km ride showed km 0.17 values, etc.
+ * the downsampled `positions` array. Maps fractional position → stream
+ * index so hovering at km 25 of a 50km ride returns sample ~50% of
+ * the way through the stream, regardless of whether streams are
+ * 200 or 2000 samples long.
  */
 function valueAtRatio<T>(arr: T[] | undefined | null, hoverIdx: number, posLen: number): T | null {
   if (!arr || arr.length === 0 || posLen < 2) return null;
@@ -138,108 +134,102 @@ function valueAtRatio<T>(arr: T[] | undefined | null, hoverIdx: number, posLen: 
 }
 
 /**
- * Invisible-thick polyline that captures mousemove to surface
- * the point-by-point metrics in a Popup. Mirrors the activity-detail
- * map's hover behaviour so users get the same insight directly from
- * the feed card without drilling into the ride.
+ * Lives inside MapContainer. Catches mousemove on an invisible thick
+ * polyline, computes the metrics at that position, pushes them to the
+ * parent via `onHover`. On mouseout, calls `onHover(null)` AND
+ * re-fits the map to the full route — so the camera returns to the
+ * initial framing the moment the cursor leaves.
  *
- * Stream lookup goes through `valueAtRatio` so the metrics for the
- * hovered position always match the actual km along the route, even
- * though `positions` has been downsampled for rendering.
+ * Throttled to requestAnimationFrame so a fast mouse doesn't queue
+ * 60+ React updates per second.
  */
-function HoverOverlay({ activity, positions, gradient }: {
+function HoverCatcher({
+  activity, positions, gradient, onHover,
+}: {
   activity: Activity;
   positions: [number, number][];
   /** Already re-sampled to positions.length — same index space. */
   gradient: number[];
+  onHover:  (info: HoverInfo | null) => void;
 }) {
-  const [info, setInfo] = useState<HoverData | null>(null);
   const map = useMap();
+  const rafRef = useRef<number | null>(null);
+  const lastIdxRef = useRef<number>(-1);
 
-  // When the cursor leaves the polyline, snap the camera back to the
-  // full-route bounds. Even with autoPan disabled on the popup (below),
-  // Leaflet sometimes nudges the view when popups open near the edge —
-  // an explicit fitBounds on mouseout makes the "return to initial
-  // framing" behaviour Florian asked for fully deterministic.
+  // Cleanup any pending rAF on unmount
+  useEffect(() => () => {
+    if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+  }, []);
+
+  const handleMouseMove = (e: LeafletMouseEvent) => {
+    // Throttle: collapse all mousemoves between two frames into one
+    // setInfo. Without this we'd re-render the tooltip 60+×/sec → jank.
+    if (rafRef.current != null) return;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      const { lat, lng } = e.latlng;
+
+      // Two-pass nearest-neighbour: coarse stride-5 sweep then a
+      // ±10-sample refinement. Avoids walking ~200 points on every
+      // mouse move while staying accurate at native resolution.
+      let nearestIdx = 0, minDist = Infinity;
+      for (let i = 0; i < positions.length; i += 5) {
+        const d = Math.hypot(positions[i][0] - lat, positions[i][1] - lng);
+        if (d < minDist) { minDist = d; nearestIdx = i; }
+      }
+      const s = Math.max(0, nearestIdx - 10);
+      const end = Math.min(positions.length - 1, nearestIdx + 10);
+      for (let i = s; i <= end; i++) {
+        const d = Math.hypot(positions[i][0] - lat, positions[i][1] - lng);
+        if (d < minDist) { minDist = d; nearestIdx = i; }
+      }
+
+      // Skip the update if we landed on the same point as last frame —
+      // tooltip content + position would be identical. Saves the React
+      // re-render entirely.
+      if (nearestIdx === lastIdxRef.current) return;
+      lastIdxRef.current = nearestIdx;
+
+      const L = positions.length;
+      const speedKmh = valueAtRatio(activity.speed_kmh, nearestIdx, L) ?? 0;
+      const speedMs  = speedKmh / 3.6;
+      const grad     = gradient[nearestIdx] ?? 0;
+      const distM    = valueAtRatio(activity.distance_m, nearestIdx, L) ?? 0;
+      const hr       = valueAtRatio(activity.heartrate,  nearestIdx, L);
+      const alt      = valueAtRatio(activity.altitude,   nearestIdx, L);
+
+      onHover({
+        x:        e.containerPoint.x,
+        y:        e.containerPoint.y,
+        dist:     +(distM / 1000).toFixed(2),
+        hr:       hr ?? null,
+        speed:    +speedKmh.toFixed(1),
+        power:    calcPowerAt(speedMs, grad),
+        altitude: alt != null ? Math.round(alt) : null,
+        gradient: +grad.toFixed(1),
+      });
+    });
+  };
+
   const handleMouseOut = () => {
-    setInfo(null);
+    // Cancel any in-flight rAF so a late frame doesn't repaint the
+    // tooltip right after we cleared it.
+    if (rafRef.current != null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+    lastIdxRef.current = -1;
+    onHover(null);
+    // Snap the camera back to the full route framing — undoes any
+    // tiny pan Leaflet did to keep the cursor's position in view.
     if (positions.length > 1) {
       map.fitBounds(positions, { padding: [6, 6], animate: true, duration: 0.25 });
     }
   };
 
-  const handleMouseMove = (e: LeafletMouseEvent) => {
-    const { lat, lng } = e.latlng;
-    // Two-pass nearest-neighbour: coarse stride-5 sweep then a
-    // ±10-sample refinement. Avoids walking ~1k points on every
-    // mouse move while staying accurate.
-    let nearestIdx = 0, minDist = Infinity;
-    for (let i = 0; i < positions.length; i += 5) {
-      const d = Math.hypot(positions[i][0] - lat, positions[i][1] - lng);
-      if (d < minDist) { minDist = d; nearestIdx = i; }
-    }
-    const s = Math.max(0, nearestIdx - 10);
-    const end = Math.min(positions.length - 1, nearestIdx + 10);
-    for (let i = s; i <= end; i++) {
-      const d = Math.hypot(positions[i][0] - lat, positions[i][1] - lng);
-      if (d < minDist) { minDist = d; nearestIdx = i; }
-    }
-
-    const L = positions.length;
-    const speedKmh = valueAtRatio(activity.speed_kmh, nearestIdx, L) ?? 0;
-    const speedMs  = speedKmh / 3.6;
-    const grad     = gradient[nearestIdx] ?? 0;  // already in positions index space
-    const distM    = valueAtRatio(activity.distance_m, nearestIdx, L) ?? 0;
-    const hr       = valueAtRatio(activity.heartrate,  nearestIdx, L);
-    const alt      = valueAtRatio(activity.altitude,   nearestIdx, L);
-
-    setInfo({
-      latlng:   { lat: e.latlng.lat, lng: e.latlng.lng },
-      dist:     +(distM / 1000).toFixed(2),
-      hr:       hr ?? null,
-      speed:    +speedKmh.toFixed(1),
-      power:    calcPowerAt(speedMs, grad),
-      altitude: alt != null ? Math.round(alt) : null,
-      gradient: +grad.toFixed(1),
-    });
-  };
-
   return (
-    <>
-      <Polyline
-        positions={positions}
-        pathOptions={{ color: 'transparent', weight: 14, opacity: 0.01 }}
-        eventHandlers={{ mousemove: handleMouseMove, mouseout: handleMouseOut }}
-      />
-      {info && (
-        <Popup
-          position={[info.latlng.lat, info.latlng.lng]}
-          offset={[0, -10]}
-          closeButton={false}
-          autoClose={false}
-          closeOnClick={false}
-          // autoPan stays on so the popup is always visible (small
-          // 180px map = it needs to shift to fit the tooltip). The
-          // resulting drift is undone by the explicit fitBounds()
-          // call in `handleMouseOut` above, which animates back to
-          // the full-route framing as soon as the cursor leaves.
-        >
-          <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontSize: 11, minWidth: 150, lineHeight: 1.7, background: tokens.surface, color: tokens.ink, padding: 6, borderRadius: 4 }}>
-            <div style={{ fontWeight: 700, marginBottom: 3, fontSize: 10, letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 5 }}>
-              <span style={{
-                display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
-                background: info.speed != null ? `hsl(${Math.round(Math.min(1, (info.speed / 50)) * 120)}, 90%, 45%)` : tokens.terra,
-              }} />
-              {info.dist} km · pente {info.gradient > 0 ? '+' : ''}{info.gradient}%
-            </div>
-            {info.hr != null && <div>FC : <strong>{info.hr} bpm</strong></div>}
-            <div>Vitesse : <strong>{info.speed} km/h</strong></div>
-            <div>Puissance : <strong>{info.power} W</strong></div>
-            {info.altitude != null && <div>Altitude : <strong>{info.altitude} m</strong></div>}
-          </div>
-        </Popup>
-      )}
-    </>
+    <Polyline
+      positions={positions}
+      pathOptions={{ color: 'transparent', weight: 14, opacity: 0.01 }}
+      eventHandlers={{ mousemove: handleMouseMove, mouseout: handleMouseOut }}
+    />
   );
 }
 
@@ -259,11 +249,10 @@ export function CardMap({
 }) {
   const dark = useDarkMode();
   const [basemap, setBasemap] = useBasemap();
+  const [hover, setHover] = useState<HoverInfo | null>(null);
 
-  // The hover tooltip uses the ORIGINAL streams (full resolution), but
-  // the polyline that captures hover events needs to use the downsampled
-  // positions for rendering perf. So we keep the index mapping aligned
-  // by computing gradient on the original altitude/distance_m arrays.
+  // Gradient computation runs on the FULL streams (altitude/distance_m,
+  // typically 1000+ samples). Skipped when streams missing.
   const gradient = useMemo(() => {
     if (!activity?.altitude || !activity?.distance_m) return null;
     const len = Math.min(activity.altitude.length, activity.distance_m.length);
@@ -273,9 +262,6 @@ export function CardMap({
 
   if (!gps || gps.length < 2) return <div style={{ height, background: '#f0ece4', borderRadius: 4 }} />;
 
-  // Downsampled for rendering speed. Hover events still target the
-  // visible polyline; the nearest-neighbour search inside HoverOverlay
-  // uses the SAME downsampled positions so the indices line up.
   const sampled   = downsample(gps, 200);
   const positions = sampled.map(p => [p.lat, p.lng] as [number, number]);
   const center    = positions[Math.floor(positions.length / 2)];
@@ -295,17 +281,35 @@ export function CardMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gradient, positions.length]);
 
+  // Clamp tooltip position so it never goes off-screen. With a 180×~xxx
+  // map and a ~150px tooltip, hovering near a corner would otherwise
+  // clip; nudge it inward.
+  const tooltipStyle: React.CSSProperties | null = hover ? {
+    position:   'absolute',
+    left:       hover.x,
+    top:        hover.y - 14,
+    transform:  'translate(-50%, -100%)',
+    pointerEvents: 'none',
+    zIndex:     500,
+    background: tokens.surface,
+    color:      tokens.ink,
+    border:     `1px solid ${tokens.creamBorder}`,
+    borderRadius: 4,
+    padding:    '6px 8px',
+    fontFamily: "'Space Grotesk', sans-serif",
+    fontSize:   11,
+    lineHeight: 1.5,
+    minWidth:   140,
+    boxShadow:  '0 4px 14px rgba(0,0,0,0.18)',
+    whiteSpace: 'nowrap',
+  } : null;
+
   return (
     <div style={{ position: 'relative', height, width: '100%' }}>
       <MapContainer
         center={center}
         zoom={12}
         style={{ height: '100%', width: '100%' }}
-        // Hover tooltip + Plan/Sat toggle benefit from a tiny bit of
-        // interactivity (drag, scroll, double-click) without it
-        // feeling like a full mini-map. dragging stays off so the
-        // user can't accidentally pan the preview while scrolling
-        // the feed. zoomControl off keeps the corner clean.
         dragging={false}
         zoomControl={false}
         scrollWheelZoom={false}
@@ -321,11 +325,36 @@ export function CardMap({
           : <Polyline positions={positions} pathOptions={{ color, weight: 3, opacity: 0.95 }} />
         }
         {activity && gradientForHover && (
-          <HoverOverlay activity={activity} positions={positions} gradient={gradientForHover} />
+          <HoverCatcher
+            activity={activity}
+            positions={positions}
+            gradient={gradientForHover}
+            onHover={setHover}
+          />
         )}
         <FitBounds positions={positions} />
       </MapContainer>
       <BasemapToggle basemap={basemap} onChange={setBasemap} compact />
+
+      {/* Custom tooltip — plain absolute-positioned div, not a Leaflet
+          Popup. Renders OUTSIDE the MapContainer so the map's internal
+          re-render cycle never touches it. Move = pure React state +
+          one CSS transform = silky smooth. */}
+      {hover && tooltipStyle && (
+        <div style={tooltipStyle}>
+          <div style={{ fontWeight: 700, fontSize: 10, letterSpacing: '0.06em', marginBottom: 3, display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span style={{
+              display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
+              background: `hsl(${Math.round(Math.min(1, (hover.speed / 50)) * 120)}, 90%, 45%)`,
+            }} />
+            {hover.dist} km · pente {hover.gradient > 0 ? '+' : ''}{hover.gradient}%
+          </div>
+          {hover.hr != null && <div>FC : <strong>{hover.hr} bpm</strong></div>}
+          <div>Vitesse : <strong>{hover.speed} km/h</strong></div>
+          <div>Puissance : <strong>{hover.power} W</strong></div>
+          {hover.altitude != null && <div>Altitude : <strong>{hover.altitude} m</strong></div>}
+        </div>
+      )}
     </div>
   );
 }
