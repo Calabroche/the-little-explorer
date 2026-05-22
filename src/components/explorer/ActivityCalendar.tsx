@@ -119,6 +119,52 @@ function avgSpeedKmh(cell: DayCell): number | null {
   return cell.totalKm / (cell.totalDurationMin / 60);
 }
 
+// ── Extra hover metrics ──────────────────────────────────────────────────
+// Mirrors the per-point data the activity-detail map shows on hover
+// (slope, top speed, HR). Here it's aggregated across every ride of
+// the day rather than instantaneous — but the user gets the same shape
+// of insight from the feed without having to open a single ride.
+function maxInclinePct(cell: DayCell): number | null {
+  let max = -Infinity;
+  for (const a of cell.activities) {
+    if (a.max_incline != null && a.max_incline > max) max = a.max_incline;
+  }
+  return Number.isFinite(max) ? max : null;
+}
+function maxSpeedKmh(cell: DayCell): number | null {
+  let max = -Infinity;
+  for (const a of cell.activities) {
+    if (a.max_speed != null && a.max_speed > max) max = a.max_speed;
+  }
+  return Number.isFinite(max) ? max : null;
+}
+function avgHrBpm(cell: DayCell): number | null {
+  // Weighted by duration so a single 10-min hard interval doesn't
+  // overshadow the day's main 2-hour endurance ride.
+  let num = 0, denom = 0;
+  for (const a of cell.activities) {
+    if (a.avg_hr != null && a.duration_min != null) {
+      num += a.avg_hr * a.duration_min;
+      denom += a.duration_min;
+    }
+  }
+  return denom > 0 ? num / denom : null;
+}
+function totalCalories(cell: DayCell): number | null {
+  let sum = 0;
+  let any = false;
+  for (const a of cell.activities) {
+    if (a.calories != null) { sum += a.calories; any = true; }
+  }
+  return any ? sum : null;
+}
+function formatDurationMin(min: number): string {
+  if (min < 60) return `${Math.round(min)}m`;
+  const h = Math.floor(min / 60);
+  const m = Math.round(min - h * 60);
+  return m === 0 ? `${h}h` : `${h}h ${m.toString().padStart(2, '0')}`;
+}
+
 export function ActivityCalendar({ activities }: { activities: Activity[] }) {
   const { t, lang } = useT();
   const [hover, setHover] = useState<DayCell | null>(null);
@@ -249,8 +295,12 @@ export function ActivityCalendar({ activities }: { activities: Activity[] }) {
         {hover && (() => {
         const dateLbl = hover.date.toLocaleDateString(lang === 'en' ? 'en-US' : 'fr-FR',
           { weekday: 'short', day: 'numeric', month: 'short' });
-        const empty   = hover.activities.length === 0;
-        const speed   = avgSpeedKmh(hover);
+        const empty    = hover.activities.length === 0;
+        const speedAvg = avgSpeedKmh(hover);
+        const speedMax = maxSpeedKmh(hover);
+        const incMax   = maxInclinePct(hover);
+        const hrAvg    = avgHrBpm(hover);
+        const cals     = totalCalories(hover);
         return (
           <div style={{
             position: 'absolute', top: 'calc(100% + 8px)', left: 0,
@@ -258,11 +308,11 @@ export function ActivityCalendar({ activities }: { activities: Activity[] }) {
             background: tokens.surface,
             border: `1px solid ${tokens.creamBorder}`,
             boxShadow: '0 6px 20px rgba(0,0,0,0.10)',
-            borderRadius: 6, minWidth: 240, zIndex: 5,
+            borderRadius: 6, minWidth: 300, maxWidth: 420, zIndex: 5,
             // Tiny fade-in so the tooltip doesn't pop in like a jumpscare.
             animation: 'tle-cal-tooltip-in 110ms ease-out',
           }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: empty ? 0 : 6 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: empty ? 0 : 8 }}>
               <span style={{ fontFamily: "'Playfair Display'", fontWeight: 700, fontSize: 12, color: tokens.ink, textTransform: 'capitalize' }}>
                 {dateLbl}
               </span>
@@ -277,15 +327,57 @@ export function ActivityCalendar({ activities }: { activities: Activity[] }) {
                 {t('calendar.tooltipNone')}
               </span>
             ) : (
-              <div style={{ display: 'flex', gap: 16 }}>
-                <Chip label="KM"  value={hover.totalKm.toFixed(1)}            color={tokens.terra} />
-                {speed != null && (
-                  <Chip label="MOY" value={`${speed.toFixed(1)} km/h`}          color={tokens.blue}  />
-                )}
-                {hover.totalElevationM > 0 && (
-                  <Chip label="D+"  value={`${Math.round(hover.totalElevationM)} m`} color={tokens.green} />
-                )}
-              </div>
+              <>
+                {/* List of ride titles when one or several — gives context
+                    before the aggregated metrics below. */}
+                <div style={{
+                  display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 8,
+                  paddingBottom: 6, borderBottom: `1px solid ${tokens.creamBorder}`,
+                }}>
+                  {hover.activities.slice(0, 3).map((a, i) => (
+                    <div key={a.id ?? i} style={{
+                      fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkMid,
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                    }}>
+                      <span style={{ color: tokens.terra, marginRight: 4 }}>·</span>
+                      {a.title}
+                    </div>
+                  ))}
+                  {hover.activities.length > 3 && (
+                    <div style={{ fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight, fontStyle: 'italic' }}>
+                      + {hover.activities.length - 3}…
+                    </div>
+                  )}
+                </div>
+
+                {/* Two-row chip grid. Mirrors the per-point metrics
+                    the activity-detail map's hover tooltip exposes
+                    (slope, top speed, HR) — aggregated to the day. */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, auto)', gap: '8px 16px' }}>
+                  <Chip label="KM"  value={hover.totalKm.toFixed(1)}            color={tokens.terra} />
+                  {speedAvg != null && (
+                    <Chip label="MOY" value={`${speedAvg.toFixed(1)} km/h`}        color={tokens.blue}  />
+                  )}
+                  {hover.totalElevationM > 0 && (
+                    <Chip label="D+"  value={`${Math.round(hover.totalElevationM)} m`} color={tokens.green} />
+                  )}
+                  {hover.totalDurationMin > 0 && (
+                    <Chip label="DURÉE" value={formatDurationMin(hover.totalDurationMin)} color={tokens.ink} />
+                  )}
+                  {speedMax != null && speedMax > 0 && (
+                    <Chip label="V. MAX" value={`${speedMax.toFixed(1)} km/h`}     color={tokens.blue} />
+                  )}
+                  {incMax != null && incMax > 0 && (
+                    <Chip label="PENTE MAX" value={`${incMax.toFixed(1)} %`}       color={tokens.terra} />
+                  )}
+                  {hrAvg != null && (
+                    <Chip label="FC MOY" value={`${Math.round(hrAvg)} bpm`}         color="#D9434E" />
+                  )}
+                  {cals != null && (
+                    <Chip label="CAL." value={`${Math.round(cals)} kcal`}           color={tokens.green} />
+                  )}
+                </div>
+              </>
             )}
           </div>
         );
@@ -305,7 +397,12 @@ export function ActivityCalendar({ activities }: { activities: Activity[] }) {
       <div
         aria-hidden
         style={{
-          height: hover ? 70 : 0,
+          // 70 → 150 to make room for the new two-row tooltip
+          // (titles list + 4-column chip grid). On empty cells the
+          // tooltip is tiny and 150 looks oversized, but the spacer
+          // keys on `!!hover` (boolean), not per-cell, so a single
+          // value here keeps the transition clean.
+          height: hover ? 150 : 0,
           transition: 'height 180ms ease',
           marginTop: hover ? 8 : 0,
         }}
