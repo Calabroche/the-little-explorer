@@ -276,6 +276,10 @@ export default function LoginPage() {
             }}>
               En continuant, tu acceptes que nous récupérions tes activités
               Strava via l&apos;API officielle. Aucun mot de passe stocké.
+              {' '}
+              <a href="/privacy" style={{ color: tokens.terra, textDecoration: 'underline' }}>
+                Politique de confidentialité
+              </a>.
             </p>
           </div>
         </div>

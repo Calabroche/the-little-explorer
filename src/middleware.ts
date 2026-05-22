@@ -33,10 +33,12 @@ export const config = {
     /*
      * Match all request paths except:
      *  - /login                  (public login page)
-     *  - /api/*                  (all API routes — session check happens in handlers later)
+     *  - /privacy                (public privacy policy — required by Google
+     *                             OAuth verification + linked from /login)
+     *  - /api/*                  (all API routes — session check happens in handlers)
      *  - /_next/*                (Next.js internals)
      *  - /favicon.* + /logo.*    (PWA icons + favicon)
      */
-    '/((?!api|login|_next|favicon|logo|.*\\.).*)',
+    '/((?!api|login|privacy|_next|favicon|logo|.*\\.).*)',
   ],
 };
