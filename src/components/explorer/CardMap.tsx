@@ -154,6 +154,19 @@ function HoverOverlay({ activity, positions, gradient }: {
   gradient: number[];
 }) {
   const [info, setInfo] = useState<HoverData | null>(null);
+  const map = useMap();
+
+  // When the cursor leaves the polyline, snap the camera back to the
+  // full-route bounds. Even with autoPan disabled on the popup (below),
+  // Leaflet sometimes nudges the view when popups open near the edge —
+  // an explicit fitBounds on mouseout makes the "return to initial
+  // framing" behaviour Florian asked for fully deterministic.
+  const handleMouseOut = () => {
+    setInfo(null);
+    if (positions.length > 1) {
+      map.fitBounds(positions, { padding: [6, 6], animate: true, duration: 0.25 });
+    }
+  };
 
   const handleMouseMove = (e: LeafletMouseEvent) => {
     const { lat, lng } = e.latlng;
@@ -196,7 +209,7 @@ function HoverOverlay({ activity, positions, gradient }: {
       <Polyline
         positions={positions}
         pathOptions={{ color: 'transparent', weight: 14, opacity: 0.01 }}
-        eventHandlers={{ mousemove: handleMouseMove, mouseout: () => setInfo(null) }}
+        eventHandlers={{ mousemove: handleMouseMove, mouseout: handleMouseOut }}
       />
       {info && (
         <Popup
@@ -205,6 +218,13 @@ function HoverOverlay({ activity, positions, gradient }: {
           closeButton={false}
           autoClose={false}
           closeOnClick={false}
+          // autoPan=true (Leaflet default) shifts the map to keep the
+          // popup in view — visible drift while hovering, and on
+          // mouseout the map stays at the shifted position. Disabling
+          // means the popup may be clipped near the edges of the
+          // mini-map, but the route stays anchored — which is what
+          // the user asked for.
+          autoPan={false}
         >
           <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontSize: 11, minWidth: 150, lineHeight: 1.7, background: tokens.surface, color: tokens.ink, padding: 6, borderRadius: 4 }}>
             <div style={{ fontWeight: 700, marginBottom: 3, fontSize: 10, letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 5 }}>
