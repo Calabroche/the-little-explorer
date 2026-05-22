@@ -130,7 +130,13 @@ export function ActivityCard({ activity, onClick }: { activity: Activity; onClic
         borderLeft: isMobile ? 'none' : `1px solid ${tokens.creamBorder}`,
         borderTop: isMobile ? `1px solid ${tokens.creamBorder}` : 'none',
       }}>
-        <CardMap gps={activity.gps} color={traceColor} height="100%" speedKmh={activity.speed_kmh} />
+        <CardMap
+          gps={activity.gps}
+          color={traceColor}
+          height="100%"
+          speedKmh={activity.speed_kmh}
+          activity={activity}  // ← enables the per-point hover tooltip (dist, slope, HR, speed, power, alt)
+        />
       </div>
     </div>
   );
