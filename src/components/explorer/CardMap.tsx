@@ -218,13 +218,11 @@ function HoverOverlay({ activity, positions, gradient }: {
           closeButton={false}
           autoClose={false}
           closeOnClick={false}
-          // autoPan=true (Leaflet default) shifts the map to keep the
-          // popup in view — visible drift while hovering, and on
-          // mouseout the map stays at the shifted position. Disabling
-          // means the popup may be clipped near the edges of the
-          // mini-map, but the route stays anchored — which is what
-          // the user asked for.
-          autoPan={false}
+          // autoPan stays on so the popup is always visible (small
+          // 180px map = it needs to shift to fit the tooltip). The
+          // resulting drift is undone by the explicit fitBounds()
+          // call in `handleMouseOut` above, which animates back to
+          // the full-route framing as soon as the cursor leaves.
         >
           <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontSize: 11, minWidth: 150, lineHeight: 1.7, background: tokens.surface, color: tokens.ink, padding: 6, borderRadius: 4 }}>
             <div style={{ fontWeight: 700, marginBottom: 3, fontSize: 10, letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 5 }}>
