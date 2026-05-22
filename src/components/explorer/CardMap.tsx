@@ -1,11 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Polyline, useMap } from 'react-leaflet';
+import { MapContainer, Polyline, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
+import { useBasemap, BasemapTiles } from './MapBasemap';
 
-const VOYAGER = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
-const DARK    = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+// CardMap is a tiny embedded preview inside ActivityCard — too small
+// to show a Plan/Sat toggle. It just follows whatever the user picked
+// on the larger maps (via the shared `useBasemap` localStorage hook).
 
 function useDarkMode() {
   const [dark, setDark] = useState(false);
@@ -72,12 +74,12 @@ export function CardMap({
   speedKmh?: number[];
 }) {
   const dark = useDarkMode();
+  const [basemap] = useBasemap();
   if (!gps || gps.length < 2) return <div style={{ height, background: '#f0ece4', borderRadius: 4 }} />;
 
   const sampled   = downsample(gps, 200);
   const positions = sampled.map(p => [p.lat, p.lng] as [number, number]);
   const center    = positions[Math.floor(positions.length / 2)];
-  const tileUrl   = dark ? DARK : VOYAGER;
   const segments  = speedKmh && speedKmh.length > 1
     ? buildSegments(positions, speedKmh, 150)
     : null;
@@ -94,7 +96,7 @@ export function CardMap({
       touchZoom={false}
       attributionControl={false}
     >
-      <TileLayer key={tileUrl} url={tileUrl} />
+      <BasemapTiles basemap={basemap} darkMode={dark} />
       {segments
         ? segments.map((seg, i) => (
             <Polyline key={i} positions={seg.pts} pathOptions={{ color: seg.color, weight: 3, opacity: 0.95 }} />

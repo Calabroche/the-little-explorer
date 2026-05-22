@@ -6,12 +6,13 @@ import { tokens, Activity } from '../tokens';
 import { SectionTag, Label } from '../ui';
 import { useT } from '@/i18n';
 import { SportId } from '../Sidebar';
+import { useBasemap, BasemapToggle } from '../MapBasemap';
 
 const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapContainer), { ssr: false });
-const TileLayer    = dynamic(() => import('react-leaflet').then(mod => mod.TileLayer),    { ssr: false });
 const Polyline     = dynamic(() => import('react-leaflet').then(mod => mod.Polyline),     { ssr: false });
 const CircleMarker = dynamic(() => import('react-leaflet').then(mod => mod.CircleMarker), { ssr: false });
 const Popup        = dynamic(() => import('react-leaflet').then(mod => mod.Popup),        { ssr: false });
+const BasemapTiles = dynamic(() => import('../MapBasemap').then(m => m.BasemapTiles), { ssr: false });
 // Local helper: pans/zooms the map whenever the centroid changes.
 // Uses useMap() so it must be mounted inside MapContainer; lazy-loaded
 // because react-leaflet pokes at `window` at import time.
@@ -46,6 +47,8 @@ const DARDILLY: [number, number] = [45.81, 4.75];
 
 export function MapPage({ activities, selectedActivity }: Props) {
   const { t } = useT();
+  const [basemap, setBasemap] = useBasemap();
+  const darkMode = typeof document !== 'undefined' && document.documentElement.hasAttribute('data-dark');
 
   // Only activities with GPS data are eligible for the map.
   const withGps = useMemo(() => activities.filter(a => a.gps && a.gps.length > 1), [activities]);
@@ -90,15 +93,13 @@ export function MapPage({ activities, selectedActivity }: Props) {
         <Header title={selectedActivity.title} />
         <div style={{ flex: 1, position: 'relative' }}>
           <MapContainer center={[selectedActivity.gps[0].lat, selectedActivity.gps[0].lng]} zoom={13} style={{ height: '100%', width: '100%' }} maxZoom={18}>
-            <TileLayer
-              url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-              attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap'
-            />
+            <BasemapTiles basemap={basemap} darkMode={darkMode} />
             <Polyline
               positions={selectedActivity.gps.map(p => [p.lat, p.lng])}
               pathOptions={{ color: SPORT_COLOR[selectedActivity.type as SportId] ?? tokens.terra, weight: 4 }}
             />
           </MapContainer>
+          <BasemapToggle basemap={basemap} onChange={setBasemap} />
         </div>
       </div>
     );
@@ -110,10 +111,7 @@ export function MapPage({ activities, selectedActivity }: Props) {
       <Header title={null} />
       <div style={{ flex: 1, position: 'relative' }}>
         <MapContainer center={centroid.center} zoom={11} style={{ height: '100%', width: '100%' }} maxZoom={18}>
-          <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-            attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap'
-          />
+          <BasemapTiles basemap={basemap} darkMode={darkMode} />
           {filtered.map((a, i) => (
             <Polyline
               key={a.id ?? i}
@@ -132,6 +130,7 @@ export function MapPage({ activities, selectedActivity }: Props) {
           ))}
           <RecenterCamera center={centroid.center} spanDeg={centroid.spanDeg} />
         </MapContainer>
+        <BasemapToggle basemap={basemap} onChange={setBasemap} />
 
         {/* Sport picker — top-left, scrollable when many sports present */}
         {availableSports.length > 1 && (

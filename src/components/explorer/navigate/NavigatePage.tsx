@@ -10,11 +10,12 @@ import { closestPointOnPolyline, distanceAlongRemaining, distanceAlongTo } from 
 import { arrowFor, maneuverCore, maneuverSentence, formatDistance, pickAnnouncement, AnnounceLevel } from './maneuvers';
 
 const MapContainer = dynamic(() => import('react-leaflet').then(m => m.MapContainer), { ssr: false });
-const TileLayer    = dynamic(() => import('react-leaflet').then(m => m.TileLayer),    { ssr: false });
 const Polyline     = dynamic(() => import('react-leaflet').then(m => m.Polyline),     { ssr: false });
 const CircleMarker = dynamic(() => import('react-leaflet').then(m => m.CircleMarker), { ssr: false });
 const FollowCamera = dynamic(() => import('./FollowCamera').then(m => m.FollowCamera), { ssr: false });
 const UserMarker   = dynamic(() => import('./UserMarker').then(m => m.UserMarker),     { ssr: false });
+const BasemapTiles = dynamic(() => import('../MapBasemap').then(m => m.BasemapTiles), { ssr: false });
+import { useBasemap, BasemapToggle } from '../MapBasemap';
 
 interface Props { itineraryId: string }
 
@@ -127,6 +128,7 @@ export function NavigatePage({ itineraryId }: Props) {
   const [stepsErr, setStepsErr] = useState<string | null>(null);
   const [started, setStarted] = useState(false);
   const [arrived, setArrived] = useState(false);
+  const [basemap, setBasemap] = useBasemap();
 
   // Look the itinerary up across both users' libraries (no auth in this app).
   useEffect(() => {
@@ -320,15 +322,11 @@ export function NavigatePage({ itineraryId }: Props) {
           zoomControl={false}
           maxZoom={20}
         >
-          {/* CARTO Voyager: dramatically less label noise than OSM-FR
-              — for navigation we want roads + your route to dominate,
-              not every shop and bus stop within 200 m. Same provider
-              as the activity-detail map. */}
-          <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-            attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap'
-            maxZoom={20}
-          />
+          {/* Basemap follows the shared useBasemap preference — plan or
+              satellite. Either works for navigation; satellite is handy
+              for spotting features that aren't on the road map (trail
+              forks in a forest, building edges in a city). */}
+          <BasemapTiles basemap={basemap} darkMode={false} />
 
           {/* Komoot-style route line: a wide white halo underneath
               and a bold blue ribbon on top, so the path POPS against
@@ -375,6 +373,7 @@ export function NavigatePage({ itineraryId }: Props) {
           <UserMarker fix={fix} />
           {fix && started && !arrived && <FollowCamera lat={fix.lat} lng={fix.lng} />}
         </MapContainer>
+        <BasemapToggle basemap={basemap} onChange={setBasemap} compact />
 
         {/* GPS-warmup overlay */}
         {started && !ready && (

@@ -14,11 +14,12 @@ import { buildGpx, downloadGpx, slugify as gpxSlug } from '../itinerary/gpx';
 
 // Leaflet pulls in `window` at import time → ssr:false.
 const MapContainer = dynamic(() => import('react-leaflet').then(m => m.MapContainer), { ssr: false });
-const TileLayer    = dynamic(() => import('react-leaflet').then(m => m.TileLayer),    { ssr: false });
 const Polyline     = dynamic(() => import('react-leaflet').then(m => m.Polyline),     { ssr: false });
 const CircleMarker = dynamic(() => import('react-leaflet').then(m => m.CircleMarker), { ssr: false });
 const Tooltip      = dynamic(() => import('react-leaflet').then(m => m.Tooltip),      { ssr: false });
 const FitBounds    = dynamic(() => import('../itinerary/FitBounds').then(m => m.FitBounds), { ssr: false });
+const BasemapTiles = dynamic(() => import('../MapBasemap').then(m => m.BasemapTiles), { ssr: false });
+import { useBasemap, BasemapToggle } from '../MapBasemap';
 
 interface Props {
   user: UserId;
@@ -534,13 +535,11 @@ export function ItineraryPage({ user, embedded }: Props) {
   //             when the route polyline + waypoint markers should
   //             dominate the map visually).
   // Dark mode:  CARTO Dark Matter base + CARTO labels overlay ("D1"),
-  //             two layers stacked instead of the merged `dark_all` so
-  //             we can swap the labels overlay independently later.
-  const lightUrl         = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
-  const lightAttribution = '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap';
-  const darkBaseUrl      = 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png';
-  const darkLabelsUrl    = 'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png';
-  const darkAttribution  = '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap';
+  // Basemap (plan/satellite) is now driven by the shared useBasemap hook
+  // — the inline tile-URL constants below were retired in favour of
+  // <BasemapTiles>. Kept the comment trail in case we need to refactor
+  // basemap selection again.
+  const [basemap, setBasemap] = useBasemap();
 
   // Map grew by +200px vs the previous V1 to leave room for the
   // elevation chart underneath without scrolling pressure.
@@ -828,33 +827,7 @@ export function ItineraryPage({ user, embedded }: Props) {
               maxZoom={20}
               minZoom={4}
             >
-              {dark ? (
-                <>
-                  {/* Dark: CARTO Dark Matter base (no labels) +
-                      CARTO labels overlay. Two TileLayers stacked. */}
-                  <TileLayer
-                    key="dark-base"
-                    url={darkBaseUrl}
-                    attribution={darkAttribution}
-                    maxZoom={20}
-                    maxNativeZoom={19}
-                  />
-                  <TileLayer
-                    key="dark-labels"
-                    url={darkLabelsUrl}
-                    maxZoom={20}
-                    maxNativeZoom={19}
-                  />
-                </>
-              ) : (
-                <TileLayer
-                  key="light"
-                  url={lightUrl}
-                  attribution={lightAttribution}
-                  maxZoom={20}
-                  maxNativeZoom={20}
-                />
-              )}
+              <BasemapTiles basemap={basemap} darkMode={dark} />
               {polylinePositions && polylinePositions.length > 1 && (
                 <Polyline positions={polylinePositions} pathOptions={{ color: tokens.terra, weight: 4, opacity: 0.85 }} />
               )}
@@ -891,6 +864,7 @@ export function ItineraryPage({ user, embedded }: Props) {
               )}
               <FitBounds positions={polylinePositions ?? waypoints.map(w => [w.lat, w.lng] as [number, number])} />
             </MapContainer>
+            <BasemapToggle basemap={basemap} onChange={setBasemap} />
           </div>
 
           {/* Elevation chart sits directly under the map so you can read both

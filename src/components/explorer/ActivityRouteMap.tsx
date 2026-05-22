@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Polyline, Popup, useMap } from 'react-leaflet';
+import { MapContainer, Polyline, Popup, useMap } from 'react-leaflet';
 import type { LeafletMouseEvent } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Activity, tokens } from './tokens';
+import { useBasemap, BasemapTiles, BasemapToggle } from './MapBasemap';
 
 function useDarkMode() {
   const [dark, setDark] = useState(false);
@@ -167,6 +168,7 @@ function RouteWithHover({ activity, positions, gradient }: {
 
 export function ActivityRouteMap({ activity }: { activity: Activity }) {
   const dark = useDarkMode();
+  const [basemap, setBasemap] = useBasemap();
   const { gps, altitude = [], distance_m = [] } = activity;
   if (!gps || gps.length < 2) return null;
 
@@ -175,24 +177,19 @@ export function ActivityRouteMap({ activity }: { activity: Activity }) {
   const positions = gps.map(p => [p.lat, p.lng] as [number, number]);
   const center    = positions[Math.floor(positions.length / 2)];
 
-  const tileUrl = dark
-    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-    : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
-
   return (
-    <MapContainer
-      center={center}
-      zoom={12}
-      style={{ height: 540, width: '100%', borderRadius: 4 }}
-      scrollWheelZoom={false}
-    >
-      <TileLayer
-        key={tileUrl}
-        url={tileUrl}
-        attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap'
-      />
-      <RouteWithHover activity={activity} positions={positions} gradient={gradient} />
-      <FitBounds positions={positions} />
-    </MapContainer>
+    <div style={{ position: 'relative' }}>
+      <MapContainer
+        center={center}
+        zoom={12}
+        style={{ height: 540, width: '100%', borderRadius: 4 }}
+        scrollWheelZoom={false}
+      >
+        <BasemapTiles basemap={basemap} darkMode={dark} />
+        <RouteWithHover activity={activity} positions={positions} gradient={gradient} />
+        <FitBounds positions={positions} />
+      </MapContainer>
+      <BasemapToggle basemap={basemap} onChange={setBasemap} />
+    </div>
   );
 }
