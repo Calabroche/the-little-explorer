@@ -33,12 +33,13 @@ export const config = {
     /*
      * Match all request paths except:
      *  - /login                  (public login page)
-     *  - /privacy                (public privacy policy — required by Google
-     *                             OAuth verification + linked from /login)
+     *  - /privacy + /terms       (public legal pages — required by Google
+     *                             OAuth verification and by the Strava API
+     *                             Agreement; linked from /login + footer)
      *  - /api/*                  (all API routes — session check happens in handlers)
      *  - /_next/*                (Next.js internals)
      *  - /favicon.* + /logo.*    (PWA icons + favicon)
      */
-    '/((?!api|login|privacy|_next|favicon|logo|.*\\.).*)',
+    '/((?!api|login|privacy|terms|_next|favicon|logo|.*\\.).*)',
   ],
 };

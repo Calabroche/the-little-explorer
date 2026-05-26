@@ -13,6 +13,7 @@
  */
 
 import Link from 'next/link';
+import { Footer } from '@/components/Footer';
 
 const CONTACT_EMAIL = 'florian.calabrese@gmail.com';
 const APP_URL       = 'https://the-little-explorer-app.vercel.app';
@@ -34,6 +35,7 @@ export default function PrivacyPage() {
   const updatedAt = '21 mai 2026';
 
   return (
+    <>
     <main style={{
       minHeight:  '100dvh',
       background: cream,
@@ -172,6 +174,29 @@ export default function PrivacyPage() {
           </p>
         </Section>
 
+        <Section title="Données Strava — usage spécifique">
+          <p>
+            Lorsque vous connectez votre compte Strava, nous accédons à
+            l&apos;API Strava conformément à son{' '}
+            <a href="https://www.strava.com/legal/api" target="_blank" rel="noreferrer" style={linkStyle}>API Agreement</a>.
+            Voici précisément ce que nous faisons des données Strava :
+          </p>
+          <ul style={listStyle}>
+            <li><strong>Champs récupérés</strong> : id de l&apos;activité, titre, description, date, type (vélo / course / hike…), durée, distance, dénivelé, calories, vitesse moyenne / max, FC moyenne / max, puissance moyenne / max, streams (GPS, vitesse, altitude, FC, cadence, puissance, distance).</li>
+            <li><strong>Pas de redistribution</strong> : aucune donnée Strava n&apos;est partagée avec des tiers, ni revendue, ni utilisée pour entraîner des modèles d&apos;apprentissage automatique.</li>
+            <li><strong>Pas d&apos;agrégation cross-user</strong> : chaque utilisateur ne voit que ses propres données. Aucun « feed social », aucun classement, aucune comparaison anonymisée entre utilisateurs.</li>
+            <li><strong>Tokens chiffrés</strong> : les <code>access_token</code> et <code>refresh_token</code> Strava sont stockés chiffrés au repos chez Supabase et ne quittent jamais le serveur.</li>
+            <li><strong>Suppression rapide</strong> : si vous supprimez une activité sur Strava, notre webhook reçoit l&apos;événement et supprime la copie locale. Si vous révoquez l&apos;Application depuis <a href="https://www.strava.com/settings/apps" target="_blank" rel="noreferrer" style={linkStyle}>strava.com/settings/apps</a>, nous arrêtons immédiatement toute synchronisation future.</li>
+          </ul>
+          <p style={{ marginTop: 16, fontSize: 12, color: inkLight }}>
+            <em>Strava</em> et le logo Strava sont des marques déposées de
+            Strava, Inc., utilisées ici conformément aux{' '}
+            <a href="https://www.strava.com/brand" target="_blank" rel="noreferrer" style={linkStyle}>
+              Strava Brand Guidelines
+            </a>. The Little Explorer n&apos;est pas affilié à Strava, Inc.
+          </p>
+        </Section>
+
         <Section title="Sécurité">
           <p>
             Toutes les communications avec l&apos;application transitent en
@@ -210,6 +235,8 @@ export default function PrivacyPage() {
         </div>
       </div>
     </main>
+    <Footer />
+    </>
   );
 }
 

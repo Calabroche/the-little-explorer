@@ -19,7 +19,9 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { signOut } from 'next-auth/react';
 import { tokens } from '@/components/explorer/tokens';
+import { Footer } from '@/components/Footer';
 
 interface MeResponse {
   id:        string;
@@ -109,6 +111,20 @@ export default function SettingsPage() {
   const [bikeKg,    setBikeKg]    = useState('');
   const [customFtp, setCustomFtp] = useState('');
 
+  // "Supprimer mon compte" — two-step confirm so a misclick doesn't
+  // wipe months of training history. First tap arms; second tap
+  // (within the same render) actually fires DELETE /api/me.
+  const [deleteArmed,  setDeleteArmed]  = useState(false);
+  const [deleting,     setDeleting]     = useState(false);
+  const [deleteError,  setDeleteError]  = useState<string | null>(null);
+
+  // "Déconnexion de tous les appareils" — bumps session_invalidated_at
+  // on the user row (kills every web JWT) + revokes every iOS bearer
+  // token. Less destructive than delete-account; useful when a device
+  // was lost or shared with someone who shouldn't have access.
+  const [logoutAllRunning, setLogoutAllRunning] = useState(false);
+  const [logoutAllError,   setLogoutAllError]   = useState<string | null>(null);
+
   useEffect(() => {
     fetch('/api/me')
       .then(async r => {
@@ -171,7 +187,48 @@ export default function SettingsPage() {
     }
   };
 
+  const onLogoutAll = async () => {
+    setLogoutAllRunning(true);
+    setLogoutAllError(null);
+    try {
+      const r = await fetch('/api/me/logout-all', { method: 'POST' });
+      if (r.status !== 204 && !r.ok) {
+        const err = await r.json().catch(() => ({})) as { error?: string; detail?: string };
+        throw new Error(err.detail ?? err.error ?? `HTTP ${r.status}`);
+      }
+      // Current cookie is now invalid server-side — bounce to /login.
+      await signOut({ callbackUrl: '/login' });
+    } catch (e) {
+      setLogoutAllError((e as Error).message ?? 'Erreur inconnue');
+      setLogoutAllRunning(false);
+    }
+  };
+
+  const onDelete = async () => {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const r = await fetch('/api/me', { method: 'DELETE' });
+      // 204 No Content on success — Strava deauth is best-effort
+      // server-side, so even a 5xx on Strava's end doesn't surface
+      // here as long as the local wipe succeeded.
+      if (r.status !== 204 && !r.ok) {
+        const err = await r.json().catch(() => ({})) as { error?: string; detail?: string };
+        throw new Error(err.detail ?? err.error ?? `HTTP ${r.status}`);
+      }
+      // Clear the NextAuth cookie + bounce to /login. callbackUrl
+      // ensures we land on the public login page (not back here, which
+      // would 401 → redirect-loop).
+      await signOut({ callbackUrl: '/login' });
+    } catch (e) {
+      setDeleteError((e as Error).message ?? 'Erreur inconnue');
+      setDeleting(false);
+      setDeleteArmed(false);
+    }
+  };
+
   return (
+    <>
     <main style={{ minHeight: '100vh', padding: '40px 24px', background: tokens.cream }}>
       <div style={{ maxWidth: 560, margin: '0 auto 16px', display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
         <h1 style={{
@@ -272,9 +329,156 @@ export default function SettingsPage() {
               <div>· Coureur {me.effective.riderKg} kg · Vélo {me.effective.bikeKg} kg · Masse totale {(me.effective.riderKg + me.effective.bikeKg).toFixed(2)} kg</div>
               <div>· FTP {me.effective.customFtp ?? 'auto'}</div>
             </div>
+
+            {/* Logout-from-all-devices — less destructive than account
+                deletion. Bumps session_invalidated_at on the user row
+                + revokes every api_tokens row. Useful after a lost
+                phone or a shared session. */}
+            <hr style={{ margin: '32px 0 20px', border: 'none', borderTop: `1px solid ${tokens.creamBorder}` }} />
+            <div style={{
+              padding:      14,
+              border:       `1px solid ${tokens.creamBorder}`,
+              background:   tokens.creamDark,
+              borderRadius: 4,
+              marginBottom: 16,
+            }}>
+              <div style={{
+                fontFamily: "'Playfair Display'", fontSize: 14, fontWeight: 700,
+                color: tokens.ink, marginBottom: 4,
+              }}>
+                Sécurité de la session
+              </div>
+              <p style={{
+                fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.inkMid,
+                lineHeight: 1.55, margin: '0 0 12px',
+              }}>
+                Déconnecte toutes les sessions actives (web + iOS / Apple Watch).
+                Utile après un appareil perdu ou un partage involontaire.
+                Tes données restent intactes — tu pourras te reconnecter
+                ensuite.
+              </p>
+              {logoutAllError && (
+                <div style={{
+                  padding: '8px 10px', marginBottom: 10,
+                  background: '#FEE', border: '1px solid #FCC', borderRadius: 4,
+                  color: '#A00', fontFamily: "'Space Grotesk'", fontSize: 12,
+                }}>{logoutAllError}</div>
+              )}
+              <button
+                onClick={onLogoutAll}
+                disabled={logoutAllRunning}
+                style={{
+                  padding:      '8px 14px',
+                  background:   'transparent',
+                  border:       `1px solid ${tokens.terra}`,
+                  borderRadius: 3,
+                  color:        tokens.terra,
+                  fontFamily:   "'Space Grotesk'", fontSize: 11, fontWeight: 700,
+                  letterSpacing: '0.04em',
+                  cursor:       'pointer',
+                }}
+              >
+                {logoutAllRunning ? 'DÉCONNEXION…' : 'DÉCONNECTER TOUS LES APPAREILS'}
+              </button>
+            </div>
+
+            {/* Danger zone — "Supprimer mon compte" (RGPD art. 17 +
+                Strava API Agreement requirement). Two-step confirm to
+                avoid accidental clicks. */}
+            <div style={{
+              padding:      16,
+              border:       '1px solid #E8C9C9',
+              background:   '#FCF4F4',
+              borderRadius: 4,
+            }}>
+              <div style={{
+                fontFamily: "'Playfair Display'", fontSize: 16, fontWeight: 700,
+                color: '#A23838', marginBottom: 6,
+              }}>
+                Danger zone
+              </div>
+              <p style={{
+                fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.inkMid,
+                lineHeight: 1.55, margin: '0 0 14px',
+              }}>
+                Supprime ton compte et toutes les données associées :
+                profil, paramètres, activités synchronisées, jetons OAuth.
+                Strava est aussi prévenu (révocation du token côté Strava).
+                <strong> Action irréversible.</strong>
+              </p>
+
+              {deleteError && (
+                <div style={{
+                  padding: '8px 10px', marginBottom: 12,
+                  background: '#FEE', border: '1px solid #FCC', borderRadius: 4,
+                  color: '#A00', fontFamily: "'Space Grotesk'", fontSize: 12,
+                }}>{deleteError}</div>
+              )}
+
+              {!deleteArmed ? (
+                <button
+                  onClick={() => setDeleteArmed(true)}
+                  disabled={deleting}
+                  style={{
+                    padding:      '8px 14px',
+                    background:   'transparent',
+                    border:       '1px solid #A23838',
+                    borderRadius: 3,
+                    color:        '#A23838',
+                    fontFamily:   "'Space Grotesk'", fontSize: 11, fontWeight: 700,
+                    letterSpacing: '0.04em',
+                    cursor:       'pointer',
+                  }}
+                >
+                  SUPPRIMER MON COMPTE
+                </button>
+              ) : (
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={{
+                    fontFamily: "'Space Grotesk'", fontSize: 12, color: '#A23838', fontWeight: 600,
+                  }}>
+                    Tu es sûr ?
+                  </span>
+                  <button
+                    onClick={onDelete}
+                    disabled={deleting}
+                    style={{
+                      padding: '8px 14px',
+                      background: '#A23838',
+                      border: '1px solid #A23838',
+                      borderRadius: 3,
+                      color: '#fff',
+                      fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 700,
+                      letterSpacing: '0.04em',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {deleting ? 'SUPPRESSION…' : 'OUI, SUPPRIME TOUT'}
+                  </button>
+                  <button
+                    onClick={() => { setDeleteArmed(false); setDeleteError(null); }}
+                    disabled={deleting}
+                    style={{
+                      padding: '8px 14px',
+                      background: 'transparent',
+                      border: `1px solid ${tokens.creamBorder}`,
+                      borderRadius: 3,
+                      color: tokens.inkMid,
+                      fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 600,
+                      letterSpacing: '0.04em',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Annuler
+                  </button>
+                </div>
+              )}
+            </div>
           </>
         )}
       </div>
     </main>
+    <Footer />
+    </>
   );
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/db';
 
 // Strava push-subscription webhook.
 //
@@ -67,25 +68,53 @@ export async function GET(req: NextRequest) {
 // background. The sync script already deduplicates by activity id, so
 // firing on every create/update is idempotent.
 export async function POST(req: NextRequest) {
-  let event: { object_type?: string; aspect_type?: string; object_id?: number; owner_id?: number };
+  let event: {
+    object_type?: string;
+    aspect_type?: string;
+    object_id?:   number;
+    owner_id?:    number;
+    updates?:     Record<string, string | number | boolean>;
+  };
   try {
     event = await req.json();
   } catch {
     return NextResponse.json({ ok: true }); // ack to avoid retries on garbage
   }
 
-  // Only react to activity-level events (not athlete deauth, which we'd
-  // handle separately if it ever became relevant).
-  const isActivityEvent = event.object_type === 'activity'
+  // Dispatch by event type. All branches fire-and-forget — Strava
+  // retries if we don't 200 within ~2s, so the handler must return
+  // fast and offload the actual work.
+  const isActivityCreateOrUpdate = event.object_type === 'activity'
     && (event.aspect_type === 'create' || event.aspect_type === 'update');
 
-  if (isActivityEvent) {
-    // Fire-and-forget: Strava only allows ~2 s before retrying. The
-    // sync-one fetch is intentionally NOT awaited so this response goes
-    // out fast. The downstream function still runs to completion on
-    // Vercel because it's a separate function invocation.
+  const isActivityDelete = event.object_type === 'activity'
+    && event.aspect_type === 'delete';
+
+  // Strava sends athlete_deauthorization as:
+  //   { object_type: 'athlete', aspect_type: 'update',
+  //     updates: { authorized: 'false' }, owner_id: <athlete_id>, … }
+  const isAthleteDeauth = event.object_type === 'athlete'
+    && event.aspect_type === 'update'
+    && String(event.updates?.authorized) === 'false';
+
+  if (isActivityCreateOrUpdate) {
     void dispatchSyncOne(event.owner_id ?? 0, event.object_id ?? 0, req).catch(err => {
       console.error('[strava-webhook] dispatch failed:', err);
+    });
+  } else if (isActivityDelete) {
+    // User deleted an activity on Strava → remove it from our store too.
+    // Required by the Strava API Agreement (ToS section 2.B.iv:
+    // "promptly remove" deleted activities).
+    void purgeActivity(event.object_id ?? 0).catch(err => {
+      console.error('[strava-webhook] purge activity failed:', err);
+    });
+  } else if (isAthleteDeauth) {
+    // User revoked our app from Strava → drop their refresh_token so
+    // we stop trying to sync. Local data is preserved — they can come
+    // back. The full account wipe is handled separately via
+    // DELETE /api/me when the user asks for that.
+    void deauthorizeAthlete(event.owner_id ?? 0).catch(err => {
+      console.error('[strava-webhook] deauth failed:', err);
     });
   }
 
@@ -99,6 +128,74 @@ function constantTimeEq(a: string, b: string): boolean {
   let diff = 0;
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return diff === 0;
+}
+
+/**
+ * Strava told us the user deleted an activity → remove it from
+ * public.activities so the feed stops showing it. Idempotent: a row
+ * that doesn't exist (already deleted, or never synced) is a no-op.
+ */
+async function purgeActivity(activityId: number): Promise<void> {
+  if (!activityId) return;
+  const { error } = await supabaseAdmin()
+    .from('activities')
+    .delete()
+    .eq('id', activityId);
+  if (error) {
+    console.error(`[strava-webhook] purge activity ${activityId} failed:`, error.message);
+  } else {
+    console.log(`[strava-webhook] purged activity ${activityId}`);
+  }
+}
+
+/**
+ * Strava told us the user revoked our app from their Strava settings
+ * → null out their athlete linkage so the cron + future webhooks stop
+ * trying to refresh a dead token. We keep the user row and their
+ * already-synced activities — they may want to come back, and we
+ * don't want to silently nuke their history from under them.
+ *
+ * Full account wipe is handled separately by DELETE /api/me when the
+ * user explicitly asks for it.
+ */
+async function deauthorizeAthlete(athleteId: number): Promise<void> {
+  if (!athleteId) return;
+  // 1. Drop the Strava account row from next_auth.accounts so we no
+  //    longer have a refresh_token to try.
+  const { data: user } = await supabaseAdmin()
+    .schema('next_auth')
+    .from('users')
+    .select('id')
+    .eq('athlete_id', athleteId)
+    .maybeSingle();
+
+  if (!user?.id) {
+    console.log(`[strava-webhook] deauth for unknown athlete ${athleteId} — nothing to do`);
+    return;
+  }
+
+  const { error: accErr } = await supabaseAdmin()
+    .schema('next_auth')
+    .from('accounts')
+    .delete()
+    .eq('userId', user.id)
+    .eq('provider', 'strava');
+  if (accErr) {
+    console.error(`[strava-webhook] deauth: drop accounts row failed for user ${user.id}:`, accErr.message);
+  }
+
+  // 2. Null out the athlete_id + scope on the user row so the cron
+  //    skips them on its next pass.
+  const { error: usrErr } = await supabaseAdmin()
+    .schema('next_auth')
+    .from('users')
+    .update({ athlete_id: null, strava_scope: null })
+    .eq('id', user.id);
+  if (usrErr) {
+    console.error(`[strava-webhook] deauth: clear athlete_id failed for user ${user.id}:`, usrErr.message);
+  } else {
+    console.log(`[strava-webhook] deauthorized user ${user.id} (athlete ${athleteId})`);
+  }
 }
 
 async function dispatchSyncOne(ownerId: number, activityId: number, req: NextRequest): Promise<void> {

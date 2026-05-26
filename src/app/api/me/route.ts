@@ -1,18 +1,24 @@
 /**
- * /api/me — read + update the signed-in user's own settings.
+ * /api/me — read + update + DELETE the signed-in user's own account.
  *
- * GET   → returns the current user row from next_auth.users, plus the
- *         effective profile (rider_kg, bike_kg, custom_ftp) after the
- *         null-fallback ladder (DB override → legacy PROFILES_BY_EMAIL
- *         → DEFAULT_PROFILE).
- * PATCH → updates rider_kg / bike_kg / custom_ftp on next_auth.users.
- *         Body: { rider_kg?: number|null, bike_kg?: number|null,
- *                 custom_ftp?: number|null }. Nulls clear the override
- *         (= revert to default). Other fields are silently ignored —
- *         user can't change their own email/name/athlete_id from here.
+ * GET    → returns the current user row from next_auth.users, plus the
+ *          effective profile (rider_kg, bike_kg, custom_ftp) after the
+ *          null-fallback ladder (DB override → legacy PROFILES_BY_EMAIL
+ *          → DEFAULT_PROFILE).
+ * PATCH  → updates rider_kg / bike_kg / custom_ftp on next_auth.users.
+ *          Body: { rider_kg?: number|null, bike_kg?: number|null,
+ *                  custom_ftp?: number|null }. Nulls clear the override
+ *          (= revert to default). Other fields are silently ignored —
+ *          user can't change their own email/name/athlete_id from here.
+ * DELETE → wipes the user's account: revokes the Strava token (best
+ *          effort), deletes the user row from next_auth.users. Every
+ *          child table (accounts, sessions, api_tokens, activities)
+ *          has an ON DELETE CASCADE FK, so a single row delete is
+ *          enough to fully purge. RGPD art. 17 + Strava API Agreement
+ *          requirement.
  *
- * All actions are scoped to session.user.id. There's no way to read or
- * write someone else's settings.
+ * All actions are scoped to session.user.id. There's no way to read,
+ * write, or delete someone else's account.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -172,4 +178,72 @@ export async function PATCH(req: NextRequest) {
     effective: effective(merged.email, merged),
   };
   return NextResponse.json(payload);
+}
+
+// ── DELETE: wipe the signed-in user's account ─────────────────────────
+// Body: none. Returns 204 on success.
+//
+// Steps:
+//   1. Best-effort revoke the Strava OAuth token via `POST
+//      https://www.strava.com/oauth/deauthorize`. This tells Strava to
+//      drop us from the athlete's authorized-apps list — required by
+//      Strava's API Agreement when a user requests deletion. Failures
+//      here are logged but do NOT block the local delete; if Strava is
+//      down we still wipe the user's data immediately.
+//   2. Delete the row from next_auth.users. Every child table FKs
+//      back with ON DELETE CASCADE (next_auth.accounts, sessions,
+//      api_tokens, public.activities), so the single delete purges the
+//      whole footprint in one statement.
+export async function DELETE(req: NextRequest) {
+  const res = await loadCurrentUser(req);
+  if (res instanceof NextResponse) return res;
+  const { row } = res;
+
+  // 1. Revoke Strava OAuth (best effort). We need a live access_token
+  //    to call /oauth/deauthorize; the refresh flow lives in
+  //    /api/strava/sync but we'd rather not pull it in here. Instead
+  //    we grab the most recent access_token from next_auth.accounts —
+  //    even if it's expired Strava typically still accepts it for
+  //    deauthorize calls, and we don't care about the result anyway.
+  if (row.athlete_id) {
+    try {
+      const { data: account } = await supabaseAdmin()
+        .schema('next_auth')
+        .from('accounts')
+        .select('access_token')
+        .eq('userId', row.id)
+        .eq('provider', 'strava')
+        .maybeSingle();
+      if (account?.access_token) {
+        await fetch('https://www.strava.com/oauth/deauthorize', {
+          method:  'POST',
+          headers: {
+            'Content-Type':  'application/x-www-form-urlencoded',
+            Authorization:   `Bearer ${account.access_token}`,
+          },
+        }).catch(err => {
+          console.error('[me.delete] strava deauthorize failed (non-fatal):', err);
+        });
+      }
+    } catch (e) {
+      // Non-fatal — proceed to local wipe regardless.
+      console.error('[me.delete] strava deauthorize lookup failed:', e);
+    }
+  }
+
+  // 2. Cascade delete the user — every child table has ON DELETE CASCADE.
+  const { error: delErr } = await supabaseAdmin()
+    .schema('next_auth')
+    .from('users')
+    .delete()
+    .eq('id', row.id);
+  if (delErr) {
+    console.error('[me.delete] user delete failed:', delErr.message);
+    return NextResponse.json({ error: 'db_error', detail: delErr.message }, { status: 500 });
+  }
+
+  console.log(`[me.delete] purged user ${row.id} (email=${row.email ?? '?'}, athlete_id=${row.athlete_id ?? '-'})`);
+  // 204 No Content — the client should immediately call NextAuth's
+  // signOut() to clear its own cookie.
+  return new NextResponse(null, { status: 204 });
 }

@@ -8,3 +8,5 @@ dist/
 *.log
 .vercel
 .env*.local
+.claude/
+tsconfig.tsbuildinfo
