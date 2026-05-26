@@ -153,22 +153,39 @@ function ClimbsCard({
   climbs,
   hoveredIdx,
   onHover,
+  compact = false,
+  maxHeight,
 }: {
   climbs: Climb[];
   hoveredIdx: number | null;
   /** Pass null on mouse leave. */
   onHover: (idx: number | null) => void;
+  /** When true, switch to a denser row layout suitable for a 20%-width
+   *  side column next to the map. Stats stack vertically and the
+   *  footer note collapses to a tooltip-style hint. */
+  compact?: boolean;
+  /** Max-height for the rows list — used in side-by-side layout to
+   *  match the map's height. Overflow scrolls inside the card. */
+  maxHeight?: number;
 }) {
   if (climbs.length === 0) return null;
   return (
-    <div style={{ ...CARD_STYLE, marginBottom: 20 }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14, gap: 8, flexWrap: 'wrap' }}>
+    <div style={{ ...CARD_STYLE, marginBottom: 0, height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12, gap: 8, flexWrap: 'wrap' }}>
         <Label>MONTÉES DÉTECTÉES</Label>
-        <span style={{ fontSize: 11, color: tokens.inkLight }}>
-          {climbs.length} montée{climbs.length > 1 ? 's' : ''} · ≥ 3 % · ≥ 30 m · <em>hover pour localiser sur la carte</em>
+        <span style={{ fontSize: 10, color: tokens.inkLight }}>
+          {climbs.length} · ≥3% / 30m
         </span>
       </div>
-      <div style={{ display: 'grid', gap: 8 }}>
+      <div
+        style={{
+          display:     'grid',
+          gap:         compact ? 6 : 8,
+          overflowY:   maxHeight ? 'auto' : 'visible',
+          maxHeight:   maxHeight,
+          paddingRight: maxHeight ? 4 : 0,
+        }}
+      >
         {climbs.map((c, idx) => (
           <ClimbRow
             key={idx}
@@ -176,13 +193,16 @@ function ClimbsCard({
             highlighted={hoveredIdx === idx}
             onEnter={() => onHover(idx)}
             onLeave={() => onHover(null)}
+            compact={compact}
           />
         ))}
       </div>
-      <p style={{ marginTop: 10, fontSize: 11, color: tokens.inkLight, lineHeight: 1.5 }}>
-        Détection auto à partir de l&apos;altitude lissée (moyenne mobile 30 pts).
-        Seuils : 500 m mini, 30 m de gain, 3 % moyens. La pente max est sur fenêtre glissante 100 m.
-      </p>
+      {!compact && (
+        <p style={{ marginTop: 10, fontSize: 11, color: tokens.inkLight, lineHeight: 1.5 }}>
+          Détection auto à partir de l&apos;altitude lissée (moyenne mobile 30 pts).
+          Seuils : 500 m mini, 30 m de gain, 3 % moyens. La pente max est sur fenêtre glissante 100 m.
+        </p>
+      )}
     </div>
   );
 }
@@ -192,11 +212,14 @@ function ClimbRow({
   highlighted,
   onEnter,
   onLeave,
+  compact = false,
 }: {
   climb: Climb;
   highlighted: boolean;
   onEnter: () => void;
   onLeave: () => void;
+  /** Side-column variant — denser layout for ~200px-wide column. */
+  compact?: boolean;
 }) {
   const distKm = (climb.distanceM / 1000).toFixed(2);
   const elev   = Math.round(climb.elevationM);
@@ -230,21 +253,54 @@ function ClimbRow({
       }}
     >
       <div style={{ background: color }} />
-      <div style={{ padding: '10px 14px' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6, gap: 8 }}>
+      <div style={{ padding: compact ? '8px 10px' : '10px 14px' }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          justifyContent: 'space-between',
+          marginBottom: compact ? 4 : 6,
+          gap: 6,
+        }}>
           <span style={{
-            fontFamily: "'Playfair Display'", fontSize: 16, fontWeight: 700,
-            color: tokens.ink,
+            fontFamily: "'Playfair Display'",
+            fontSize:   compact ? 13 : 16,
+            fontWeight: 700,
+            color:      tokens.ink,
+            whiteSpace: 'nowrap',
+            overflow:   'hidden',
+            textOverflow: 'ellipsis',
           }}>{climb.name}</span>
-          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color }}>
-            {avg}% MOY · {max}% MAX
+          <span style={{
+            fontSize:      compact ? 11 : 10,
+            fontWeight:    700,
+            letterSpacing: compact ? '0.04em' : '0.08em',
+            color,
+            whiteSpace:    'nowrap',
+          }}>
+            {avg}%
           </span>
         </div>
-        <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
-          <ClimbStat label="DISTANCE" value={distKm} unit="km" />
-          <ClimbStat label="DÉNIVELÉ" value={String(elev)} unit="m" />
-          <ClimbStat label="DURÉE" value={dur} unit="" />
-        </div>
+
+        {compact ? (
+          // Single line of compact stats — fits a 200px column.
+          <div style={{
+            fontSize: 10, color: tokens.inkLight, lineHeight: 1.4,
+            display: 'flex', gap: 6, flexWrap: 'wrap',
+          }}>
+            <span>{distKm} km</span>
+            <span style={{ color: tokens.creamBorder }}>·</span>
+            <span>{elev} m</span>
+            <span style={{ color: tokens.creamBorder }}>·</span>
+            <span>{dur}</span>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
+            <ClimbStat label="DISTANCE" value={distKm} unit="km" />
+            <ClimbStat label="DÉNIVELÉ" value={String(elev)} unit="m" />
+            <ClimbStat label="DURÉE"    value={dur}       unit="" />
+            <ClimbStat label="MAX"      value={max}       unit="%" />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -656,22 +712,45 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
         );
       })()}
 
-      {/* Auto-detected climbs — same algorithm as the iOS app, so a
-          given ride surfaces the same list on both surfaces. Hides
-          itself if no climbs qualify (flat ride). Placed ABOVE the
-          map so hovering a climb row highlights the matching segment
-          on the map immediately below — eye doesn't have to travel. */}
-      <ClimbsCard
-        climbs={climbs}
-        hoveredIdx={hoveredClimbIdx}
-        onHover={setHoveredClimbIdx}
-      />
-
-      {/* Route map */}
-      {hasGPS && (
-        <div style={{ ...CARD_STYLE, marginBottom: 20 }}>
-          <Label style={{ display: 'block', marginBottom: 14 }}>CARTE DU TRAJET</Label>
-          <ActivityRouteMap activity={activity} highlightSegment={highlightSegment} />
+      {/* Route map + Climbs side-by-side (80% / 20% on desktop).
+          Hover a climb row → matching segment lights up on the map
+          beside it. Adjacent placement means the eye doesn't travel
+          to find the highlight. On mobile, the climbs card stacks
+          above the map (climbs first because it's the index; map is
+          the visualization the climbs reference). */}
+      {(hasGPS || climbs.length > 0) && (
+        <div style={{
+          display:        'flex',
+          gap:            12,
+          marginBottom:   20,
+          flexDirection:  isMobile ? 'column' : 'row',
+          alignItems:     'stretch',
+        }}>
+          {hasGPS && (
+            <div style={{
+              flex:     isMobile ? 'auto' : '0 0 calc(80% - 6px)',
+              minWidth: 0, // allow the inner map to shrink in flex
+            }}>
+              <div style={{ ...CARD_STYLE, marginBottom: 0, height: '100%' }}>
+                <Label style={{ display: 'block', marginBottom: 14 }}>CARTE DU TRAJET</Label>
+                <ActivityRouteMap activity={activity} highlightSegment={highlightSegment} />
+              </div>
+            </div>
+          )}
+          {climbs.length > 0 && (
+            <div style={{
+              flex:     isMobile ? 'auto' : '0 0 calc(20% - 6px)',
+              minWidth: 0,
+            }}>
+              <ClimbsCard
+                climbs={climbs}
+                hoveredIdx={hoveredClimbIdx}
+                onHover={setHoveredClimbIdx}
+                compact={!isMobile}
+                maxHeight={isMobile ? undefined : 460}
+              />
+            </div>
+          )}
         </div>
       )}
 
