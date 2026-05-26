@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 // Proxy to opentopodata.org's eudem25m dataset (25 m resolution DEM
 // covering Europe). Free, no key, but limited to 100 locations per
@@ -6,6 +7,10 @@ import { NextRequest, NextResponse } from 'next/server';
 //
 // Client posts up to 100 [lat, lng] points; we forward, normalise the
 // response to a flat number[] of elevations (m), preserving order.
+//
+// Per-IP rate-limited to protect the upstream quota — the route is
+// unauthenticated (the iOS app + web both call it) so any leaked URL
+// could otherwise burn our daily 1000-call budget in minutes.
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
@@ -18,6 +23,9 @@ interface OpenTopoResp {
 const MAX_POINTS = 100;
 
 export async function POST(req: NextRequest) {
+  const limited = enforceRateLimit(req, RATE_LIMITS.elevation, 'elevation');
+  if (limited) return limited;
+
   let body: { points?: [number, number][] };
   try {
     body = await req.json();

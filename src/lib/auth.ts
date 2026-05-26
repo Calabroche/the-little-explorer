@@ -208,6 +208,40 @@ export function buildAuthOptions(): AuthOptions {
             }
           }
         }
+
+        // "Logout from all devices" enforcement. On every JWT read we
+        // compare the token's iat (issued-at, seconds-epoch) to the
+        // user's session_invalidated_at — if the token predates the
+        // cutoff, we drop the uid so the `session` callback below
+        // surfaces a null user and downstream auth checks 401.
+        //
+        // Skipped on the very first call of a fresh sign-in (where the
+        // `user` parameter is populated) — that token is by definition
+        // current. Also skipped if uid is missing for any reason.
+        if (!user && token?.uid) {
+          try {
+            const { data } = await supabaseAdmin()
+              .schema('next_auth')
+              .from('users')
+              .select('session_invalidated_at')
+              .eq('id', token.uid)
+              .maybeSingle();
+            const cutoff = data?.session_invalidated_at
+              ? Math.floor(new Date(data.session_invalidated_at as string).getTime() / 1000)
+              : 0;
+            const iat = typeof token.iat === 'number' ? token.iat : 0;
+            if (cutoff && iat && iat < cutoff) {
+              // Invalidate by stripping fields the session callback
+              // depends on. NextAuth will then surface { user: null }
+              // to the client and middleware redirects to /login.
+              delete token.uid;
+              delete token.athleteId;
+            }
+          } catch (err) {
+            // Don't lock users out on transient DB errors.
+            console.error('[auth] session-invalidated lookup failed:', err);
+          }
+        }
         return token;
       },
       /**

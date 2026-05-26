@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 // Proxy to the French government's free address API: BAN (Base Adresse
 // Nationale) at api-adresse.data.gouv.fr. Replaces the older
@@ -44,6 +45,9 @@ interface BanFeature {
 interface BanResponse { type: 'FeatureCollection'; features: BanFeature[] }
 
 export async function GET(req: NextRequest) {
+  const limited = enforceRateLimit(req, RATE_LIMITS.commune, 'commune-search');
+  if (limited) return limited;
+
   const q       = (req.nextUrl.searchParams.get('q') || '').trim();
   const lat     = req.nextUrl.searchParams.get('lat');
   const lng     = req.nextUrl.searchParams.get('lng');

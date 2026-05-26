@@ -194,3 +194,37 @@ returns uuid
 language sql stable as $$
   select id from next_auth.users where athlete_id = p_athlete_id limit 1;
 $$;
+
+-- ── Logout-from-all-devices: invalidate every web JWT for this user ─────────
+-- We add a single timestamp; the NextAuth `jwt` callback compares the
+-- JWT's `iat` against this column and rejects the session if the token
+-- was issued before the cutoff. Combined with revoking all api_tokens
+-- rows (for iOS bearer auth), this gives a true "log out everywhere".
+alter table if exists next_auth.users
+  add column if not exists session_invalidated_at timestamptz;
+
+-- ── Admin audit log ─────────────────────────────────────────────────────────
+-- Records every write action taken from /admin (revoke user, edit
+-- allowlist, force-sync someone, etc.). Read-only actions are deliberately
+-- NOT logged here — would be too noisy and provides little forensic value.
+--
+-- `actor_id`        — who took the action (admin's user id)
+-- `action`          — short verb string ('revoke_session', 'force_sync', …)
+-- `target_user_id`  — who the action was taken against (nullable for system-wide actions)
+-- `payload`         — full action context (JSON; trimmed of secrets)
+-- `ip`              — best-effort client IP for traceability
+create table if not exists next_auth.admin_audit (
+  id              uuid primary key default uuid_generate_v4(),
+  actor_id        uuid not null references next_auth.users(id) on delete cascade,
+  action          text not null,
+  target_user_id  uuid          references next_auth.users(id) on delete set null,
+  payload         jsonb not null default '{}'::jsonb,
+  ip              text,
+  created_at      timestamptz not null default now()
+);
+create index if not exists admin_audit_actor_idx   on next_auth.admin_audit (actor_id,   created_at desc);
+create index if not exists admin_audit_target_idx  on next_auth.admin_audit (target_user_id, created_at desc);
+create index if not exists admin_audit_action_idx  on next_auth.admin_audit (action, created_at desc);
+
+grant all on table next_auth.admin_audit to postgres;
+grant all on table next_auth.admin_audit to service_role;
