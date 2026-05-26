@@ -45,11 +45,21 @@ export interface ClimbThresholds {
   maxNetDescentDuringClimb:   number;
 }
 
+// Thresholds deliberately kept on the "major climb" side, not the
+// "every kicker" side. Rationale: a 200 m bump at 8 % (= 16 m gain) is
+// a 30-second effort — surfacing it as a "Montée" alongside a 3 km col
+// dilutes the meaning of the card. We'd rather show 1-5 real climbs
+// per ride than 25 micro-events. The card's NB explains this to
+// users so a missing-bump isn't read as a bug.
+//
+// If someone wants a "kicker tracker" we'd ship it as a separate card
+// with its own visual treatment (Strava does this with their "punchy
+// efforts" overlay), not by mutating these numbers.
 export const DEFAULT_THRESHOLDS: ClimbThresholds = {
-  minDistanceM:             500,
-  minElevationM:            30,
-  minAvgGradePct:           3,
-  maxNetDescentDuringClimb: 8,
+  minDistanceM:             500,  // 500 m mini
+  minElevationM:            30,   // 30 m de gain
+  minAvgGradePct:           3,    // 3 % moyens
+  maxNetDescentDuringClimb: 8,    // 8 m de creux toléré au milieu
 };
 
 /**

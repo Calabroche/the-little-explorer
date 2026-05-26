@@ -203,12 +203,24 @@ function ClimbsCard({
           </div>
         ))}
       </div>
-      {!compact && (
-        <p style={{ marginTop: 10, fontSize: 11, color: tokens.inkLight, lineHeight: 1.5 }}>
-          Détection auto à partir de l&apos;altitude lissée (moyenne mobile 30 pts).
-          Seuils : 500 m mini, 30 m de gain, 3 % moyens. La pente max est sur fenêtre glissante 100 m.
-        </p>
-      )}
+      {/* NB — always visible. Explains the strict thresholds so a
+          missing "kicker" isn't read as a bug. Compact variant trims
+          the wording for the 20 %-width side column. */}
+      <p style={{
+        marginTop:  compact ? 8  : 10,
+        fontSize:   compact ? 10 : 11,
+        color:      tokens.inkLight,
+        lineHeight: 1.45,
+        borderTop:  `1px solid ${tokens.creamBorder}`,
+        paddingTop: compact ? 8  : 10,
+      }}>
+        <strong style={{ color: tokens.inkMid, fontWeight: 700 }}>NB —</strong>{' '}
+        {compact ? (
+          <>seuils volontairement stricts : <strong>≥ 500 m</strong>, <strong>≥ 30 m</strong> de gain, <strong>≥ 3 %</strong> moyens. Les petits raidards (kickers &lt; 500 m) sont volontairement ignorés pour ne lister que les vraies montées.</>
+        ) : (
+          <>seuils volontairement stricts pour ne lister que les <em>vraies</em> montées : <strong>≥ 500 m</strong> de longueur, <strong>≥ 30 m</strong> de gain, <strong>≥ 3 %</strong> de pente moyenne. Les petits raidards (kickers &lt; 500 m, même à 8-10 %) sont délibérément ignorés. Détection sur altitude lissée (moyenne mobile 30 pts) ; pente max sur fenêtre glissante 100 m.</>
+        )}
+      </p>
     </div>
   );
 }
