@@ -104,14 +104,27 @@ function dataAtIndex(idx: number, activity: Activity, positions: [number, number
   };
 }
 
-function RouteWithHover({ activity, positions, gradient }: {
+function RouteWithHover({ activity, positions, gradient, highlightSegment }: {
   activity: Activity;
   positions: [number, number][];
   gradient: number[];
+  highlightSegment: { startIdx: number; endIdx: number } | null;
 }) {
   const [info, setInfo] = useState<HoverData | null>(null);
   const speeds   = activity.speed_kmh ?? [];
   const segments = buildSegments(positions, speeds, 200);
+
+  // Clamp the highlight indices into the actual GPS array length —
+  // streams can disagree (Strava sometimes returns a slightly shorter
+  // altitude array than distance), so a climb's endIdx might point
+  // past gps.length on the rare malformed activity.
+  const highlightPositions = (() => {
+    if (!highlightSegment) return null;
+    const s = Math.max(0, Math.min(highlightSegment.startIdx, positions.length - 1));
+    const e = Math.max(s, Math.min(highlightSegment.endIdx, positions.length - 1));
+    if (e - s < 2) return null;
+    return positions.slice(s, e + 1);
+  })();
 
   const handleMouseMove = (e: LeafletMouseEvent) => {
     const { lat, lng } = e.latlng;
@@ -136,6 +149,25 @@ function RouteWithHover({ activity, positions, gradient }: {
       {segments.map((seg, i) => (
         <Polyline key={i} positions={seg.pts} pathOptions={{ color: seg.color, weight: 5, opacity: 0.9 }} />
       ))}
+
+      {/* Climb highlight — drawn ABOVE the base segments so it pops on
+          hover. Two layers: a thick semi-transparent halo (visual
+          "glow") + a punchy core stroke. Stays inert (no event
+          handlers) so the hover-info overlay still catches mouse
+          events on the surrounding stretches. */}
+      {highlightPositions && (
+        <>
+          <Polyline
+            positions={highlightPositions}
+            pathOptions={{ color: tokens.terra, weight: 14, opacity: 0.35, lineCap: 'round' }}
+          />
+          <Polyline
+            positions={highlightPositions}
+            pathOptions={{ color: tokens.terra, weight: 7, opacity: 1.0, lineCap: 'round' }}
+          />
+        </>
+      )}
+
       {/* Invisible overlay for hover events */}
       <Polyline
         positions={positions}
@@ -166,7 +198,18 @@ function RouteWithHover({ activity, positions, gradient }: {
   );
 }
 
-export function ActivityRouteMap({ activity }: { activity: Activity }) {
+export function ActivityRouteMap({
+  activity,
+  highlightSegment,
+}: {
+  activity: Activity;
+  /** Optional climb / segment to highlight on top of the base route.
+   *  Indices are into the activity's altitude/distance streams; we
+   *  clamp into the GPS array's bounds defensively in case Strava
+   *  returned mismatched stream lengths. Used by the Climbs card on
+   *  the parent AnalysisPage when the user hovers a climb row. */
+  highlightSegment?: { startIdx: number; endIdx: number } | null;
+}) {
   const dark = useDarkMode();
   const [basemap, setBasemap] = useBasemap();
   const { gps, altitude = [], distance_m = [] } = activity;
@@ -182,15 +225,19 @@ export function ActivityRouteMap({ activity }: { activity: Activity }) {
       <MapContainer
         center={center}
         zoom={12}
-        // 540px was tight when looking at a long ride — bumped to 810
-        // (≈1.5×) per Florian's "agrandi de 0.5x" feedback. Visual
-        // breathing room without pushing the elevation/HR charts
-        // entirely below the fold.
-        style={{ height: 810, width: '100%', borderRadius: 4 }}
+        // 480px — trimmed from the previous 810 now that the Climbs
+        // card sits above the map. Less scroll, and the highlighted
+        // climb segment still reads clearly at this height.
+        style={{ height: 480, width: '100%', borderRadius: 4 }}
         scrollWheelZoom={false}
       >
         <BasemapTiles basemap={basemap} darkMode={dark} />
-        <RouteWithHover activity={activity} positions={positions} gradient={gradient} />
+        <RouteWithHover
+          activity={activity}
+          positions={positions}
+          gradient={gradient}
+          highlightSegment={highlightSegment ?? null}
+        />
         <FitBounds positions={positions} />
       </MapContainer>
       <BasemapToggle basemap={basemap} onChange={setBasemap} />

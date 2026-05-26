@@ -149,18 +149,35 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
  * than showing an empty state, because the typical flat ride wouldn't
  * trigger anything and we don't want to add visual noise.
  */
-function ClimbsCard({ climbs }: { climbs: Climb[] }) {
+function ClimbsCard({
+  climbs,
+  hoveredIdx,
+  onHover,
+}: {
+  climbs: Climb[];
+  hoveredIdx: number | null;
+  /** Pass null on mouse leave. */
+  onHover: (idx: number | null) => void;
+}) {
   if (climbs.length === 0) return null;
   return (
     <div style={{ ...CARD_STYLE, marginBottom: 20 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14, gap: 8, flexWrap: 'wrap' }}>
         <Label>MONTÉES DÉTECTÉES</Label>
         <span style={{ fontSize: 11, color: tokens.inkLight }}>
-          {climbs.length} montée{climbs.length > 1 ? 's' : ''} · ≥ 3 % · ≥ 30 m
+          {climbs.length} montée{climbs.length > 1 ? 's' : ''} · ≥ 3 % · ≥ 30 m · <em>hover pour localiser sur la carte</em>
         </span>
       </div>
       <div style={{ display: 'grid', gap: 8 }}>
-        {climbs.map((c, idx) => <ClimbRow key={idx} climb={c} />)}
+        {climbs.map((c, idx) => (
+          <ClimbRow
+            key={idx}
+            climb={c}
+            highlighted={hoveredIdx === idx}
+            onEnter={() => onHover(idx)}
+            onLeave={() => onHover(null)}
+          />
+        ))}
       </div>
       <p style={{ marginTop: 10, fontSize: 11, color: tokens.inkLight, lineHeight: 1.5 }}>
         Détection auto à partir de l&apos;altitude lissée (moyenne mobile 30 pts).
@@ -170,7 +187,17 @@ function ClimbsCard({ climbs }: { climbs: Climb[] }) {
   );
 }
 
-function ClimbRow({ climb }: { climb: Climb }) {
+function ClimbRow({
+  climb,
+  highlighted,
+  onEnter,
+  onLeave,
+}: {
+  climb: Climb;
+  highlighted: boolean;
+  onEnter: () => void;
+  onLeave: () => void;
+}) {
   const distKm = (climb.distanceM / 1000).toFixed(2);
   const elev   = Math.round(climb.elevationM);
   const avg    = climb.avgGradePct.toFixed(1);
@@ -188,13 +215,20 @@ function ClimbRow({ climb }: { climb: Climb }) {
                               tokens.green;
 
   return (
-    <div style={{
-      display:      'grid',
-      gridTemplateColumns: '4px 1fr',
-      borderRadius: 3,
-      overflow:     'hidden',
-      background:   tokens.creamDark,
-    }}>
+    <div
+      onMouseEnter={onEnter}
+      onMouseLeave={onLeave}
+      style={{
+        display:      'grid',
+        gridTemplateColumns: '4px 1fr',
+        borderRadius: 3,
+        overflow:     'hidden',
+        background:   highlighted ? tokens.surface : tokens.creamDark,
+        boxShadow:    highlighted ? `0 0 0 2px ${tokens.terra}` : 'none',
+        cursor:       'pointer',
+        transition:   'box-shadow 140ms ease, background 140ms ease',
+      }}
+    >
       <div style={{ background: color }} />
       <div style={{ padding: '10px 14px' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6, gap: 8 }}>
@@ -404,6 +438,13 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
     () => detectClimbs(activity.altitude, activity.distance_m, activity.time_s),
     [activity],
   );
+
+  // Which climb is currently highlighted on the map (hover state). Lifted
+  // to the parent so the Climbs card and the map can be siblings.
+  const [hoveredClimbIdx, setHoveredClimbIdx] = useState<number | null>(null);
+  const highlightSegment = hoveredClimbIdx !== null && climbs[hoveredClimbIdx]
+    ? { startIdx: climbs[hoveredClimbIdx].startIndex, endIdx: climbs[hoveredClimbIdx].endIndex }
+    : null;
 
   const chartHeight = isMobile ? 260 : 300;
 
@@ -615,18 +656,24 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
         );
       })()}
 
+      {/* Auto-detected climbs — same algorithm as the iOS app, so a
+          given ride surfaces the same list on both surfaces. Hides
+          itself if no climbs qualify (flat ride). Placed ABOVE the
+          map so hovering a climb row highlights the matching segment
+          on the map immediately below — eye doesn't have to travel. */}
+      <ClimbsCard
+        climbs={climbs}
+        hoveredIdx={hoveredClimbIdx}
+        onHover={setHoveredClimbIdx}
+      />
+
       {/* Route map */}
       {hasGPS && (
         <div style={{ ...CARD_STYLE, marginBottom: 20 }}>
           <Label style={{ display: 'block', marginBottom: 14 }}>CARTE DU TRAJET</Label>
-          <ActivityRouteMap activity={activity} />
+          <ActivityRouteMap activity={activity} highlightSegment={highlightSegment} />
         </div>
       )}
-
-      {/* Auto-detected climbs — same algorithm as the iOS app, so a
-          given ride surfaces the same list on both surfaces. Hides
-          itself if no climbs qualify (flat ride). */}
-      <ClimbsCard climbs={climbs} />
 
 
       {/* VO2 Max + Power summary — moved under the route map so the
