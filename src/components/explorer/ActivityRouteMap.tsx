@@ -73,7 +73,13 @@ function FitBounds({ positions }: { positions: [number, number][] }) {
   const map = useMap();
   useEffect(() => {
     if (positions.length > 1) {
-      map.fitBounds(positions, { padding: [40, 40] });
+      // Fit to bounds, then bump the zoom level by +1 so the route
+      // fills more of the card. Default fitBounds leaves a lot of
+      // padding around long rides; a single zoom step is enough to
+      // close the gap without cropping the polyline.
+      map.fitBounds(positions, { padding: [16, 16] });
+      const currentZoom = map.getZoom();
+      map.setZoom(Math.min(currentZoom + 1, 16));
     }
   }, [map, positions]);
   return null;

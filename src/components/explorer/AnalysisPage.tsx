@@ -258,7 +258,7 @@ function ClimbRow({
           display: 'flex',
           alignItems: 'baseline',
           justifyContent: 'space-between',
-          marginBottom: compact ? 4 : 6,
+          marginBottom: compact ? 6 : 6,
           gap: 6,
         }}>
           <span style={{
@@ -270,28 +270,31 @@ function ClimbRow({
             overflow:   'hidden',
             textOverflow: 'ellipsis',
           }}>{climb.name}</span>
-          <span style={{
-            fontSize:      compact ? 11 : 10,
-            fontWeight:    700,
-            letterSpacing: compact ? '0.04em' : '0.08em',
-            color,
-            whiteSpace:    'nowrap',
-          }}>
-            {avg}%
-          </span>
+          {!compact && (
+            <span style={{
+              fontSize:      10,
+              fontWeight:    700,
+              letterSpacing: '0.08em',
+              color,
+              whiteSpace:    'nowrap',
+            }}>
+              {avg}% MOY · {max}% MAX
+            </span>
+          )}
         </div>
 
         {compact ? (
-          // Single line of compact stats — fits a 200px column.
+          // 4-stat grid sized for a ~200px column: 2 columns × 2 rows.
+          // Labels above values keep the layout readable at small widths.
           <div style={{
-            fontSize: 10, color: tokens.inkLight, lineHeight: 1.4,
-            display: 'flex', gap: 6, flexWrap: 'wrap',
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            rowGap: 6, columnGap: 8,
           }}>
-            <span>{distKm} km</span>
-            <span style={{ color: tokens.creamBorder }}>·</span>
-            <span>{elev} m</span>
-            <span style={{ color: tokens.creamBorder }}>·</span>
-            <span>{dur}</span>
+            <ClimbStat label="long." value={distKm} unit="km" compact />
+            <ClimbStat label="D+"    value={String(elev)} unit="m" compact />
+            <ClimbStat label="moy"   value={avg} unit="%" compact color={color} />
+            <ClimbStat label="max"   value={max} unit="%" compact />
           </div>
         ) : (
           <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
@@ -301,22 +304,46 @@ function ClimbRow({
             <ClimbStat label="MAX"      value={max}       unit="%" />
           </div>
         )}
+        {compact && climb.durationSec > 0 && (
+          <div style={{
+            marginTop: 6, fontSize: 10, color: tokens.inkLight,
+            display: 'flex', justifyContent: 'space-between',
+          }}>
+            <span style={{ letterSpacing: '0.04em' }}>durée</span>
+            <span style={{ color: tokens.ink, fontWeight: 600 }}>{dur}</span>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function ClimbStat({ label, value, unit }: { label: string; value: string; unit: string }) {
+function ClimbStat({
+  label, value, unit, compact = false, color,
+}: {
+  label: string;
+  value: string;
+  unit: string;
+  /** Side-column variant — smaller fonts, lowercase label. */
+  compact?: boolean;
+  /** Override for the value color (used to grade-tint the avg %). */
+  color?: string;
+}) {
   return (
     <div>
       <div style={{
-        fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
-        color: tokens.inkLight, textTransform: 'uppercase',
+        fontSize:      compact ? 9  : 9,
+        fontWeight:    700,
+        letterSpacing: compact ? '0.04em' : '0.08em',
+        color:         tokens.inkLight,
+        textTransform: compact ? 'none' : 'uppercase',
       }}>{label}</div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 2 }}>
         <span style={{
-          fontFamily: "'Playfair Display'", fontSize: 15, fontWeight: 700,
-          color: tokens.ink,
+          fontFamily: "'Playfair Display'",
+          fontSize:   compact ? 13 : 15,
+          fontWeight: 700,
+          color:      color ?? tokens.ink,
         }}>{value}</span>
         {unit && <span style={{ fontSize: 10, color: tokens.inkLight }}>{unit}</span>}
       </div>
