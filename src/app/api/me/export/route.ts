@@ -13,6 +13,14 @@
  *     activities:  [ full Supabase rows including payload streams ],
  *   }
  *
+ * Why streamed: Vercel Hobby caps response bodies at 4.5 MB. With full
+ * payload streams (GPS / HR / altitude arrays — typically ~1 MB each
+ * for a long bike ride), even a 6-ride user can exceed the buffer
+ * limit. Streaming the response with a ReadableStream chunks the JSON
+ * one activity at a time and bypasses that cap. Client-side fetch
+ * still buffers the full body, which is fine — 10-50 MB in memory is
+ * cheap; what we can't do is buffer 5+ MB inside the lambda.
+ *
  * Out of scope here (intentional):
  *   - OAuth refresh tokens (security: never exported).
  *   - admin_audit entries about this user (those are operational
@@ -36,13 +44,20 @@ const PROFILES_BY_EMAIL: Record<string, { riderKg: number; bikeKg: number }> = {
 };
 const DEFAULT_PROFILE = { riderKg: 70, bikeKg: 9 };
 
+// Page size for streaming activities. Big enough that the per-page
+// overhead is negligible, small enough that a single page's response
+// stays well under any in-flight buffer Vercel might apply between
+// chunks. Tuned for ~1MB-per-activity payloads.
+const ACTIVITY_PAGE_SIZE = 5;
+
 export async function GET(req: NextRequest) {
   const authed = await getAuthedUser(req);
   if (!authed?.id) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  // 1. User row (settings + identity).
+  // 1. User row (settings + identity). Small and read once — no need
+  //    to stream this part.
   const { data: user, error: userErr } = await supabaseAdmin()
     .schema('next_auth')
     .from('users')
@@ -51,23 +66,10 @@ export async function GET(req: NextRequest) {
     .maybeSingle();
   if (userErr) {
     console.error('[me.export] user query failed:', userErr.message);
-    return NextResponse.json({ error: 'db_error' }, { status: 500 });
+    return NextResponse.json({ error: 'db_error', detail: userErr.message }, { status: 500 });
   }
   if (!user) {
     return NextResponse.json({ error: 'user_not_found' }, { status: 404 });
-  }
-
-  // 2. Activities — every row owned by this user, full payload included
-  //    so the export is genuinely portable (a sibling app can ingest
-  //    the streams + metrics from this dump alone).
-  const { data: activities, error: actErr } = await supabaseAdmin()
-    .from('activities')
-    .select('id, sport, original_type, title, start_date, duration_min, distance_km, elevation_m, payload, created_at')
-    .eq('user_id', authed.id)
-    .order('start_date', { ascending: false });
-  if (actErr) {
-    console.error('[me.export] activities query failed:', actErr.message);
-    return NextResponse.json({ error: 'db_error', detail: actErr.message }, { status: 500 });
   }
 
   const legacy = user.email ? PROFILES_BY_EMAIL[user.email] : undefined;
@@ -77,29 +79,89 @@ export async function GET(req: NextRequest) {
     customFtp: user.custom_ftp ?? null,
   };
 
-  const payload = {
-    exportedAt: new Date().toISOString(),
-    schema:     'tle-export-v1',
-    profile: {
-      id:         user.id,
-      email:      user.email,
-      name:       user.name,
-      image:      user.image,
-      athleteId:  user.athlete_id,
-      createdAt:  user.created_at,
-      settings: {
-        rider_kg:   user.rider_kg,
-        bike_kg:    user.bike_kg,
-        custom_ftp: user.custom_ftp,
-      },
-      effective,
+  const profileBlock = {
+    id:         user.id,
+    email:      user.email,
+    name:       user.name,
+    image:      user.image,
+    athleteId:  user.athlete_id,
+    createdAt:  user.created_at,
+    settings: {
+      rider_kg:   user.rider_kg,
+      bike_kg:    user.bike_kg,
+      custom_ftp: user.custom_ftp,
     },
-    activities: activities ?? [],
+    effective,
   };
 
   const filename = `the-little-explorer-export-${new Date().toISOString().slice(0, 10)}.json`;
+  const encoder  = new TextEncoder();
 
-  return new NextResponse(JSON.stringify(payload, null, 2), {
+  // 2. Stream the JSON document — header first, then activities in
+  //    paged chunks, then close the array + outer object. Each `push`
+  //    flushes a chunk to the client, so Vercel never holds more than
+  //    a few KB of buffer in memory at once.
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        // Header — exportedAt + schema + profile.
+        controller.enqueue(encoder.encode(
+          `{\n  "exportedAt": ${JSON.stringify(new Date().toISOString())},\n` +
+          `  "schema": "tle-export-v1",\n` +
+          `  "profile": ${JSON.stringify(profileBlock, null, 2)},\n` +
+          `  "activities": [\n`,
+        ));
+
+        // Activities, paged. Each page is fetched then streamed out
+        // one row at a time. We stream in start_date descending order
+        // (newest first) — same order as the Feed for consistency.
+        let pageStart = 0;
+        let first = true;
+        // Hard ceiling so a runaway pagination loop can't run forever.
+        const MAX_PAGES = 200;
+        for (let pageIdx = 0; pageIdx < MAX_PAGES; pageIdx++) {
+          const { data: page, error: pageErr } = await supabaseAdmin()
+            .from('activities')
+            .select('id, sport, original_type, title, start_date, duration_min, distance_km, elevation_m, payload, created_at')
+            .eq('user_id', authed.id)
+            .order('start_date', { ascending: false })
+            .range(pageStart, pageStart + ACTIVITY_PAGE_SIZE - 1);
+
+          if (pageErr) {
+            // Mid-stream errors: we've already started writing a 200
+            // response and can't change the status. Close the JSON
+            // gracefully with an error sentinel — the client can
+            // detect this when parsing.
+            console.error('[me.export] activities page query failed:', pageErr.message);
+            controller.enqueue(encoder.encode(
+              `${first ? '' : ',\n'}    {"__error": "activities_query_failed", "detail": ${JSON.stringify(pageErr.message)}}\n`,
+            ));
+            break;
+          }
+          if (!page || page.length === 0) break;
+
+          for (const activity of page) {
+            const prefix = first ? '    ' : ',\n    ';
+            controller.enqueue(encoder.encode(prefix + JSON.stringify(activity)));
+            first = false;
+          }
+
+          if (page.length < ACTIVITY_PAGE_SIZE) break; // last page
+          pageStart += ACTIVITY_PAGE_SIZE;
+        }
+
+        // Close the array + outer object.
+        controller.enqueue(encoder.encode(`\n  ]\n}\n`));
+        controller.close();
+      } catch (err) {
+        console.error('[me.export] stream failed:', err);
+        // Best-effort close — controller may already be torn down.
+        try { controller.error(err); } catch { /* noop */ }
+      }
+    },
+  });
+
+  return new NextResponse(stream, {
     status:  200,
     headers: {
       'Content-Type':        'application/json',
@@ -107,6 +169,11 @@ export async function GET(req: NextRequest) {
       // Don't cache — this contains personal data, every request
       // should hit fresh state.
       'Cache-Control':       'no-store, max-age=0',
+      // Hint to proxies / browsers that we're streaming — disables
+      // any buffering they might otherwise apply waiting for the
+      // full Content-Length.
+      'Transfer-Encoding':   'chunked',
+      'X-Accel-Buffering':   'no',
     },
   });
 }
