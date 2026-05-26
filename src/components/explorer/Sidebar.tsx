@@ -316,13 +316,6 @@ const NAV_LABEL_KEY: Record<PageId, string> = {
 
 export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobile, sport, onSportChange, availableSports, user, onUserChange, onHome, onToggleCollapse }: Props) {
   const { t, lang, setLang } = useT();
-  const { data: session } = useSession();
-  // Admin-only "view as Helena" toggle — temporary stop-gap until the
-  // multi-user account flow is finished and Helena has her own login.
-  // Anyone non-admin (zero people right now, since florian is the only
-  // admin) doesn't see the toggle; the API also gates `?user=helena`
-  // on the same admin check, so even hand-crafted URLs are inert.
-  const showUserToggle = isAdminEmail(session?.user?.email);
   const navItems = ALL_NAV_ITEMS.filter(n => n.sports.includes(sport));
   if (mobile) {
     return (
@@ -345,9 +338,6 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
           display: 'flex', gap: 6, alignItems: 'center',
         }}>
           <MobileProfileAvatar />
-          {showUserToggle && (
-            <div style={{ flex: '0 0 auto' }}><UserToggle user={user} onChange={onUserChange} compact /></div>
-          )}
           <div style={{ flex: '1 1 0%', minWidth: 0 }}><SportToggle sport={sport} onChange={onSportChange} available={availableSports} compact /></div>
           <div style={{ flex: '0 0 auto' }}><LangToggle lang={lang} onChange={setLang} compact /></div>
           <button
@@ -455,13 +445,6 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
             multi-user means each session sees only their own data, so
             switching users from the sidebar no longer makes sense. */}
       </div>
-
-      {showUserToggle && (
-        <div style={{ padding: '14px 12px 4px' }}>
-          <Label style={{ display: 'block', marginBottom: 6 }}>PROFIL</Label>
-          <UserToggle user={user} onChange={onUserChange} />
-        </div>
-      )}
 
       <div style={{ padding: '14px 12px 4px' }}>
         <Label style={{ display: 'block', marginBottom: 6 }}>{t('common.sport')}</Label>

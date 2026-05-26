@@ -3,7 +3,6 @@ import fs from 'fs';
 import path from 'path';
 import { supabaseAdmin, isSupabaseConfigured } from '@/lib/db';
 import { getAuthedUser } from '@/lib/api-auth';
-import { isAdminEmail } from '@/lib/admin';
 
 // Force dynamic rendering : the route reads from Supabase (or legacy JSON
 // for users not yet migrated). Next.js 13 app-router would otherwise
@@ -435,46 +434,28 @@ export async function GET(req: NextRequest) {
   const email  = authed.email;
   const userId = authed.id;
 
-  // Stop-gap "view-as-Helena" mode (admin-only). The proper multi-user
-  // account flow is in flight — Helena will get her own login + Strava
-  // link soon — but until then the admin can still browse her archived
-  // activities (44 static JSON files bootstrapped before the auth
-  // pivot) by passing `?user=helena`. Anyone else who tries this just
-  // gets their own data back, so it's harmless if leaked into a URL.
-  const url = new URL(req.url);
-  const viewAsHelena = url.searchParams.get('user') === 'helena' && isAdminEmail(email);
-
   // Resolve the per-user profile: DB override > legacy hardcoded by
   // email > global default. customFtp is null when the user hasn't set
   // one; downstream code falls back to the derived FTP in that case.
-  // When viewing as Helena we use a hardcoded profile — she has no DB
-  // row yet and most of her data is running/walking, where the profile
-  // mass only matters for power derivation (irrelevant without a power
-  // meter). Adjust riderKg here if it looks off in the UI.
   type DbProfile = { rider_kg: number | null; bike_kg: number | null; custom_ftp: number | null };
-  let profile: Profile;
-  if (viewAsHelena) {
-    profile = { riderKg: 60, bikeKg: 9, mass: 69, customFtp: null };
-  } else {
-    let dbOverride: DbProfile | null = null;
-    try {
-      const { data } = await supabaseAdmin()
-        .schema('next_auth')
-        .from('users')
-        .select('rider_kg, bike_kg, custom_ftp')
-        .eq('id', userId)
-        .maybeSingle();
-      if (data) dbOverride = data as DbProfile;
-    } catch (err) {
-      // Non-fatal — fall through to legacy/default profile.
-      console.warn('[activities] profile lookup failed:', (err as Error).message);
-    }
-    const legacy = PROFILES_BY_EMAIL[email];
-    const riderKg   = dbOverride?.rider_kg ?? legacy?.riderKg ?? DEFAULT_PROFILE.riderKg;
-    const bikeKg    = dbOverride?.bike_kg  ?? legacy?.bikeKg  ?? DEFAULT_PROFILE.bikeKg;
-    const customFtp = dbOverride?.custom_ftp ?? null;
-    profile = { riderKg, bikeKg, mass: riderKg + bikeKg, customFtp };
+  let dbOverride: DbProfile | null = null;
+  try {
+    const { data } = await supabaseAdmin()
+      .schema('next_auth')
+      .from('users')
+      .select('rider_kg, bike_kg, custom_ftp')
+      .eq('id', userId)
+      .maybeSingle();
+    if (data) dbOverride = data as DbProfile;
+  } catch (err) {
+    // Non-fatal — fall through to legacy/default profile.
+    console.warn('[activities] profile lookup failed:', (err as Error).message);
   }
+  const legacy = PROFILES_BY_EMAIL[email];
+  const riderKg   = dbOverride?.rider_kg ?? legacy?.riderKg ?? DEFAULT_PROFILE.riderKg;
+  const bikeKg    = dbOverride?.bike_kg  ?? legacy?.bikeKg  ?? DEFAULT_PROFILE.bikeKg;
+  const customFtp = dbOverride?.custom_ftp ?? null;
+  const profile: Profile = { riderKg, bikeKg, mass: riderKg + bikeKg, customFtp };
 
   // Prefer Supabase. Fall back to legacy JSON files if the user hasn't been
   // migrated yet (e.g., Helena before her first sign-in) — driven by the
@@ -482,17 +463,12 @@ export async function GET(req: NextRequest) {
   // Strava (Stage 3 will trigger the auto-sync at that point).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let raws: any[] = [];
-  if (viewAsHelena) {
-    // Bypass Supabase entirely — Helena's archive lives in data/users/helena/.
-    raws = loadFromJsonFiles('helena');
-  } else {
-    if (isSupabaseConfigured()) {
-      raws = await loadFromSupabase(userId);
-    }
-    if (raws.length === 0) {
-      const slug = EMAIL_TO_USER_SLUG[email];
-      if (slug) raws = loadFromJsonFiles(slug);
-    }
+  if (isSupabaseConfigured()) {
+    raws = await loadFromSupabase(userId);
+  }
+  if (raws.length === 0) {
+    const slug = EMAIL_TO_USER_SLUG[email];
+    if (slug) raws = loadFromJsonFiles(slug);
   }
 
   raws.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
