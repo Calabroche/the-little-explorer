@@ -5,11 +5,15 @@
  *          effective profile (rider_kg, bike_kg, custom_ftp) after the
  *          null-fallback ladder (DB override → legacy PROFILES_BY_EMAIL
  *          → DEFAULT_PROFILE).
- * PATCH  → updates rider_kg / bike_kg / custom_ftp on next_auth.users.
- *          Body: { rider_kg?: number|null, bike_kg?: number|null,
- *                  custom_ftp?: number|null }. Nulls clear the override
- *          (= revert to default). Other fields are silently ignored —
- *          user can't change their own email/name/athlete_id from here.
+ * PATCH  → updates rider_kg / bike_kg / custom_ftp / name on
+ *          next_auth.users. Body fields are optional:
+ *             rider_kg?:   number|null   (null clears the override)
+ *             bike_kg?:    number|null   (null clears the override)
+ *             custom_ftp?: number|null   (null clears the override)
+ *             name?:       string|null   (null clears, falls back to
+ *                                         the OAuth-provided name)
+ *          Other fields (email / athlete_id) stay locked — those come
+ *          from the OAuth provider and can't be edited from here.
  * DELETE → wipes the user's account: revokes the Strava token (best
  *          effort), deletes the user row from next_auth.users. Every
  *          child table (accounts, sessions, api_tokens, activities)
@@ -127,10 +131,11 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'bad_json' }, { status: 400 });
   }
 
-  // Validate + build the update patch. Only the three editable fields
-  // are picked up; anything else in the body is silently dropped so
-  // someone can't bump their athlete_id by submitting a crafted body.
-  const update: Record<string, number | null> = {};
+  // Validate + build the update patch. Only the explicit editable
+  // fields are picked up; anything else in the body is silently
+  // dropped so someone can't bump their athlete_id by submitting a
+  // crafted body.
+  const update: Record<string, number | string | null> = {};
   for (const k of ['rider_kg', 'bike_kg', 'custom_ftp'] as const) {
     if (!(k in body)) continue;
     const v = body[k];
@@ -146,6 +151,27 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: `out_of_range_${k}`, message: `${r.min} ≤ ${k} ≤ ${r.max}` }, { status: 400 });
     }
     update[k] = v;
+  }
+
+  // Display name override. Empty string or null clears the override
+  // → name falls back to whatever the OAuth provider populated.
+  // Length capped at 64 to keep the UI readable and avoid abuse.
+  if ('name' in body) {
+    const raw = (body as { name?: string | null }).name;
+    if (raw === null) {
+      update.name = null;
+    } else if (typeof raw === 'string') {
+      const trimmed = raw.trim();
+      if (trimmed.length === 0) {
+        update.name = null;
+      } else if (trimmed.length > 64) {
+        return NextResponse.json({ error: 'name_too_long', message: '64 caractères max' }, { status: 400 });
+      } else {
+        update.name = trimmed;
+      }
+    } else {
+      return NextResponse.json({ error: 'invalid_name', message: 'must be a string or null' }, { status: 400 });
+    }
   }
 
   if (Object.keys(update).length === 0) {

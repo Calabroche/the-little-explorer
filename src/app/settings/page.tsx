@@ -107,9 +107,16 @@ export default function SettingsPage() {
   const [saved,    setSaved]    = useState(false);
 
   // Form state — strings so the user can type freely (including empty).
+  const [name,      setName]      = useState('');
   const [riderKg,   setRiderKg]   = useState('');
   const [bikeKg,    setBikeKg]    = useState('');
   const [customFtp, setCustomFtp] = useState('');
+
+  // "Exporter mes données" + "Déconnecter Strava" — RGPD art. 20
+  // (portability) and granular control over the Strava link.
+  const [exporting,    setExporting]    = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [profileError, setProfileError]   = useState<string | null>(null);
 
   // "Supprimer mon compte" — two-step confirm so a misclick doesn't
   // wipe months of training history. First tap arms; second tap
@@ -133,6 +140,7 @@ export default function SettingsPage() {
       })
       .then(d => {
         setMe(d);
+        setName(d.name ?? '');
         setRiderKg(toInput(d.settings.rider_kg));
         setBikeKg(toInput(d.settings.bike_kg));
         setCustomFtp(toInput(d.settings.custom_ftp));
@@ -148,7 +156,7 @@ export default function SettingsPage() {
 
     // Build patch — empty string means "clear override" → null.
     // NaN means "user typed garbage" → bail with error.
-    const patch: Record<string, number | null> = {};
+    const patch: Record<string, number | string | null> = {};
     for (const [k, v] of [
       ['rider_kg',   riderKg],
       ['bike_kg',    bikeKg],
@@ -162,6 +170,10 @@ export default function SettingsPage() {
       }
       patch[k] = parsed;
     }
+    // Display name — trim + send. Empty → clears the override on the
+    // server, falling back to the OAuth-provided name.
+    const nameTrim = name.trim();
+    patch.name = nameTrim.length === 0 ? null : nameTrim;
 
     try {
       const r = await fetch('/api/me', {
@@ -175,6 +187,7 @@ export default function SettingsPage() {
       }
       const fresh = await r.json() as MeResponse;
       setMe(fresh);
+      setName(fresh.name ?? '');
       setRiderKg(toInput(fresh.settings.rider_kg));
       setBikeKg(toInput(fresh.settings.bike_kg));
       setCustomFtp(toInput(fresh.settings.custom_ftp));
@@ -184,6 +197,56 @@ export default function SettingsPage() {
       setError((e as Error).message ?? 'Erreur inconnue');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const onExport = async () => {
+    setExporting(true);
+    setProfileError(null);
+    try {
+      const r = await fetch('/api/me/export');
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({})) as { error?: string };
+        throw new Error(err.error ?? `HTTP ${r.status}`);
+      }
+      // Stream the body as a Blob and trigger a download. We don't
+      // use the server-set Content-Disposition because <a download>
+      // is more reliable cross-browser than relying on the response
+      // headers when the request was kicked off via fetch().
+      const blob = await r.blob();
+      const today = new Date().toISOString().slice(0, 10);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `the-little-explorer-export-${today}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setProfileError(`Export échoué : ${(e as Error).message}`);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const onDisconnectStrava = async () => {
+    setDisconnecting(true);
+    setProfileError(null);
+    try {
+      const r = await fetch('/api/me/disconnect-strava', { method: 'POST' });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({})) as { error?: string; detail?: string };
+        throw new Error(err.detail ?? err.error ?? `HTTP ${r.status}`);
+      }
+      // Reload the page so the session refreshes (athleteId is now
+      // null in the JWT on the next request) and any Strava-gated UI
+      // re-renders accordingly. Simpler than threading invalidation
+      // through every component.
+      window.location.reload();
+    } catch (e) {
+      setProfileError(`Déconnexion Strava échouée : ${(e as Error).message}`);
+      setDisconnecting(false);
     }
   };
 
@@ -277,6 +340,14 @@ export default function SettingsPage() {
             </p>
 
             <div style={ROW}>
+              <label style={LABEL} htmlFor="name">Nom affiché</label>
+              <input id="name" type="text" maxLength={64}
+                value={name} onChange={e => setName(e.target.value)}
+                placeholder={me.name ?? 'auto'}
+                style={INPUT} />
+            </div>
+
+            <div style={ROW}>
               <label style={LABEL} htmlFor="rider_kg">Poids du coureur (kg)</label>
               <input id="rider_kg" type="number" step="0.1" min="30" max="200"
                 value={riderKg} onChange={e => setRiderKg(e.target.value)}
@@ -330,11 +401,76 @@ export default function SettingsPage() {
               <div>· FTP {me.effective.customFtp ?? 'auto'}</div>
             </div>
 
-            {/* Logout-from-all-devices — less destructive than account
-                deletion. Bumps session_invalidated_at on the user row
-                + revokes every api_tokens row. Useful after a lost
-                phone or a shared session. */}
+            {/* RGPD art. 20 portability + granular Strava control.
+                Both are low-friction (no two-step) — Export is a
+                read-only download, Disconnect Strava is reversible
+                (the user can re-link by signing in with Strava). */}
             <hr style={{ margin: '32px 0 20px', border: 'none', borderTop: `1px solid ${tokens.creamBorder}` }} />
+            <div style={{
+              padding:      14,
+              border:       `1px solid ${tokens.creamBorder}`,
+              background:   tokens.surface,
+              borderRadius: 4,
+              marginBottom: 16,
+            }}>
+              <div style={{
+                fontFamily: "'Playfair Display'", fontSize: 14, fontWeight: 700,
+                color: tokens.ink, marginBottom: 4,
+              }}>
+                Mes données
+              </div>
+              <p style={{
+                fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.inkMid,
+                lineHeight: 1.55, margin: '0 0 12px',
+              }}>
+                Télécharge un fichier JSON contenant ton profil, tes
+                paramètres et toutes tes activités (RGPD art. 20).
+                Format <code>tle-export-v1</code>.
+              </p>
+              {profileError && (
+                <div style={{
+                  padding: '8px 10px', marginBottom: 10,
+                  background: '#FEE', border: '1px solid #FCC', borderRadius: 4,
+                  color: '#A00', fontFamily: "'Space Grotesk'", fontSize: 12,
+                }}>{profileError}</div>
+              )}
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <button
+                  onClick={onExport}
+                  disabled={exporting}
+                  style={{
+                    padding: '8px 14px',
+                    background: tokens.terra,
+                    border: `1px solid ${tokens.terra}`,
+                    borderRadius: 3,
+                    color: '#fff',
+                    fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 700,
+                    letterSpacing: '0.04em',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {exporting ? 'EXPORT…' : 'EXPORTER MES DONNÉES'}
+                </button>
+                {me.athleteId && (
+                  <button
+                    onClick={onDisconnectStrava}
+                    disabled={disconnecting}
+                    style={{
+                      padding: '8px 14px',
+                      background: 'transparent',
+                      border: `1px solid ${tokens.creamBorder}`,
+                      borderRadius: 3,
+                      color: tokens.inkMid,
+                      fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 700,
+                      letterSpacing: '0.04em',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {disconnecting ? 'DÉCONNEXION…' : 'DÉCONNECTER STRAVA'}
+                  </button>
+                )}
+              </div>
+            </div>
             <div style={{
               padding:      14,
               border:       `1px solid ${tokens.creamBorder}`,
