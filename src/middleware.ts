@@ -28,11 +28,15 @@ import type { NextRequest } from 'next/server';
 const { withAuth } = require('next-auth/middleware');
 
 // Pages that should be reachable without completing onboarding first.
-// Apart from /onboarding itself, /settings is allowed so a user can
-// fix bad data they entered, and /admin/* is allowed so admin pages
-// don't get gated either.
+// Apart from /onboarding itself:
+//   - /admin/* — admin pages don't get gated
+//   - /api/*   — auth-side, never user-facing
+//   - /auth/*  — includes /auth/native-done, the iOS bearer-token
+//                handoff. Without this the iOS sign-in flow would
+//                redirect into /onboarding in the ASWebAuthenticationSession
+//                webview instead of bouncing back to the native app.
 const ONBOARDING_BYPASS = new Set<string>(['/onboarding']);
-const ONBOARDING_BYPASS_PREFIX = ['/admin', '/api'];
+const ONBOARDING_BYPASS_PREFIX = ['/admin', '/api', '/auth'];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export default withAuth(

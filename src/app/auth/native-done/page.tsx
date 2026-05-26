@@ -73,5 +73,19 @@ export default async function NativeDonePage() {
     redirect(`${NATIVE_SCHEME}://auth/done?error=token_issue_failed`);
   }
 
+  // Auto-mark iOS users as onboarded — they don't see the 3-screen
+  // web /onboarding (it'd open inside ASWebAuthenticationSession's
+  // webview and break the bearer-token handoff). For now we treat
+  // the iOS sign-in itself as "onboarded enough"; if we ship a
+  // native onboarding screen later we'll move this stamp into that
+  // flow. Idempotent — null check via .is('onboarded_at', null)
+  // means existing onboarded users aren't re-stamped.
+  await supabaseAdmin()
+    .schema('next_auth')
+    .from('users')
+    .update({ onboarded_at: new Date().toISOString() })
+    .eq('id', session.user.id)
+    .is('onboarded_at', null);
+
   redirect(`${NATIVE_SCHEME}://auth/done?token=${encodeURIComponent(token)}`);
 }
