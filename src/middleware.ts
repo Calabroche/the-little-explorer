@@ -1,44 +1,74 @@
 /**
- * Auth gate: redirect unauthenticated users to /login.
+ * Auth gate + onboarding redirect.
  *
- * Runs on every request before Next.js routes anything. Uses NextAuth's
- * built-in `withAuth` helper, which:
- *   - reads the session cookie (works in Edge runtime, no DB call)
- *   - lets the request through if a session token is present
- *   - redirects to `pages.signIn` (= '/login') otherwise
+ * Two responsibilities:
  *
- * The `matcher` excludes routes that must remain public so we don't
- * trap users in a redirect loop:
- *   - /login           — the login page itself
- *   - /api/auth/*      — NextAuth's own endpoints (signin/callback/csrf/…)
- *   - /_next/*         — Next.js assets
- *   - /favicon.*       — favicon and PWA icons
+ *   1. Auth gate (NextAuth's withAuth): if no session cookie, redirect
+ *      to /login. Handled implicitly by withAuth on every matched path.
  *
- * Public API routes (currently /api/activities, /api/commune-search,
- * /api/elevation, /api/route-bike, /api/strava-webhook) are also
- * excluded for now — they'll be session-locked in Stage 2 once the
- * activities table is the source of truth. Until then, the existing
- * JSON-file code path still serves Florian + Helena.
+ *   2. Onboarding gate (custom): if the signed-in user hasn't completed
+ *      the 3-step /onboarding flow, redirect them there. The JWT carries
+ *      `onboardedAt` (populated by the jwt callback in lib/auth.ts) so
+ *      this check is done at the Edge without a DB roundtrip.
+ *
+ * The middleware runs on every page route except:
+ *   - /login                  (public sign-in page)
+ *   - /privacy, /terms        (public legal pages)
+ *   - /api/*                  (per-handler auth instead)
+ *   - /_next, /favicon, /logo (assets)
+ *
+ * /onboarding itself IS matched (must be signed in to reach it) but
+ * we explicitly skip the onboarding-redirect when already on it, to
+ * avoid a redirect loop.
  */
 
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { withAuth } = require('next-auth/middleware');
 
-export default withAuth({
-  pages: { signIn: '/login' },
-});
+// Pages that should be reachable without completing onboarding first.
+// Apart from /onboarding itself, /settings is allowed so a user can
+// fix bad data they entered, and /admin/* is allowed so admin pages
+// don't get gated either.
+const ONBOARDING_BYPASS = new Set<string>(['/onboarding']);
+const ONBOARDING_BYPASS_PREFIX = ['/admin', '/api'];
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export default withAuth(
+  function middleware(req: NextRequest & { nextauth: { token: any } }) {
+    const token = req.nextauth?.token;
+    if (!token) return; // withAuth already handled the unauth → /login redirect
+
+    const path = req.nextUrl.pathname;
+    const isOnboarded = Boolean(token.onboardedAt);
+
+    if (isOnboarded) return;
+    if (ONBOARDING_BYPASS.has(path)) return;
+    if (ONBOARDING_BYPASS_PREFIX.some(prefix => path.startsWith(prefix))) return;
+
+    // Not onboarded + not on a bypass route → send to /onboarding,
+    // preserving the original path as `from` so future polish can
+    // bounce them back where they were trying to go.
+    const url = req.nextUrl.clone();
+    url.pathname = '/onboarding';
+    url.searchParams.set('from', path);
+    return NextResponse.redirect(url);
+  },
+  {
+    pages: { signIn: '/login' },
+  },
+);
 
 export const config = {
   matcher: [
     /*
      * Match all request paths except:
      *  - /login                  (public login page)
-     *  - /privacy + /terms       (public legal pages — required by Google
-     *                             OAuth verification and by the Strava API
-     *                             Agreement; linked from /login + footer)
-     *  - /api/*                  (all API routes — session check happens in handlers)
+     *  - /privacy + /terms       (public legal pages — Strava + Google compliance)
+     *  - /api/*                  (handler-side auth)
      *  - /_next/*                (Next.js internals)
-     *  - /favicon.* + /logo.*    (PWA icons + favicon)
+     *  - /favicon.* + /logo.*    (assets)
      */
     '/((?!api|login|privacy|terms|_next|favicon|logo|.*\\.).*)',
   ],
