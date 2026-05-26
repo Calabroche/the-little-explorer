@@ -253,7 +253,7 @@ function ClimbRow({
       }}
     >
       <div style={{ background: color }} />
-      <div style={{ padding: compact ? '8px 10px' : '10px 14px' }}>
+      <div style={{ padding: compact ? '10px 12px' : '10px 14px' }}>
         <div style={{
           display: 'flex',
           alignItems: 'baseline',
@@ -263,7 +263,7 @@ function ClimbRow({
         }}>
           <span style={{
             fontFamily: "'Playfair Display'",
-            fontSize:   compact ? 13 : 16,
+            fontSize:   compact ? 14 : 16,
             fontWeight: 700,
             color:      tokens.ink,
             whiteSpace: 'nowrap',
@@ -284,17 +284,26 @@ function ClimbRow({
         </div>
 
         {compact ? (
-          // 4-stat grid sized for a ~200px column: 2 columns × 2 rows.
-          // Labels above values keep the layout readable at small widths.
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            rowGap: 6, columnGap: 8,
-          }}>
-            <ClimbStat label="long." value={distKm} unit="km" compact />
-            <ClimbStat label="D+"    value={String(elev)} unit="m" compact />
-            <ClimbStat label="moy"   value={avg} unit="%" compact color={color} />
-            <ClimbStat label="max"   value={max} unit="%" compact />
+          // Two horizontal lines, inline "label value · label value".
+          // Impossible to clip a value visually — they sit next to
+          // their label on the same baseline. Reads like a stat strip
+          // a cyclist would scan quickly.
+          <div style={{ fontSize: 11, lineHeight: 1.6, color: tokens.inkMid }}>
+            <div>
+              <CompactStat label="long." value={`${distKm} km`} />
+              {' · '}
+              <CompactStat label="D+" value={`${elev} m`} />
+            </div>
+            <div>
+              <CompactStat label="moy" value={`${avg}%`} valueColor={color} />
+              {' · '}
+              <CompactStat label="max" value={`${max}%`} />
+            </div>
+            {climb.durationSec > 0 && (
+              <div>
+                <CompactStat label="durée" value={dur} />
+              </div>
+            )}
           </div>
         ) : (
           <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
@@ -304,17 +313,27 @@ function ClimbRow({
             <ClimbStat label="MAX"      value={max}       unit="%" />
           </div>
         )}
-        {compact && climb.durationSec > 0 && (
-          <div style={{
-            marginTop: 6, fontSize: 10, color: tokens.inkLight,
-            display: 'flex', justifyContent: 'space-between',
-          }}>
-            <span style={{ letterSpacing: '0.04em' }}>durée</span>
-            <span style={{ color: tokens.ink, fontWeight: 600 }}>{dur}</span>
-          </div>
-        )}
       </div>
     </div>
+  );
+}
+
+/** Inline "label value" pair used in the compact climbs side column.
+ *  Label rendered in inkLight, value in ink (or overriden for the grade
+ *  color tint on the avg stat). Stays on a single baseline so the
+ *  vertical rhythm of the climb row is predictable. */
+function CompactStat({
+  label, value, valueColor,
+}: {
+  label: string;
+  value: string;
+  valueColor?: string;
+}) {
+  return (
+    <>
+      <span style={{ color: tokens.inkLight, fontSize: 10 }}>{label}</span>
+      <span style={{ color: valueColor ?? tokens.ink, fontWeight: 700, marginLeft: 3 }}>{value}</span>
+    </>
   );
 }
 

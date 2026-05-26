@@ -81,7 +81,15 @@ function FitBounds({ positions }: { positions: [number, number][] }) {
       const currentZoom = map.getZoom();
       map.setZoom(Math.min(currentZoom + 1, 16));
     }
-  }, [map, positions]);
+    // Empty dep array — fit + zoom ONCE on mount. Previously this had
+    // [map, positions] but `positions` is recreated on every render
+    // of the parent (`.map(...)` always returns a new array), which
+    // re-fired the effect on every climb hover and stacked +1 zoom
+    // steps until the map was zoomed to street level. Activity is
+    // immutable for the lifetime of the page so we never need to
+    // re-fit anyway.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return null;
 }
 
