@@ -28,6 +28,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/db';
 import { getAuthedUser } from '@/lib/api-auth';
+import { logEvent } from '@/lib/events';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -269,6 +270,13 @@ export async function DELETE(req: NextRequest) {
   }
 
   console.log(`[me.delete] purged user ${row.id} (email=${row.email ?? '?'}, athlete_id=${row.athlete_id ?? '-'})`);
+  // Event log — fire-and-forget. user_id will be null in the row
+  // because the user was just deleted; we record the deletion via
+  // an anonymous event with the email in properties for forensics.
+  void logEvent(
+    { type: 'delete_account', userId: null, properties: { former_email: row.email ?? null, former_athlete_id: row.athlete_id ?? null } },
+    req,
+  );
   // 204 No Content — the client should immediately call NextAuth's
   // signOut() to clear its own cookie.
   return new NextResponse(null, { status: 204 });

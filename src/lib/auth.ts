@@ -39,6 +39,7 @@ import './polyfill-ws';
 type AuthOptions = any;
 
 import { supabaseAdmin } from './db';
+import { logEvent } from './events';
 
 const STRAVA_AUTH_URL  = 'https://www.strava.com/oauth/authorize';
 const STRAVA_TOKEN_URL = 'https://www.strava.com/oauth/token';
@@ -150,6 +151,43 @@ export function buildAuthOptions(): AuthOptions {
        */
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       async signIn({ user, account, profile }: any) {
+        // Event log — fire-and-forget. We don't have NextRequest here,
+        // so IP / user-agent are null. We distinguish signup (= first
+        // sign-in for this user) from signin by checking whether the
+        // user row has any prior signin event; the dashboard derives
+        // signup count from "users whose first event is signin/signup".
+        if (user?.id) {
+          void logEvent({
+            type: 'signin',
+            userId: user.id,
+            properties: { provider: account?.provider ?? 'unknown' },
+          });
+          // Best-effort: if this is the user's very first sign-in,
+          // also log a `signup` event. We check by comparing the user
+          // row's created_at to now — if it was created in the last
+          // 60s, this signIn IS the one that minted the row.
+          try {
+            const { data } = await supabaseAdmin()
+              .schema('next_auth')
+              .from('users')
+              .select('created_at')
+              .eq('id', user.id)
+              .maybeSingle();
+            if (data?.created_at) {
+              const ageMs = Date.now() - new Date(data.created_at as string).getTime();
+              if (ageMs < 60_000) {
+                void logEvent({
+                  type: 'signup',
+                  userId: user.id,
+                  properties: { provider: account?.provider ?? 'unknown' },
+                });
+              }
+            }
+          } catch {
+            // Best-effort — never block sign-in.
+          }
+        }
+
         if (account?.provider !== 'strava') return true;
         if (!user?.id) return true;
 
@@ -209,21 +247,23 @@ export function buildAuthOptions(): AuthOptions {
           }
         }
 
-        // "Logout from all devices" enforcement. On every JWT read we
-        // compare the token's iat (issued-at, seconds-epoch) to the
-        // user's session_invalidated_at — if the token predates the
-        // cutoff, we drop the uid so the `session` callback below
-        // surfaces a null user and downstream auth checks 401.
+        // "Logout from all devices" enforcement + onboarding state.
+        // On every JWT read we make ONE DB call to fetch:
+        //   * session_invalidated_at — if the token's iat predates it,
+        //     we strip uid so the session callback below surfaces a
+        //     null user and middleware redirects to /login.
+        //   * onboarded_at — surfaced as `token.onboardedAt` so the
+        //     Edge middleware can decide whether to redirect new users
+        //     to /onboarding without its own DB roundtrip.
         //
-        // Skipped on the very first call of a fresh sign-in (where the
-        // `user` parameter is populated) — that token is by definition
-        // current. Also skipped if uid is missing for any reason.
+        // Skipped on the very first call of a fresh sign-in (where
+        // `user` is populated) — fields are written from `user` then.
         if (!user && token?.uid) {
           try {
             const { data } = await supabaseAdmin()
               .schema('next_auth')
               .from('users')
-              .select('session_invalidated_at')
+              .select('session_invalidated_at, onboarded_at')
               .eq('id', token.uid)
               .maybeSingle();
             const cutoff = data?.session_invalidated_at
@@ -231,15 +271,31 @@ export function buildAuthOptions(): AuthOptions {
               : 0;
             const iat = typeof token.iat === 'number' ? token.iat : 0;
             if (cutoff && iat && iat < cutoff) {
-              // Invalidate by stripping fields the session callback
-              // depends on. NextAuth will then surface { user: null }
-              // to the client and middleware redirects to /login.
               delete token.uid;
               delete token.athleteId;
+              delete token.onboardedAt;
+            } else {
+              // Refresh onboarding state on every read so the
+              // middleware sees the latest value within one request
+              // after /api/me/onboarding/complete fires.
+              token.onboardedAt = data?.onboarded_at ?? null;
             }
           } catch (err) {
-            // Don't lock users out on transient DB errors.
-            console.error('[auth] session-invalidated lookup failed:', err);
+            console.error('[auth] session/onboarded lookup failed:', err);
+          }
+        } else if (user) {
+          // First-sign-in path — also seed onboardedAt so middleware
+          // immediately knows whether to redirect.
+          try {
+            const { data } = await supabaseAdmin()
+              .schema('next_auth')
+              .from('users')
+              .select('onboarded_at')
+              .eq('id', user.id)
+              .maybeSingle();
+            token.onboardedAt = data?.onboarded_at ?? null;
+          } catch {
+            token.onboardedAt = null;
           }
         }
         return token;

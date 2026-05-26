@@ -23,6 +23,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/db';
 import { getAuthedUser } from '@/lib/api-auth';
+import { logEvent } from '@/lib/events';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -60,5 +61,6 @@ export async function POST(req: NextRequest) {
   }
 
   console.log(`[me.logout-all] invalidated all sessions for user ${authed.id}`);
+  void logEvent({ type: 'logout_all', userId: authed.id }, req);
   return new NextResponse(null, { status: 204 });
 }

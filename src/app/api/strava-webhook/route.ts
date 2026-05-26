@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/db';
+import { logEvent } from '@/lib/events';
 
 // Strava push-subscription webhook.
 //
@@ -96,6 +97,19 @@ export async function POST(req: NextRequest) {
   const isAthleteDeauth = event.object_type === 'athlete'
     && event.aspect_type === 'update'
     && String(event.updates?.authorized) === 'false';
+
+  // Event log — every webhook delivery, regardless of outcome. The
+  // dashboard cross-references this with `strava_webhook_synced` to
+  // compute the sync success rate.
+  void logEvent({
+    type: 'strava_webhook_received',
+    userId: null, // we'd need to resolve owner_id → user_id to fill this
+    properties: {
+      object_type: event.object_type ?? null,
+      aspect_type: event.aspect_type ?? null,
+      owner_id:    event.owner_id    ?? null,
+    },
+  }, req);
 
   if (isActivityCreateOrUpdate) {
     void dispatchSyncOne(event.owner_id ?? 0, event.object_id ?? 0, req).catch(err => {

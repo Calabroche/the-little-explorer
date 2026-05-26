@@ -27,6 +27,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/db';
 import { getAuthedUser } from '@/lib/api-auth';
+import { logEvent } from '@/lib/events';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -84,5 +85,6 @@ export async function POST(req: NextRequest) {
   }
 
   console.log(`[me.disconnect-strava] disconnected Strava for user ${authed.id}`);
+  void logEvent({ type: 'disconnect_strava', userId: authed.id }, req);
   return NextResponse.json({ ok: true });
 }

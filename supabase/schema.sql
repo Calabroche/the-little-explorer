@@ -228,3 +228,64 @@ create index if not exists admin_audit_action_idx  on next_auth.admin_audit (act
 
 grant all on table next_auth.admin_audit to postgres;
 grant all on table next_auth.admin_audit to service_role;
+
+-- ── Product analytics: events ──────────────────────────────────────────────
+-- One row per meaningful event in the user lifecycle, persisted so the
+-- /admin/metrics dashboard can compute DAU, funnel conversion, retention,
+-- and sync health from a single source of truth.
+--
+-- Why bake our own instead of pulling PostHog / Mixpanel:
+--   * One-shot SQL JOIN against `users` / `activities` for derived metrics
+--     beats fetching from a SaaS event store.
+--   * No PII leaving Supabase — every event sits in the same Postgres as
+--     the user it describes. Consistent with the rest of the app's RGPD
+--     posture (everything in `eu-west-3`, nothing shared with third parties).
+--   * Keeps the side-project cost stack at zero.
+--
+-- Conventions:
+--   * `event_type` is snake_case verb (`signup`, `first_sync`, `export`, …).
+--   * `properties` is a free-form JSONB — use for context that varies per
+--     event (e.g. `{"activities_synced": 12}` on first_sync). Strip secrets
+--     before writing.
+--   * `user_id` is nullable: anonymous events (e.g. failed sign-in attempts)
+--     are still useful for sync-health.
+--   * `occurred_at` defaults to now() — the client never sets it. Avoids
+--     clock-skew issues.
+create table if not exists next_auth.events (
+  id          bigserial primary key,
+  user_id     uuid references next_auth.users(id) on delete set null,
+  event_type  text not null,
+  properties  jsonb not null default '{}'::jsonb,
+  ip          text,
+  user_agent  text,
+  occurred_at timestamptz not null default now()
+);
+
+-- Time-bucketed queries (DAU, daily counts) are the dashboard's hot
+-- path → index by (event_type, occurred_at desc). Per-user queries (e.g.
+-- "what's <user>'s most recent event") are second → index by
+-- (user_id, occurred_at desc). The all-events-by-time index covers the
+-- recent-events table at the bottom of the dashboard.
+create index if not exists events_type_time_idx  on next_auth.events (event_type, occurred_at desc);
+create index if not exists events_user_time_idx  on next_auth.events (user_id, occurred_at desc);
+create index if not exists events_time_idx       on next_auth.events (occurred_at desc);
+
+grant all on table next_auth.events to postgres;
+grant all on table next_auth.events to service_role;
+
+-- ── Onboarding state ──────────────────────────────────────────────────────
+-- Stamped once when the user completes the 3-step onboarding flow at
+-- /onboarding (sport pick → physical profile → Strava connect/skip).
+-- The middleware redirects any signed-in user whose onboarded_at is NULL
+-- to /onboarding, which means new sign-ups can't access the rest of the
+-- app until they've filled in at least the minimum profile data.
+--
+-- Why a single timestamp rather than per-step columns:
+--   * Each step's data is already captured in its own column (rider_kg,
+--     bike_kg, custom_ftp, athlete_id), so we'd be storing the same fact
+--     twice.
+--   * The funnel analysis lives in `next_auth.events` instead — one
+--     event per step (`onboarding_step_*`), which gives the dashboard
+--     drop-off rates without bloating the user row.
+alter table if exists next_auth.users
+  add column if not exists onboarded_at timestamptz;

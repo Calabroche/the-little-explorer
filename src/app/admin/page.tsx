@@ -124,6 +124,18 @@ export default function AdminPage() {
           Admin · Users
         </h1>
         <div style={{ display: 'flex', gap: 10 }}>
+          <Link href="/admin/metrics" style={{
+            padding: '6px 14px',
+            background: tokens.terra,
+            border: `1px solid ${tokens.terra}`,
+            borderRadius: 3,
+            color: '#fff',
+            fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 700,
+            letterSpacing: '0.04em',
+            textDecoration: 'none',
+          }}>
+            MÉTRIQUES →
+          </Link>
           <button onClick={refresh} disabled={loading} style={{
             padding: '6px 14px',
             background: tokens.creamDark,

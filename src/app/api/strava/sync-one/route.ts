@@ -30,6 +30,8 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
+import { logEvent } from '@/lib/events';
+
 const STRAVA_TOKEN_URL = 'https://www.strava.com/api/v3/oauth/token';
 
 // Mirrors the sets in /api/strava/sync and scripts/sync-strava-supabase.mjs.
@@ -209,6 +211,29 @@ export async function POST(req: NextRequest) {
     console.error('[sync-one] upsert failed:', upsertErr.message);
     return NextResponse.json({ error: 'db_upsert_failed', detail: upsertErr.message }, { status: 500 });
   }
+
+  // Event log — fire-and-forget. The dashboard cross-references this
+  // with `strava_webhook_received` to compute the sync success rate.
+  // If this is the user's first activity ever, also log `first_sync`
+  // for the onboarding funnel chart.
+  void logEvent({
+    type: 'strava_webhook_synced',
+    userId,
+    properties: { activity_id: activityId, has_streams: Boolean(streams), sport: row.sport },
+  }, req);
+
+  void (async () => {
+    try {
+      const { count } = await supabaseAdmin()
+        .from('activities')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId);
+      // count === 1 means the row we just inserted is the only one.
+      if ((count ?? 0) === 1) {
+        await logEvent({ type: 'first_sync', userId, properties: { activity_id: activityId } }, req);
+      }
+    } catch { /* best-effort */ }
+  })();
 
   return NextResponse.json({
     ok: true,

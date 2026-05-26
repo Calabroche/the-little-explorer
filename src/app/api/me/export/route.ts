@@ -38,6 +38,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/db';
 import { getAuthedUser } from '@/lib/api-auth';
+import { logEvent } from '@/lib/events';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -114,6 +115,13 @@ export async function GET(req: NextRequest) {
   };
 
   const filename = `the-little-explorer-export-${new Date().toISOString().slice(0, 10)}.json`;
+
+  // Event log — fire-and-forget. The activity count is useful context
+  // for the dashboard (export size distribution, etc.).
+  void logEvent(
+    { type: 'export', userId: authed.id, properties: { activity_count: (activities ?? []).length } },
+    req,
+  );
 
   return new NextResponse(JSON.stringify(payload, null, 2), {
     status:  200,
