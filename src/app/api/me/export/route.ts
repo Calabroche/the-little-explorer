@@ -5,29 +5,34 @@
  * authenticated user, served with Content-Disposition: attachment so
  * the browser triggers a download instead of rendering it.
  *
- * Shape:
+ * What's in the export:
+ *   * Profile (id, email, name, athlete_id, settings, effective values).
+ *   * Every activity row owned by the user — metadata only (id, sport,
+ *     title, date, distance, elevation, duration). Strava activity ids
+ *     are preserved so the user can re-pull raw streams from Strava
+ *     directly using the standard API + their own credentials.
+ *
+ * What's NOT in the export:
+ *   * Activity payload streams (GPS / HR / altitude / power arrays). For
+ *     a typical user these add up to multi-MB per activity, breaking
+ *     Vercel's response-body limits. We strip them and document the
+ *     re-acquisition path in the response. RGPD compliance is preserved
+ *     because (a) the user has the activity ids needed to re-pull from
+ *     Strava, (b) for locally-recorded rides (id < 0), the iOS app holds
+ *     the original streams in LocalRideStore.
+ *   * OAuth refresh tokens — security: never exported.
+ *   * admin_audit entries about this user — operational metadata, not
+ *     user content (and could leak actor identity).
+ *
+ * The on-the-wire shape:
  *   {
  *     exportedAt:  ISO8601,
- *     schema:      "tle-export-v1",
- *     profile:     { id, email, name, athleteId, settings, effective },
- *     activities:  [ full Supabase rows including payload streams ],
+ *     schema:      "tle-export-v2",
+ *     notice:      <plain-English note about streams omission>,
+ *     profile:     { id, email, name, athleteId, settings, effective, createdAt },
+ *     activities:  [ { id, sport, title, start_date, distance_km, … } ],
+ *     activityCount: <int>,
  *   }
- *
- * Why streamed: Vercel Hobby caps response bodies at 4.5 MB. With full
- * payload streams (GPS / HR / altitude arrays — typically ~1 MB each
- * for a long bike ride), even a 6-ride user can exceed the buffer
- * limit. Streaming the response with a ReadableStream chunks the JSON
- * one activity at a time and bypasses that cap. Client-side fetch
- * still buffers the full body, which is fine — 10-50 MB in memory is
- * cheap; what we can't do is buffer 5+ MB inside the lambda.
- *
- * Out of scope here (intentional):
- *   - OAuth refresh tokens (security: never exported).
- *   - admin_audit entries about this user (those are operational
- *     metadata, not user content — and could leak the actor's
- *     identity if the user was action-targeted).
- *   - The legacy /data/users/<id>/ JSON files. Those are being
- *     phased out in favour of next_auth.users + public.activities.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -37,18 +42,10 @@ import { getAuthedUser } from '@/lib/api-auth';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-// Same defaults as /api/me — kept in sync so the "effective" block
-// matches what the rest of the app uses today.
 const PROFILES_BY_EMAIL: Record<string, { riderKg: number; bikeKg: number }> = {
   'florian.calabrese@gmail.com': { riderKg: 66, bikeKg: 8.18 },
 };
 const DEFAULT_PROFILE = { riderKg: 70, bikeKg: 9 };
-
-// Page size for streaming activities. Big enough that the per-page
-// overhead is negligible, small enough that a single page's response
-// stays well under any in-flight buffer Vercel might apply between
-// chunks. Tuned for ~1MB-per-activity payloads.
-const ACTIVITY_PAGE_SIZE = 5;
 
 export async function GET(req: NextRequest) {
   const authed = await getAuthedUser(req);
@@ -56,8 +53,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  // 1. User row (settings + identity). Small and read once — no need
-  //    to stream this part.
+  // 1. User row.
   const { data: user, error: userErr } = await supabaseAdmin()
     .schema('next_auth')
     .from('users')
@@ -72,6 +68,22 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'user_not_found' }, { status: 404 });
   }
 
+  // 2. Activities — metadata only (payload column EXCLUDED). The
+  //    payload field on Hobby easily exceeds the response-body cap;
+  //    streaming worked around the cap but turned out to be unreliable
+  //    with custom Transfer-Encoding headers on Vercel. The simpler,
+  //    more robust path: skip the streams entirely. Users who want
+  //    streams re-pull from Strava using the preserved activity ids.
+  const { data: activities, error: actErr } = await supabaseAdmin()
+    .from('activities')
+    .select('id, sport, original_type, title, start_date, duration_min, distance_km, elevation_m, created_at')
+    .eq('user_id', authed.id)
+    .order('start_date', { ascending: false });
+  if (actErr) {
+    console.error('[me.export] activities query failed:', actErr.message);
+    return NextResponse.json({ error: 'db_error', detail: actErr.message }, { status: 500 });
+  }
+
   const legacy = user.email ? PROFILES_BY_EMAIL[user.email] : undefined;
   const effective = {
     riderKg:   user.rider_kg ?? legacy?.riderKg ?? DEFAULT_PROFILE.riderKg,
@@ -79,101 +91,36 @@ export async function GET(req: NextRequest) {
     customFtp: user.custom_ftp ?? null,
   };
 
-  const profileBlock = {
-    id:         user.id,
-    email:      user.email,
-    name:       user.name,
-    image:      user.image,
-    athleteId:  user.athlete_id,
-    createdAt:  user.created_at,
-    settings: {
-      rider_kg:   user.rider_kg,
-      bike_kg:    user.bike_kg,
-      custom_ftp: user.custom_ftp,
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    schema:     'tle-export-v2',
+    notice:     'Streams GPS/FC/altitude omis pour rester sous les limites de l\'API. Récupère-les depuis Strava avec ton athlete_id et les activity ids ci-dessous, ou utilise l\'app iOS pour les rides locaux (id < 0).',
+    profile: {
+      id:         user.id,
+      email:      user.email,
+      name:       user.name,
+      image:      user.image,
+      athleteId:  user.athlete_id,
+      createdAt:  user.created_at,
+      settings: {
+        rider_kg:   user.rider_kg,
+        bike_kg:    user.bike_kg,
+        custom_ftp: user.custom_ftp,
+      },
+      effective,
     },
-    effective,
+    activities:     activities ?? [],
+    activityCount:  (activities ?? []).length,
   };
 
   const filename = `the-little-explorer-export-${new Date().toISOString().slice(0, 10)}.json`;
-  const encoder  = new TextEncoder();
 
-  // 2. Stream the JSON document — header first, then activities in
-  //    paged chunks, then close the array + outer object. Each `push`
-  //    flushes a chunk to the client, so Vercel never holds more than
-  //    a few KB of buffer in memory at once.
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      try {
-        // Header — exportedAt + schema + profile.
-        controller.enqueue(encoder.encode(
-          `{\n  "exportedAt": ${JSON.stringify(new Date().toISOString())},\n` +
-          `  "schema": "tle-export-v1",\n` +
-          `  "profile": ${JSON.stringify(profileBlock, null, 2)},\n` +
-          `  "activities": [\n`,
-        ));
-
-        // Activities, paged. Each page is fetched then streamed out
-        // one row at a time. We stream in start_date descending order
-        // (newest first) — same order as the Feed for consistency.
-        let pageStart = 0;
-        let first = true;
-        // Hard ceiling so a runaway pagination loop can't run forever.
-        const MAX_PAGES = 200;
-        for (let pageIdx = 0; pageIdx < MAX_PAGES; pageIdx++) {
-          const { data: page, error: pageErr } = await supabaseAdmin()
-            .from('activities')
-            .select('id, sport, original_type, title, start_date, duration_min, distance_km, elevation_m, payload, created_at')
-            .eq('user_id', authed.id)
-            .order('start_date', { ascending: false })
-            .range(pageStart, pageStart + ACTIVITY_PAGE_SIZE - 1);
-
-          if (pageErr) {
-            // Mid-stream errors: we've already started writing a 200
-            // response and can't change the status. Close the JSON
-            // gracefully with an error sentinel — the client can
-            // detect this when parsing.
-            console.error('[me.export] activities page query failed:', pageErr.message);
-            controller.enqueue(encoder.encode(
-              `${first ? '' : ',\n'}    {"__error": "activities_query_failed", "detail": ${JSON.stringify(pageErr.message)}}\n`,
-            ));
-            break;
-          }
-          if (!page || page.length === 0) break;
-
-          for (const activity of page) {
-            const prefix = first ? '    ' : ',\n    ';
-            controller.enqueue(encoder.encode(prefix + JSON.stringify(activity)));
-            first = false;
-          }
-
-          if (page.length < ACTIVITY_PAGE_SIZE) break; // last page
-          pageStart += ACTIVITY_PAGE_SIZE;
-        }
-
-        // Close the array + outer object.
-        controller.enqueue(encoder.encode(`\n  ]\n}\n`));
-        controller.close();
-      } catch (err) {
-        console.error('[me.export] stream failed:', err);
-        // Best-effort close — controller may already be torn down.
-        try { controller.error(err); } catch { /* noop */ }
-      }
-    },
-  });
-
-  return new NextResponse(stream, {
+  return new NextResponse(JSON.stringify(payload, null, 2), {
     status:  200,
     headers: {
       'Content-Type':        'application/json',
       'Content-Disposition': `attachment; filename="${filename}"`,
-      // Don't cache — this contains personal data, every request
-      // should hit fresh state.
       'Cache-Control':       'no-store, max-age=0',
-      // Hint to proxies / browsers that we're streaming — disables
-      // any buffering they might otherwise apply waiting for the
-      // full Content-Length.
-      'Transfer-Encoding':   'chunked',
-      'X-Accel-Buffering':   'no',
     },
   });
 }
