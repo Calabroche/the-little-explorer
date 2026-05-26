@@ -803,7 +803,13 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
                 hoveredIdx={hoveredClimbIdx}
                 onHover={setHoveredClimbIdx}
                 compact={!isMobile}
-                maxHeight={isMobile ? undefined : 460}
+                // No explicit maxHeight: with `alignItems: stretch` on
+                // the parent flex row, the climbs card already stretches
+                // to match the map card's height (~670 px). Capping at
+                // 460 forced an internal scrollbar and clipped Montée 1
+                // off the top. Letting the column grow naturally + the
+                // flex-grow on each row distributes the available height
+                // across the 5 climbs so they all fit visibly.
               />
             </div>
           )}
