@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { MapContainer, Polyline, Popup, useMap } from 'react-leaflet';
 import type { LeafletMouseEvent } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -69,27 +69,51 @@ function buildSegments(
   return result;
 }
 
-function FitBounds({ positions }: { positions: [number, number][] }) {
+/**
+ * Drives the map's viewport.
+ *
+ * Behaviour:
+ *   - On mount: fit to the entire route (default "you see your whole
+ *     ride" view).
+ *   - When `focus` becomes non-null (user hovered a climb): zoom to
+ *     the segment's GPS bounds with a smooth animated transition.
+ *   - When `focus` becomes null (user un-hovered): zoom back out to
+ *     the full route.
+ *
+ * The animation uses leaflet's `flyToBounds` instead of `fitBounds`
+ * so the camera glides rather than jumps. flyToBounds has slightly
+ * larger padding to keep the targeted segment visually centered with
+ * breathing room.
+ */
+function FitBounds({
+  positions,
+  focus,
+}: {
+  positions: [number, number][];
+  focus: [number, number][] | null;
+}) {
   const map = useMap();
+
+  // Initial fit — runs once on mount.
   useEffect(() => {
     if (positions.length > 1) {
-      // Fit to bounds, then bump the zoom level by +1 so the route
-      // fills more of the card. Default fitBounds leaves a lot of
-      // padding around long rides; a single zoom step is enough to
-      // close the gap without cropping the polyline.
-      map.fitBounds(positions, { padding: [16, 16] });
-      const currentZoom = map.getZoom();
-      map.setZoom(Math.min(currentZoom + 1, 16));
+      map.fitBounds(positions, { padding: [24, 24] });
     }
-    // Empty dep array — fit + zoom ONCE on mount. Previously this had
-    // [map, positions] but `positions` is recreated on every render
-    // of the parent (`.map(...)` always returns a new array), which
-    // re-fired the effect on every climb hover and stacked +1 zoom
-    // steps until the map was zoomed to street level. Activity is
-    // immutable for the lifetime of the page so we never need to
-    // re-fit anyway.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Re-fit whenever the focused segment changes. Falling back to the
+  // full route when focus is cleared mirrors the "default ↔ focused"
+  // toggle the user sees in the Climbs card.
+  useEffect(() => {
+    if (positions.length < 2) return;
+    if (focus && focus.length >= 2) {
+      map.flyToBounds(focus, { padding: [60, 60], duration: 0.5, maxZoom: 15 });
+    } else {
+      map.flyToBounds(positions, { padding: [24, 24], duration: 0.5 });
+    }
+  }, [map, focus, positions]);
+
   return null;
 }
 
@@ -217,22 +241,41 @@ export function ActivityRouteMap({
   highlightSegment,
 }: {
   activity: Activity;
-  /** Optional climb / segment to highlight on top of the base route.
-   *  Indices are into the activity's altitude/distance streams; we
-   *  clamp into the GPS array's bounds defensively in case Strava
-   *  returned mismatched stream lengths. Used by the Climbs card on
-   *  the parent AnalysisPage when the user hovers a climb row. */
+  /** Optional climb / segment to highlight + focus on. Indices are
+   *  into the activity's altitude/distance streams; we clamp into
+   *  the GPS array's bounds defensively in case Strava returned
+   *  mismatched stream lengths. Used by the Climbs card on the
+   *  parent AnalysisPage when the user hovers a climb row — drives
+   *  both the orange highlight overlay AND a map zoom flying to that
+   *  segment (cleared on un-hover → fly back to full route). */
   highlightSegment?: { startIdx: number; endIdx: number } | null;
 }) {
   const dark = useDarkMode();
   const [basemap, setBasemap] = useBasemap();
   const { gps, altitude = [], distance_m = [] } = activity;
+  // `positions` is memoized so its array reference is stable across
+  // renders. Without this, every parent re-render (which happens on
+  // every climb hover) would produce a fresh `positions` array →
+  // FitBounds's useEffect deps would fire → fly-to would loop.
+  const positions = useMemo(
+    () => (gps ?? []).map(p => [p.lat, p.lng] as [number, number]),
+    [gps],
+  );
+  // Same memo for focus coordinates — derived from highlightSegment +
+  // positions. Null when no climb is hovered.
+  const focusCoords = useMemo(() => {
+    if (!highlightSegment) return null;
+    const s = Math.max(0, Math.min(highlightSegment.startIdx, positions.length - 1));
+    const e = Math.max(s, Math.min(highlightSegment.endIdx,   positions.length - 1));
+    if (e - s < 2) return null;
+    return positions.slice(s, e + 1);
+  }, [highlightSegment, positions]);
+
   if (!gps || gps.length < 2) return null;
 
-  const len       = Math.min(gps.length, altitude.length, distance_m.length);
-  const gradient  = computeGradient(altitude, distance_m, len);
-  const positions = gps.map(p => [p.lat, p.lng] as [number, number]);
-  const center    = positions[Math.floor(positions.length / 2)];
+  const len      = Math.min(gps.length, altitude.length, distance_m.length);
+  const gradient = computeGradient(altitude, distance_m, len);
+  const center   = positions[Math.floor(positions.length / 2)];
 
   return (
     <div style={{ position: 'relative' }}>
@@ -252,7 +295,7 @@ export function ActivityRouteMap({
           gradient={gradient}
           highlightSegment={highlightSegment ?? null}
         />
-        <FitBounds positions={positions} />
+        <FitBounds positions={positions} focus={focusCoords} />
       </MapContainer>
       <BasemapToggle basemap={basemap} onChange={setBasemap} />
     </div>

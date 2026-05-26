@@ -179,22 +179,28 @@ function ClimbsCard({
       </div>
       <div
         style={{
-          display:     'grid',
-          gap:         compact ? 6 : 8,
-          overflowY:   maxHeight ? 'auto' : 'visible',
-          maxHeight:   maxHeight,
-          paddingRight: maxHeight ? 4 : 0,
+          // flex column with grow=1 so the rows stretch to fill the
+          // map's height — eliminates the white space at the bottom
+          // of the climbs card that user flagged.
+          display:        'flex',
+          flexDirection:  'column',
+          gap:            compact ? 10 : 8,
+          flex:           1,
+          overflowY:      maxHeight ? 'auto' : 'visible',
+          maxHeight:      maxHeight,
+          paddingRight:   maxHeight ? 4 : 0,
         }}
       >
         {climbs.map((c, idx) => (
-          <ClimbRow
-            key={idx}
-            climb={c}
-            highlighted={hoveredIdx === idx}
-            onEnter={() => onHover(idx)}
-            onLeave={() => onHover(null)}
-            compact={compact}
-          />
+          <div key={idx} style={{ flex: '1 1 auto' }}>
+            <ClimbRow
+              climb={c}
+              highlighted={hoveredIdx === idx}
+              onEnter={() => onHover(idx)}
+              onLeave={() => onHover(null)}
+              compact={compact}
+            />
+          </div>
         ))}
       </div>
       {!compact && (
@@ -250,10 +256,14 @@ function ClimbRow({
         boxShadow:    highlighted ? `0 0 0 2px ${tokens.terra}` : 'none',
         cursor:       'pointer',
         transition:   'box-shadow 140ms ease, background 140ms ease',
+        height:       '100%', // stretch when parent has flex space to fill
       }}
     >
       <div style={{ background: color }} />
-      <div style={{ padding: compact ? '10px 12px' : '10px 14px' }}>
+      <div style={{
+        padding: compact ? '14px 14px' : '10px 14px',
+        width: '100%',
+      }}>
         <div style={{
           display: 'flex',
           alignItems: 'baseline',
