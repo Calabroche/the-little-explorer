@@ -286,12 +286,34 @@ export function TrainingPlan({ activities }: { activities: Activity[] }) {
     return d.toISOString().slice(0, 10);
   })();
 
+  // Sport picker — drives whether the form shows the cycling inputs
+  // (km + D+) or the running inputs (km + target pace). Same plan
+  // engine downstream, only the per-sport TSS estimate diverges.
+  const [sport,      setSport]      = useState<'cycling' | 'running'>('cycling');
   const [targetKm,   setTargetKm]   = useState(100);
   const [targetElev, setTargetElev] = useState(1500);
+  // Running-only target pace expressed in seconds per km. Slider works
+  // in seconds so the conversion lives in one place; UI formats back
+  // to "5:30 /km".
+  const [targetPaceSecPerKm, setTargetPaceSecPerKm] = useState(5 * 60); // 5:00 /km default
   const [startDate,  setStartDate]  = useState(todayIso);
   const [targetDate, setTargetDate] = useState(defaultTarget);
   const [generated,  setGenerated]  = useState(false);
   const [showInfo,   setShowInfo]   = useState(false);
+
+  // Adapt slider extrema + defaults when the user flips sport.
+  // Running thresholds are tighter than cycling (a marathon is 42 km,
+  // not 200), and elevation isn't surfaced for runners.
+  const sportCfg = sport === 'cycling'
+    ? { kmMin: 20, kmMax: 200, kmStep: 5,  defaultKm: 100 }
+    : { kmMin: 5,  kmMax: 50,  kmStep: 1,  defaultKm: 21 };
+  // When the user toggles sport, clamp targetKm into the new range so the
+  // slider doesn't visibly snap to a bound mid-render.
+  const clampedKm = Math.min(Math.max(targetKm, sportCfg.kmMin), sportCfg.kmMax);
+  if (clampedKm !== targetKm) {
+    // Will trigger a re-render on the next tick — fine, only happens on toggle.
+    queueMicrotask(() => setTargetKm(clampedKm));
+  }
 
   const { tss: baselineTss, hasData } = useMemo(() => baselineWeeklyTss(activities), [activities]);
 
@@ -309,19 +331,40 @@ export function TrainingPlan({ activities }: { activities: Activity[] }) {
 
   const planResult = useMemo(() => {
     if (!generated || dateError) return null;
-    // The "race day" effort itself: a 100 km / 1500 m ride at moderate pace
-    // ≈ 250 TSS. We size the peak week to ~2.4× that single-day load so the
-    // body is comfortably fatigue-resistant by race week.
-    const oneDayTss   = Math.round(targetKm * 2.5 + targetElev * 0.05);
-    const peakWeeklyTss  = Math.round(oneDayTss * 2.4);
-    const peakWeeklyKm   = Math.round(targetKm   * 1.6);
-    const peakWeeklyElev = Math.round(targetElev * 1.5);
+
+    // Per-sport "race day" effort estimate (the single-day TSS we ramp
+    // the peak week towards).
+    let oneDayTss: number;
+    let peakWeeklyKm: number;
+    let peakWeeklyElev: number;
+    let goalElev: number;
+
+    if (sport === 'running') {
+      // Running TSS model. Pace 5:00 /km is the reference (~7 TSS/km).
+      // Faster pace → higher TSS/km (squared so the curve climbs
+      // steeply for sub-4:00 efforts). No elevation target — runners
+      // think in pace, not D+.
+      const intensity = 300 / Math.max(targetPaceSecPerKm, 180);
+      oneDayTss      = Math.round(targetKm * 7 * intensity * intensity);
+      peakWeeklyKm   = Math.round(targetKm * 1.4);
+      peakWeeklyElev = 0;
+      goalElev       = 0;
+    } else {
+      // Cycling model — the original. 100 km / 1500 m ≈ 250 TSS. We
+      // size the peak week to ~2.4× the single-day load.
+      oneDayTss      = Math.round(targetKm * 2.5 + targetElev * 0.05);
+      peakWeeklyKm   = Math.round(targetKm   * 1.6);
+      peakWeeklyElev = Math.round(targetElev * 1.5);
+      goalElev       = targetElev;
+    }
+
+    const peakWeeklyTss = Math.round(oneDayTss * 2.4);
     return buildPlan(
       baselineTss, peakWeeklyTss, peakWeeklyKm, peakWeeklyElev,
       new Date(startDate), new Date(targetDate),
-      { km: targetKm, elev: targetElev, oneDayTss },
+      { km: targetKm, elev: goalElev, oneDayTss },
     );
-  }, [generated, dateError, baselineTss, targetKm, targetElev, startDate, targetDate]);
+  }, [generated, dateError, baselineTss, sport, targetKm, targetElev, targetPaceSecPerKm, startDate, targetDate]);
 
   const plan = planResult?.weeks ?? [];
 
@@ -385,10 +428,50 @@ export function TrainingPlan({ activities }: { activities: Activity[] }) {
         {t('plan.headline')}{' '}
         <em style={{ color: tokens.terra, fontStyle: 'italic', fontWeight: 700 }}>{t('plan.headlineEm')}</em>
       </div>
-      <div style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight, marginTop: 8, marginBottom: 20, lineHeight: 1.6 }}>
+      <div style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight, marginTop: 8, marginBottom: 16, lineHeight: 1.6 }}>
         {t('plan.intro')}
         <br />
         {hasData ? t('plan.baseline', { tss: baselineTss }) : t('plan.baselineFb')}
+      </div>
+
+      {/* Sport selector — flips the form between cycling (km + D+) and
+          running (km + pace). The plan engine + week structure stay
+          identical; only the single-day TSS estimate changes. */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
+        {([
+          { v: 'cycling' as const, icon: '🚴', label: 'Vélo' },
+          { v: 'running' as const, icon: '🏃', label: 'Course' },
+        ]).map(opt => {
+          const active = sport === opt.v;
+          return (
+            <button
+              key={opt.v}
+              onClick={() => {
+                setSport(opt.v);
+                // Reset to the per-sport default if we crossed a range
+                // boundary, so the slider doesn't start at an awkward
+                // value (e.g. 100 km when switching to running).
+                if (opt.v === 'running' && targetKm > 50) setTargetKm(21);
+                if (opt.v === 'cycling' && targetKm < 20) setTargetKm(100);
+                setGenerated(false); // force re-generate after sport switch
+              }}
+              style={{
+                padding: '6px 14px',
+                background:   active ? tokens.terra : tokens.creamDark,
+                color:        active ? '#fff' : tokens.inkMid,
+                border:       `1px solid ${active ? tokens.terra : tokens.creamBorder}`,
+                borderRadius: 3,
+                cursor:       'pointer',
+                fontFamily:   "'Space Grotesk'", fontSize: 11, fontWeight: 700,
+                letterSpacing: '0.04em',
+                display:      'inline-flex', alignItems: 'center', gap: 6,
+              }}
+            >
+              <span>{opt.icon}</span>
+              {opt.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Form */}
@@ -404,25 +487,46 @@ export function TrainingPlan({ activities }: { activities: Activity[] }) {
               {targetKm}<span style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight, marginLeft: 3 }}>km</span>
             </span>
           </div>
-          <input type="range" min={20} max={200} step={5} value={targetKm}
+          <input type="range" min={sportCfg.kmMin} max={sportCfg.kmMax} step={sportCfg.kmStep} value={targetKm}
             onChange={e => setTargetKm(+e.target.value)} style={SLIDER} />
           <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'Space Grotesk'", fontSize: 9, color: tokens.inkLight }}>
-            <span>20 km</span><span>200 km</span>
+            <span>{sportCfg.kmMin} km</span><span>{sportCfg.kmMax} km</span>
           </div>
         </div>
-        <div style={{ gridColumn: isMobile ? 'span 2' : undefined }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <Label>{t('plan.targetElev')}</Label>
-            <span style={{ fontFamily: "'Playfair Display'", fontSize: 22, fontWeight: 700, color: tokens.ink }}>
-              {targetElev}<span style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight, marginLeft: 3 }}>m</span>
-            </span>
+
+        {/* Second slider: elevation for cycling, pace for running. The
+            wrapper div positioning stays identical across modes so the
+            grid doesn't shift when the user toggles sport. */}
+        {sport === 'cycling' ? (
+          <div style={{ gridColumn: isMobile ? 'span 2' : undefined }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <Label>{t('plan.targetElev')}</Label>
+              <span style={{ fontFamily: "'Playfair Display'", fontSize: 22, fontWeight: 700, color: tokens.ink }}>
+                {targetElev}<span style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight, marginLeft: 3 }}>m</span>
+              </span>
+            </div>
+            <input type="range" min={100} max={4000} step={50} value={targetElev}
+              onChange={e => setTargetElev(+e.target.value)} style={SLIDER} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'Space Grotesk'", fontSize: 9, color: tokens.inkLight }}>
+              <span>100 m</span><span>4000 m</span>
+            </div>
           </div>
-          <input type="range" min={100} max={4000} step={50} value={targetElev}
-            onChange={e => setTargetElev(+e.target.value)} style={SLIDER} />
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'Space Grotesk'", fontSize: 9, color: tokens.inkLight }}>
-            <span>100 m</span><span>4000 m</span>
+        ) : (
+          <div style={{ gridColumn: isMobile ? 'span 2' : undefined }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <Label>ALLURE CIBLE</Label>
+              <span style={{ fontFamily: "'Playfair Display'", fontSize: 22, fontWeight: 700, color: tokens.ink }}>
+                {Math.floor(targetPaceSecPerKm / 60)}:{(targetPaceSecPerKm % 60).toString().padStart(2, '0')}
+                <span style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight, marginLeft: 3 }}>/km</span>
+              </span>
+            </div>
+            <input type="range" min={210} max={480} step={5} value={targetPaceSecPerKm}
+              onChange={e => setTargetPaceSecPerKm(+e.target.value)} style={SLIDER} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'Space Grotesk'", fontSize: 9, color: tokens.inkLight }}>
+              <span>3:30 /km</span><span>8:00 /km</span>
+            </div>
           </div>
-        </div>
+        )}
         <div>
           <Label style={{ display: 'block', marginBottom: 6 }}>{t('plan.startDate')}</Label>
           <input type="date" value={startDate}

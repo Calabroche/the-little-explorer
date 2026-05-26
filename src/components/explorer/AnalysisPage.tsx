@@ -10,6 +10,7 @@ import { Activity, tokens } from './tokens';
 import { Label, TypeBadge, StatChip, useIsMobile } from './ui';
 import { useT, formatDateLocale } from '@/i18n';
 import { formatPace } from '@/utils/format';
+import { detectClimbs, Climb } from '@/lib/climbs';
 
 const ActivityRouteMap = dynamic(
   () => import('./ActivityRouteMap').then(m => m.ActivityRouteMap),
@@ -133,6 +134,102 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
     <div style={CARD_STYLE}>
       <Label style={{ display: 'block', marginBottom: 14 }}>{title}</Label>
       {children}
+    </div>
+  );
+}
+
+/**
+ * "Montées détectées" — algorithmic climb-spotter card. Walks the
+ * activity's altitude + distance streams and surfaces stretches that
+ * meet the thresholds in `lib/climbs.ts` (≥ 500 m, ≥ 30 m gain, ≥ 3 %
+ * avg grade). Same algorithm as the iOS app's ClimbDetector.swift so
+ * a given ride shows the same climbs on web and mobile.
+ *
+ * Renders nothing if no climbs qualify — the card hides itself rather
+ * than showing an empty state, because the typical flat ride wouldn't
+ * trigger anything and we don't want to add visual noise.
+ */
+function ClimbsCard({ climbs }: { climbs: Climb[] }) {
+  if (climbs.length === 0) return null;
+  return (
+    <div style={{ ...CARD_STYLE, marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14, gap: 8, flexWrap: 'wrap' }}>
+        <Label>MONTÉES DÉTECTÉES</Label>
+        <span style={{ fontSize: 11, color: tokens.inkLight }}>
+          {climbs.length} montée{climbs.length > 1 ? 's' : ''} · ≥ 3 % · ≥ 30 m
+        </span>
+      </div>
+      <div style={{ display: 'grid', gap: 8 }}>
+        {climbs.map((c, idx) => <ClimbRow key={idx} climb={c} />)}
+      </div>
+      <p style={{ marginTop: 10, fontSize: 11, color: tokens.inkLight, lineHeight: 1.5 }}>
+        Détection auto à partir de l&apos;altitude lissée (moyenne mobile 30 pts).
+        Seuils : 500 m mini, 30 m de gain, 3 % moyens. La pente max est sur fenêtre glissante 100 m.
+      </p>
+    </div>
+  );
+}
+
+function ClimbRow({ climb }: { climb: Climb }) {
+  const distKm = (climb.distanceM / 1000).toFixed(2);
+  const elev   = Math.round(climb.elevationM);
+  const avg    = climb.avgGradePct.toFixed(1);
+  const max    = climb.maxGradePct.toFixed(1);
+  const mins   = Math.floor(climb.durationSec / 60);
+  const secs   = Math.round(climb.durationSec % 60);
+  const dur    = climb.durationSec > 0 ? `${mins}:${secs.toString().padStart(2, '0')}` : '—';
+
+  // Grade-driven color: gentle (green) → moderate (terra) → punchy (red).
+  // Same buckets as the gradient overlay in the HR/slope chart so the
+  // card and chart agree visually on what "steep" means.
+  const color =
+    climb.avgGradePct >= 8  ? '#A23838' :
+    climb.avgGradePct >= 5  ? tokens.terra :
+                              tokens.green;
+
+  return (
+    <div style={{
+      display:      'grid',
+      gridTemplateColumns: '4px 1fr',
+      borderRadius: 3,
+      overflow:     'hidden',
+      background:   tokens.creamDark,
+    }}>
+      <div style={{ background: color }} />
+      <div style={{ padding: '10px 14px' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6, gap: 8 }}>
+          <span style={{
+            fontFamily: "'Playfair Display'", fontSize: 16, fontWeight: 700,
+            color: tokens.ink,
+          }}>{climb.name}</span>
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color }}>
+            {avg}% MOY · {max}% MAX
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
+          <ClimbStat label="DISTANCE" value={distKm} unit="km" />
+          <ClimbStat label="DÉNIVELÉ" value={String(elev)} unit="m" />
+          <ClimbStat label="DURÉE" value={dur} unit="" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ClimbStat({ label, value, unit }: { label: string; value: string; unit: string }) {
+  return (
+    <div>
+      <div style={{
+        fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
+        color: tokens.inkLight, textTransform: 'uppercase',
+      }}>{label}</div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
+        <span style={{
+          fontFamily: "'Playfair Display'", fontSize: 15, fontWeight: 700,
+          color: tokens.ink,
+        }}>{value}</span>
+        {unit && <span style={{ fontSize: 10, color: tokens.inkLight }}>{unit}</span>}
+      </div>
     </div>
   );
 }
@@ -299,6 +396,14 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
   const hasHR  = (activity.heartrate?.length ?? 0) > 10;
   const hasPow = data.some(d => d.power > 0);
   const hasGPS = (activity.gps?.length ?? 0) > 1;
+
+  // Climb detection — same algorithm as the iOS app (lib/climbs.ts).
+  // Memoized on the activity reference so we don't re-walk the altitude
+  // stream on every chart drag / hover.
+  const climbs = useMemo(
+    () => detectClimbs(activity.altitude, activity.distance_m, activity.time_s),
+    [activity],
+  );
 
   const chartHeight = isMobile ? 260 : 300;
 
@@ -517,6 +622,12 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
           <ActivityRouteMap activity={activity} />
         </div>
       )}
+
+      {/* Auto-detected climbs — same algorithm as the iOS app, so a
+          given ride surfaces the same list on both surfaces. Hides
+          itself if no climbs qualify (flat ride). */}
+      <ClimbsCard climbs={climbs} />
+
 
       {/* VO2 Max + Power summary — moved under the route map so the
           synthesis cards (your physiological "score" for this ride)
