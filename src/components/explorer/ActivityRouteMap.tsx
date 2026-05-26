@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { MapContainer, Polyline, Popup, useMap } from 'react-leaflet';
 import type { LeafletMouseEvent } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -77,42 +77,61 @@ function buildSegments(
  *     ride" view).
  *   - When `focus` becomes non-null (user hovered a climb): zoom to
  *     the segment's GPS bounds with a smooth animated transition.
- *   - When `focus` becomes null (user un-hovered): zoom back out to
- *     the full route.
+ *   - When `focus` becomes null (user un-hovered): zoom back out.
+ *   - `zoomPercent` shifts the zoom level applied on top of fitBounds.
+ *     100 = default fitBounds, < 100 = more zoomed out, > 100 = more
+ *     zoomed in. Step is half a Leaflet zoom level per 25 % so the
+ *     range 50–175 % feels meaningful without crashing into integer
+ *     zoom snapping.
  *
  * The animation uses leaflet's `flyToBounds` instead of `fitBounds`
- * so the camera glides rather than jumps. flyToBounds has slightly
- * larger padding to keep the targeted segment visually centered with
- * breathing room.
+ * so the camera glides rather than jumps.
  */
 function FitBounds({
   positions,
   focus,
+  zoomPercent,
 }: {
   positions: [number, number][];
   focus: [number, number][] | null;
+  zoomPercent: number;
 }) {
   const map = useMap();
+
+  // Convert the % control into a zoom delta applied AFTER fitBounds.
+  // 100 → 0, 75 → -1, 125 → +1, 150 → +2 (rounded to integer zoom).
+  const zoomOffset = Math.round((zoomPercent - 100) / 25);
 
   // Initial fit — runs once on mount.
   useEffect(() => {
     if (positions.length > 1) {
       map.fitBounds(positions, { padding: [24, 24] });
+      if (zoomOffset !== 0) {
+        map.setZoom(Math.max(2, Math.min(18, map.getZoom() + zoomOffset)));
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Re-fit whenever the focused segment changes. Falling back to the
-  // full route when focus is cleared mirrors the "default ↔ focused"
-  // toggle the user sees in the Climbs card.
+  // Re-fit when focus OR the user-chosen zoom level changes.
   useEffect(() => {
     if (positions.length < 2) return;
-    if (focus && focus.length >= 2) {
-      map.flyToBounds(focus, { padding: [60, 60], duration: 0.5, maxZoom: 15 });
-    } else {
-      map.flyToBounds(positions, { padding: [24, 24], duration: 0.5 });
+    const target = focus && focus.length >= 2 ? focus : positions;
+    const isSegment = focus && focus.length >= 2;
+    map.flyToBounds(target, {
+      padding:  isSegment ? [60, 60] : [24, 24],
+      duration: 0.5,
+      maxZoom:  isSegment ? 15 : undefined,
+    });
+    // Apply the user's zoom offset slightly after the fly finishes so
+    // we end up at the offset zoom rather than fighting the animation.
+    if (zoomOffset !== 0) {
+      const t = setTimeout(() => {
+        map.setZoom(Math.max(2, Math.min(18, map.getZoom() + zoomOffset)));
+      }, 560);
+      return () => clearTimeout(t);
     }
-  }, [map, focus, positions]);
+  }, [map, focus, positions, zoomOffset]);
 
   return null;
 }
@@ -271,6 +290,11 @@ export function ActivityRouteMap({
     return positions.slice(s, e + 1);
   }, [highlightSegment, positions]);
 
+  // User-controlled default zoom — picks a % offset relative to the
+  // auto-fitted view. Persists in localStorage so the choice carries
+  // across activities + reloads.
+  const [zoomPercent, setZoomPercent] = useZoomPercent();
+
   if (!gps || gps.length < 2) return null;
 
   const len      = Math.min(gps.length, altitude.length, distance_m.length);
@@ -282,11 +306,13 @@ export function ActivityRouteMap({
       <MapContainer
         center={center}
         zoom={12}
-        // 480px — trimmed from the previous 810 now that the Climbs
-        // card sits above the map. Less scroll, and the highlighted
-        // climb segment still reads clearly at this height.
-        style={{ height: 480, width: '100%', borderRadius: 4 }}
+        // 600px — taller so all 5 climbs fit in the right-hand column
+        // without scrolling, and the trailing whitespace under the
+        // map card collapses. Charts below stay visible on a 1080p
+        // screen because the chart grid is below the fold by design.
+        style={{ height: 600, width: '100%', borderRadius: 4 }}
         scrollWheelZoom={false}
+        zoomSnap={1}
       >
         <BasemapTiles basemap={basemap} darkMode={dark} />
         <RouteWithHover
@@ -295,9 +321,99 @@ export function ActivityRouteMap({
           gradient={gradient}
           highlightSegment={highlightSegment ?? null}
         />
-        <FitBounds positions={positions} focus={focusCoords} />
+        <FitBounds positions={positions} focus={focusCoords} zoomPercent={zoomPercent} />
       </MapContainer>
       <BasemapToggle basemap={basemap} onChange={setBasemap} />
+      <ZoomPercentPill value={zoomPercent} onChange={setZoomPercent} />
+    </div>
+  );
+}
+
+// ── Zoom % selector ──────────────────────────────────────────────────────
+// Lets the user pick a default zoom level relative to the auto-fitted
+// view. Saved per-browser so picking "125 %" once carries to every
+// future activity opened on this device.
+
+const ZOOM_PERCENT_KEY = 'tle_map_zoom_percent_v1';
+const ZOOM_OPTIONS = [50, 75, 100, 125, 150, 200];
+
+function useZoomPercent(): [number, (v: number) => void] {
+  const [percent, setPercentState] = useState<number>(100);
+  // Hydrate from localStorage on mount.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const raw = window.localStorage.getItem(ZOOM_PERCENT_KEY);
+    const parsed = raw ? Number(raw) : NaN;
+    if (Number.isFinite(parsed) && ZOOM_OPTIONS.includes(parsed)) {
+      setPercentState(parsed);
+    }
+  }, []);
+  const setPercent = useCallback((v: number) => {
+    setPercentState(v);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(ZOOM_PERCENT_KEY, String(v));
+    }
+  }, []);
+  return [percent, setPercent];
+}
+
+/** Pill UI matching BasemapToggle's style, placed top-left of the map. */
+function ZoomPercentPill({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div
+      style={{
+        position:      'absolute',
+        top:           12,
+        left:          50,           // sit to the right of the Leaflet +/- control
+        zIndex:        1000,
+        background:    tokens.surface,
+        border:        `1px solid ${tokens.creamBorder}`,
+        borderRadius:  999,
+        padding:       '2px 4px',
+        display:       'flex',
+        alignItems:    'center',
+        gap:           4,
+        boxShadow:     '0 2px 6px rgba(0,0,0,0.15)',
+        pointerEvents: 'auto',
+      }}
+      onMouseDown={e => e.stopPropagation()}
+      onClick={e => e.stopPropagation()}
+    >
+      <span style={{
+        fontFamily:    "'Space Grotesk'",
+        fontSize:      10,
+        fontWeight:    700,
+        letterSpacing: '0.06em',
+        color:         tokens.inkLight,
+        textTransform: 'uppercase',
+        padding:       '0 6px',
+      }}>Zoom</span>
+      <select
+        value={value}
+        onChange={e => onChange(Number(e.target.value))}
+        style={{
+          background:   'transparent',
+          border:       'none',
+          borderRadius: 999,
+          padding:      '4px 6px',
+          fontFamily:   "'Space Grotesk'",
+          fontSize:     11,
+          fontWeight:   700,
+          color:        tokens.ink,
+          cursor:       'pointer',
+          appearance:   'none',
+        }}
+      >
+        {ZOOM_OPTIONS.map(p => (
+          <option key={p} value={p}>{p}%</option>
+        ))}
+      </select>
     </div>
   );
 }
