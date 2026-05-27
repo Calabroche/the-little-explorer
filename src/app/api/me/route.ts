@@ -29,6 +29,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/db';
 import { getAuthedUser } from '@/lib/api-auth';
 import { logEvent } from '@/lib/events';
+import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -104,6 +105,8 @@ export async function GET(req: NextRequest) {
   const res = await loadCurrentUser(req);
   if (res instanceof NextResponse) return res;
   const { row } = res;
+  const limited = enforceRateLimit(req, RATE_LIMITS.authedRead, 'me-get', { userId: row.id });
+  if (limited) return limited;
 
   const payload: MeResponse = {
     id:        row.id,
@@ -124,6 +127,8 @@ export async function PATCH(req: NextRequest) {
   const res = await loadCurrentUser(req);
   if (res instanceof NextResponse) return res;
   const { row } = res;
+  const limited = enforceRateLimit(req, RATE_LIMITS.authedWrite, 'me-patch', { userId: row.id });
+  if (limited) return limited;
 
   let body: Partial<UserSettings>;
   try {
@@ -225,6 +230,8 @@ export async function DELETE(req: NextRequest) {
   const res = await loadCurrentUser(req);
   if (res instanceof NextResponse) return res;
   const { row } = res;
+  const limited = enforceRateLimit(req, RATE_LIMITS.authedWrite, 'me-delete', { userId: row.id });
+  if (limited) return limited;
 
   // 1. Revoke Strava OAuth (best effort). We need a live access_token
   //    to call /oauth/deauthorize; the refresh flow lives in

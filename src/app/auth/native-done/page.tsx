@@ -59,13 +59,20 @@ export default async function NativeDonePage() {
   const ua = headers().get('user-agent') ?? '';
   const label = deriveLabel(ua);
 
+  // 90-day token lifetime — short enough that a lost device stops
+  // being a risk after 3 months even if the user never thought to
+  // revoke; long enough that the average user re-auths twice a year,
+  // not monthly. The lookup in `api-auth.ts` filters expired rows.
+  const expiresAt = new Date(Date.now() + 90 * 24 * 3600 * 1000).toISOString();
+
   const { error } = await supabaseAdmin()
     .schema('next_auth')
     .from('api_tokens')
     .insert({
-      user_id: session.user.id,
+      user_id:    session.user.id,
       token,
       label,
+      expires_at: expiresAt,
     });
 
   if (error) {

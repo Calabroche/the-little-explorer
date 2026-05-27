@@ -54,11 +54,13 @@ export async function getAuthedUser(req: NextRequest | null = null): Promise<Aut
   const token = m[1];
 
   // Token lookup — service role bypasses RLS. Tokens that don't
-  // exist or are revoked simply don't match here.
+  // exist or are revoked simply don't match here. Expired tokens
+  // (expires_at < now) are filtered too; legacy tokens without
+  // an expiry stay valid until they're rotated.
   const { data, error } = await supabaseAdmin()
     .schema('next_auth')
     .from('api_tokens')
-    .select('user_id, revoked_at, users:user_id(email)')
+    .select('user_id, revoked_at, expires_at, users:user_id(email)')
     .eq('token', token)
     .is('revoked_at', null)
     .maybeSingle();
@@ -68,6 +70,15 @@ export async function getAuthedUser(req: NextRequest | null = null): Promise<Aut
     return null;
   }
   if (!data) return null;
+
+  // Expiry check — `expires_at` may be NULL for tokens issued before
+  // the 90-day policy shipped; we treat those as non-expiring rather
+  // than locking grandfathered iOS clients out.
+  const exp = (data as { expires_at: string | null }).expires_at;
+  if (exp && new Date(exp).getTime() < Date.now()) {
+    console.warn('[api-auth] token expired — refusing');
+    return null;
+  }
 
   // Optional: touch last_used_at so we know which tokens are stale.
   // Fire-and-forget — no need to await; if it fails the auth still works.

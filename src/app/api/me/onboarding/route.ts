@@ -22,6 +22,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/db';
 import { getAuthedUser } from '@/lib/api-auth';
 import { logEvent, EventType } from '@/lib/events';
+import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -39,6 +40,10 @@ export async function POST(req: NextRequest) {
   if (!authed?.id) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
+  // Onboarding fires ~5 events per user, ever. Anything beyond
+  // `authedWrite` is abuse / a misbehaving client.
+  const limited = enforceRateLimit(req, RATE_LIMITS.authedWrite, 'me-onboarding', { userId: authed.id });
+  if (limited) return limited;
 
   let body: Body;
   try {

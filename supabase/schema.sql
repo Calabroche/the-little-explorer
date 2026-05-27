@@ -169,6 +169,16 @@ alter table if exists next_auth.api_tokens
   add column if not exists last_used_at timestamp with time zone;
 alter table if exists next_auth.api_tokens
   add column if not exists revoked_at   timestamp with time zone;
+-- Token expiry — defence-in-depth alongside `revoked_at`. A lost
+-- phone whose token wasn't manually revoked stops being usable after
+-- 90 days. New tokens issued by /auth/native-done get this stamped
+-- to NOW() + 90d; old tokens (NULL expires_at) are grandfathered in
+-- and treated as non-expiring until they're rotated.
+alter table if exists next_auth.api_tokens
+  add column if not exists expires_at   timestamp with time zone;
+create index if not exists api_tokens_expires_idx
+  on next_auth.api_tokens (expires_at)
+  where expires_at is not null;
 
 -- ── Activities (our own table, our own conventions) ─────────────────────────
 create table if not exists public.activities (

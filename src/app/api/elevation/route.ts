@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { enforceRateLimit, enforceBodySize, RATE_LIMITS } from '@/lib/rate-limit';
 
 // Proxy to opentopodata.org's eudem25m dataset (25 m resolution DEM
 // covering Europe). Free, no key, but limited to 100 locations per
@@ -25,6 +25,10 @@ const MAX_POINTS = 100;
 export async function POST(req: NextRequest) {
   const limited = enforceRateLimit(req, RATE_LIMITS.elevation, 'elevation');
   if (limited) return limited;
+  // Body cap = 50 KB. 100 points × ~20 bytes per [lat,lng] pair = 2 KB.
+  // Even with comments / whitespace, 50 KB is comfortably 25× over.
+  const tooBig = enforceBodySize(req, 50_000);
+  if (tooBig) return tooBig;
 
   let body: { points?: [number, number][] };
   try {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { enforceRateLimit, enforceBodySize, RATE_LIMITS } from '@/lib/rate-limit';
 
 // Proxy to a public OSRM cycling-profile router.
 // Takes an ordered list of [lat, lng] waypoints and returns the cycling
@@ -65,6 +65,10 @@ export interface NavStep {
 export async function POST(req: NextRequest) {
   const limited = enforceRateLimit(req, RATE_LIMITS.routeBike, 'route-bike');
   if (limited) return limited;
+  // Body cap = 10 KB. 25 waypoints × ~25 bytes = 625 B; even
+  // with steps:true and verbose payloads, 10 KB is way overhead.
+  const tooBig = enforceBodySize(req, 10_000);
+  if (tooBig) return tooBig;
 
   let body: { waypoints?: [number, number][]; steps?: boolean };
   try {

@@ -39,6 +39,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/db';
 import { getAuthedUser } from '@/lib/api-auth';
 import { logEvent } from '@/lib/events';
+import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -53,6 +54,10 @@ export async function GET(req: NextRequest) {
   if (!authed?.id) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
+  // Heavy endpoint — pulls every activity row + payload. Cap at
+  // 5/min per user so a curl loop can't drain Supabase egress.
+  const limited = enforceRateLimit(req, RATE_LIMITS.heavyRead, 'me-export', { userId: authed.id });
+  if (limited) return limited;
 
   // 1. User row.
   const { data: user, error: userErr } = await supabaseAdmin()

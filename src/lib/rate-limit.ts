@@ -48,6 +48,18 @@ export const RATE_LIMITS = {
   /** 60 reqs/min sustained — village autocomplete fires on each keystroke
       after debounce, so this needs to be generous. */
   commune:    { capacity: 60, refillPerS: 1.0 } satisfies Config,
+  /** Authenticated read endpoints (/api/me, /api/activities). 60/min is
+      enough for normal browsing — anyone hitting this ceiling is
+      scripting against us. */
+  authedRead: { capacity: 60, refillPerS: 1.0 } satisfies Config,
+  /** Heavy authenticated endpoints (/api/me/export with full activity
+      pull). 5/min is more than enough for a human; stops a curl loop
+      from running our Supabase egress bill up. */
+  heavyRead:  { capacity: 5,  refillPerS: 0.083 } satisfies Config, // 5/min
+  /** Authenticated write endpoints (/api/me PATCH, /api/me/onboarding).
+      Same ceiling as read — writes don't need to be slower per se,
+      but a misbehaving client shouldn't be able to spam either. */
+  authedWrite:{ capacity: 30, refillPerS: 0.5 } satisfies Config,
 } as const;
 
 const buckets = new Map<string, Bucket>();
@@ -63,6 +75,30 @@ function clientIp(req: NextRequest): string {
   const real = req.headers.get('x-real-ip');
   if (real) return real;
   return 'anonymous';
+}
+
+/**
+ * Reject requests whose declared body size exceeds `maxBytes`. Defends
+ * against the "POST 50 MB of garbage to crash the lambda" attack: the
+ * Content-Length header gets checked before we read the body into
+ * memory, so a malicious client can't even start streaming.
+ *
+ * Returns a 413 NextResponse if too large, otherwise `null`.
+ *
+ * Usage:
+ *   const tooBig = enforceBodySize(req, 1_000_000); // 1 MB cap
+ *   if (tooBig) return tooBig;
+ */
+export function enforceBodySize(req: NextRequest, maxBytes: number): NextResponse | null {
+  const declared = Number(req.headers.get('content-length') ?? '0');
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    console.warn(`[body-size] rejected ${declared} bytes (cap ${maxBytes})`);
+    return NextResponse.json(
+      { error: 'payload_too_large', max_bytes: maxBytes },
+      { status: 413, headers: { 'Content-Length': '0' } },
+    );
+  }
+  return null;
 }
 
 /**
@@ -116,24 +152,30 @@ function maybeSweep() {
  * Guard a route handler. Returns `null` if the request is allowed
  * (handler should proceed), or a 429 NextResponse if rate-limited.
  *
- * Usage:
- *   export async function POST(req: NextRequest) {
- *     const limited = enforceRateLimit(req, RATE_LIMITS.elevation, 'elevation');
- *     if (limited) return limited;
- *     // … real handler
- *   }
+ * Usage (per-IP):
+ *   const limited = enforceRateLimit(req, RATE_LIMITS.elevation, 'elevation');
+ *
+ * Usage (per-user, for authenticated routes — preferred over IP
+ * once the user is known so a noisy office NAT doesn't punish a
+ * second user behind the same gateway):
+ *   const limited = enforceRateLimit(req, RATE_LIMITS.authedRead,
+ *     'me-get', { userId: authed.id });
  */
 export function enforceRateLimit(
   req: NextRequest,
   cfg: Config,
   routeName: string,
+  /** Optional per-user keying. When provided, the bucket is keyed on
+   *  the user id rather than the IP — bypasses the shared-NAT
+   *  problem and follows the actor across reconnects. */
+  opts: { userId?: string | null } = {},
 ): NextResponse | null {
-  const ip = clientIp(req);
-  const key = `${routeName}:${ip}`;
+  const subject = opts.userId ? `u:${opts.userId}` : `ip:${clientIp(req)}`;
+  const key = `${routeName}:${subject}`;
   const { ok, retryAfter } = consume(key, cfg);
   if (ok) return null;
   maybeSweep();
-  console.warn(`[rate-limit] ${routeName} blocked ip=${ip} retry_after=${retryAfter}s`);
+  console.warn(`[rate-limit] ${routeName} blocked ${subject} retry_after=${retryAfter}s`);
   return NextResponse.json(
     {
       error:        'rate_limited',
