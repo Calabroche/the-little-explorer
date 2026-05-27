@@ -11,6 +11,7 @@ import { MapPage } from './pages/MapPage';
 import { PhotosPage } from './pages/PhotosPage';
 import { PlannerPage } from './pages/PlannerPage';
 import { FtpPage } from './pages/FtpPage';
+import { TrainingLoadPage } from './pages/TrainingLoadPage';
 import { ComparePage } from './pages/ComparePage';
 import { WrappedPage } from './pages/WrappedPage';
 import { AnalysisPage } from './AnalysisPage';
@@ -25,6 +26,7 @@ const PAGE_PATHS: Record<PageId, string> = {
   map:       '/carte',
   wrapped:   '/bilan',
   ftp:       '/ftp',
+  'training-load': '/charge',
   photos:    '/photos',
 };
 
@@ -34,6 +36,7 @@ function pathToPage(pathname: string): PageId {
   if (pathname.startsWith('/comparer'))      return 'compare';
   if (pathname.startsWith('/carte'))         return 'map';
   if (pathname.startsWith('/bilan'))         return 'wrapped';
+  if (pathname.startsWith('/charge'))        return 'training-load';
   if (pathname.startsWith('/ftp'))           return 'ftp';
   if (pathname.startsWith('/photos'))        return 'photos';
   // /stats route is gone — the standalone Stats page was removed.
@@ -105,7 +108,7 @@ export function ExplorerApp() {
     localStorage.setItem('tle_sport', s);
     setAnalysisActivity(null);
     // Sur les pages spécifiques au vélo, retomber sur le feed quand on passe en course.
-    if (s !== 'cycling' && (page === 'planner' || page === 'ftp' || page === 'itinerary')) {
+    if (s !== 'cycling' && (page === 'planner' || page === 'ftp' || page === 'training-load' || page === 'itinerary')) {
       setPage('feed');
       window.history.pushState(null, '', '/');
     }
@@ -336,6 +339,7 @@ export function ExplorerApp() {
       case 'map':       return <MapPage     activities={activities} selectedActivity={selectedActivityForMap} />;
       case 'wrapped':   return <WrappedPage activities={filteredActivities} sport={sport} />;
       case 'ftp':       return <FtpPage     activities={filteredActivities} />;
+      case 'training-load': return <TrainingLoadPage activities={filteredActivities} />;
       case 'photos':    return <PhotosPage  activities={filteredActivities} />;
     }
   };

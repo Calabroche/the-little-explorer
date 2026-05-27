@@ -42,14 +42,15 @@ export const dict = {
 
     // ── Sidebar ──────────────────────────────────────────────────────────────
     nav: {
-      activities: 'Activités',
-      planner:    'Planificateur',
-      itinerary:  'Itinéraire',
-      compare:    'Comparer',
-      map:        'Carte',
-      wrapped:    'Bilan',
-      ftp:        'FTP',
-      photos:     'Photos',
+      activities:   'Activités',
+      planner:      'Planificateur',
+      itinerary:    'Itinéraire',
+      compare:      'Comparer',
+      map:          'Carte',
+      wrapped:      'Bilan',
+      ftp:          'FTP',
+      trainingLoad: 'Charge',
+      photos:       'Photos',
     },
 
     // ── Type badges ──────────────────────────────────────────────────────────
@@ -606,14 +607,15 @@ export const dict = {
 
     // ── Sidebar ──────────────────────────────────────────────────────────────
     nav: {
-      activities: 'Activities',
-      planner:    'Planner',
-      itinerary:  'Itinerary',
-      compare:    'Compare',
-      map:        'Map',
-      wrapped:    'Recap',
-      ftp:        'FTP',
-      photos:     'Photos',
+      activities:   'Activities',
+      planner:      'Planner',
+      itinerary:    'Itinerary',
+      compare:      'Compare',
+      map:          'Map',
+      wrapped:      'Recap',
+      ftp:          'FTP',
+      trainingLoad: 'Load',
+      photos:       'Photos',
     },
 
     // ── Type badges ──────────────────────────────────────────────────────────
