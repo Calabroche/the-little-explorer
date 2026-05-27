@@ -65,7 +65,13 @@ export default async function NativeDonePage() {
   // not monthly. The lookup in `api-auth.ts` filters expired rows.
   const expiresAt = new Date(Date.now() + 90 * 24 * 3600 * 1000).toISOString();
 
-  const { error } = await supabaseAdmin()
+  // Tolerant of a pre-migration DB: if the `expires_at` column hasn't
+  // been added yet (deploy race), the insert with the column fails
+  // with a "column does not exist" Postgres error. We retry without
+  // the column so the user can still sign in — they get a legacy
+  // non-expiring token, which is what every token before this commit
+  // was. As soon as the migration runs, new tokens get stamped.
+  let { error } = await supabaseAdmin()
     .schema('next_auth')
     .from('api_tokens')
     .insert({
@@ -74,6 +80,19 @@ export default async function NativeDonePage() {
       label,
       expires_at: expiresAt,
     });
+
+  if (error && /column.*expires_at|expires_at.*column/i.test(error.message ?? '')) {
+    console.warn('[native-done] expires_at column missing — falling back to legacy insert. Run the migration!');
+    const retry = await supabaseAdmin()
+      .schema('next_auth')
+      .from('api_tokens')
+      .insert({
+        user_id: session.user.id,
+        token,
+        label,
+      });
+    error = retry.error;
+  }
 
   if (error) {
     console.error('[native-done] insert failed:', error.message);
