@@ -121,7 +121,12 @@ function FitBounds({
     map.flyToBounds(target, {
       padding:  isSegment ? [60, 60] : [24, 24],
       duration: 0.5,
-      maxZoom:  isSegment ? 15 : undefined,
+      // maxZoom 13 (was 15) — Florian found the segment fly-in zoomed
+      // in too aggressively. Dropping 2 zoom levels widens the
+      // visible area ~4× (each Leaflet level halves the area), so a
+      // hovered climb now sits in geographic context rather than
+      // filling the entire viewport.
+      maxZoom:  isSegment ? 13 : undefined,
     });
     // Apply the user's zoom offset slightly after the fly finishes so
     // we end up at the offset zoom rather than fighting the animation.
