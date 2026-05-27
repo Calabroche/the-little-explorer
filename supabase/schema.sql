@@ -198,6 +198,46 @@ create table if not exists public.activities (
 create index if not exists activities_user_date_idx  on public.activities (user_id, start_date desc);
 create index if not exists activities_user_sport_idx on public.activities (user_id, sport);
 
+-- ── Bike maintenance tracker ───────────────────────────────────────────────
+-- One row per wear-item the user is tracking (chain, brake pads, tires,
+-- cables, etc.). We compute "km depuis la pose" as the sum of cycling
+-- activity distance after `installed_at`; once that hits `lifetime_km`,
+-- the UI flags the part as worn.
+--
+-- Convention:
+--   * `installed_at_km` is the user's CUMULATIVE total cycling km at the
+--     moment the part was installed. We store this once at install so
+--     we don't need to re-sum activities on every page render — the
+--     current km on the part = (total km today) − installed_at_km.
+--   * `replaced_at` non-null = retired item, kept for history but not
+--     shown in the "current setup" view.
+--   * Lifetime is per-part — chains die at 3000 km, brake pads 2000,
+--     tires 5000, BB 15000. We give sane defaults but the user can
+--     override per item from the UI.
+create table if not exists public.bike_equipment (
+  id              uuid primary key default uuid_generate_v4(),
+  user_id         uuid not null references next_auth.users(id) on delete cascade,
+  name            text not null,
+  -- Closed set so the UI can pick icons + default lifetimes. Add new
+  -- types here (and in the front-end TYPE_META map) when needed.
+  kind            text not null check (kind in (
+    'chain', 'brake_pads_front', 'brake_pads_rear', 'tire_front',
+    'tire_rear', 'cassette', 'cables', 'bar_tape', 'bottom_bracket',
+    'pedals', 'other'
+  )),
+  installed_at    timestamptz not null default now(),
+  installed_at_km numeric(10,2) not null default 0,
+  lifetime_km     integer not null default 3000,
+  replaced_at     timestamptz,                          -- null = still in use
+  notes           text,
+  created_at      timestamptz not null default now()
+);
+create index if not exists bike_equipment_user_idx
+  on public.bike_equipment (user_id, replaced_at);
+
+grant all on table public.bike_equipment to postgres;
+grant all on table public.bike_equipment to service_role;
+
 -- ── Helper RPC: find user by Strava athlete id (used by webhook) ────────────
 create or replace function public.user_by_athlete(p_athlete_id bigint)
 returns uuid

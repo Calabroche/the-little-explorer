@@ -50,6 +50,7 @@ export const dict = {
       wrapped:      'Bilan',
       ftp:          'FTP',
       trainingLoad: 'Charge',
+      equipment:    'Matériel',
       photos:       'Photos',
     },
 
@@ -615,6 +616,7 @@ export const dict = {
       wrapped:      'Recap',
       ftp:          'FTP',
       trainingLoad: 'Load',
+      equipment:    'Equipment',
       photos:       'Photos',
     },
 

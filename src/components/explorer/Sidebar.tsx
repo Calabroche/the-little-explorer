@@ -8,7 +8,7 @@ import { Label } from './ui';
 import { useT } from '@/i18n';
 import type { Lang } from '@/i18n';
 
-export type PageId = 'feed' | 'planner' | 'map' | 'photos' | 'ftp' | 'training-load' | 'compare' | 'wrapped' | 'itinerary';
+export type PageId = 'feed' | 'planner' | 'map' | 'photos' | 'ftp' | 'training-load' | 'equipment' | 'compare' | 'wrapped' | 'itinerary';
 export type SportId = 'cycling' | 'running' | 'hiking' | 'ski' | 'snowshoe' | 'walking' | 'swim';
 export type UserId  = 'florian' | 'helena';
 
@@ -26,6 +26,7 @@ const ALL_NAV_ITEMS: { id: PageId; icon: string; label: string; sports: SportId[
   { id: 'wrapped', icon: '✺', label: 'Bilan',         sports: ALL_SPORTS },
   { id: 'ftp',     icon: '⚡', label: 'FTP',           sports: ['cycling'] },
   { id: 'training-load', icon: '◐', label: 'Charge',  sports: ['cycling'] },
+  { id: 'equipment', icon: '⚙', label: 'Matériel', sports: ['cycling'] },
 ];
 
 interface Props {
@@ -313,6 +314,7 @@ const NAV_LABEL_KEY: Record<PageId, string> = {
   wrapped:   'nav.wrapped',
   ftp:       'nav.ftp',
   'training-load': 'nav.trainingLoad',
+  equipment:       'nav.equipment',
   photos:    'nav.photos',
 };
 
