@@ -104,7 +104,10 @@ export function EquipmentPage() {
   };
 
   return (
-    <main style={{ padding: '40px 24px', background: tokens.cream, minHeight: '100vh' }}>
+    // The parent ExplorerApp main is `overflow: hidden` — each page
+    // must provide its own scroll container with `flex:1 + overflowY:
+    // auto`. Same pattern as FtpPage / WrappedPage.
+    <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '20px 16px' : '40px 24px', background: tokens.cream }}>
       <div style={{ maxWidth: 1080, margin: '0 auto' }}>
         <Header totalKm={totalKm} onAdd={() => setShowAdd(true)} />
 
@@ -146,7 +149,7 @@ export function EquipmentPage() {
           />
         )}
       </div>
-    </main>
+    </div>
   );
 }
 

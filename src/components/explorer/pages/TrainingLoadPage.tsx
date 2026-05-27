@@ -44,7 +44,10 @@ export function TrainingLoadPage({ activities }: { activities: Activity[] }) {
 
   if (cyclingActivities.length < 5) {
     return (
-      <main style={{ padding: '40px 24px', background: tokens.cream, minHeight: '100vh' }}>
+      // The parent ExplorerApp main is `overflow: hidden` — each page
+      // must provide its own scroll container with `flex:1 + overflowY:
+      // auto`. Same pattern as FtpPage / WrappedPage.
+      <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '20px 16px' : '40px 24px', background: tokens.cream }}>
         <div style={{ maxWidth: 720, margin: '0 auto', background: tokens.surface,
                       border: `1px solid ${tokens.creamBorder}`, borderRadius: 4, padding: 36 }}>
           <SectionHeader />
@@ -52,12 +55,12 @@ export function TrainingLoadPage({ activities }: { activities: Activity[] }) {
             Pas assez d&apos;activités cyclisme avec TSS pour calculer ta charge. Reviens après quelques sorties.
           </p>
         </div>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main style={{ padding: '40px 24px', background: tokens.cream, minHeight: '100vh' }}>
+    <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '20px 16px' : '40px 24px', background: tokens.cream }}>
       <div style={{ maxWidth: 1080, margin: '0 auto' }}>
         <SectionHeader />
 
@@ -111,7 +114,7 @@ export function TrainingLoadPage({ activities }: { activities: Activity[] }) {
 
         <ExplainerCard />
       </div>
-    </main>
+    </div>
   );
 }
 
