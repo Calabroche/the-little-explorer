@@ -8,7 +8,7 @@ import { Label } from './ui';
 import { useT } from '@/i18n';
 import type { Lang } from '@/i18n';
 
-export type PageId = 'feed' | 'planner' | 'map' | 'photos' | 'ftp' | 'training-load' | 'equipment' | 'compare' | 'wrapped' | 'itinerary';
+export type PageId = 'feed' | 'planner' | 'photos' | 'ftp' | 'training-load' | 'equipment' | 'compare' | 'wrapped' | 'itinerary';
 export type SportId = 'cycling' | 'running' | 'hiking' | 'ski' | 'snowshoe' | 'walking' | 'swim';
 export type UserId  = 'florian' | 'helena';
 
@@ -28,10 +28,6 @@ export type UserId  = 'florian' | 'helena';
 const ALL_SPORTS: SportId[] = ['cycling', 'running', 'hiking', 'ski', 'snowshoe', 'walking', 'swim'];
 const ALL_NAV_ITEMS: { id: PageId; icon: string; label: string; sports: SportId[] }[] = [
   { id: 'feed',      icon: '◎', label: 'Activités',     sports: ALL_SPORTS },
-  // Heatmap = density-style aggregation of every GPS track on one
-  // map. Sits next to Activités because they're two views of the
-  // same data (list vs. spatial).
-  { id: 'map',       icon: '▩', label: 'Heatmap',       sports: ALL_SPORTS },
   // 'itinerary' is no longer a top-level destination — it lives as a
   // tab inside Planner. Kept as a PageId for backward-compat URLs
   // (/itineraire still works and lands on the itinerary tab).
@@ -323,7 +319,6 @@ const NAV_LABEL_KEY: Record<PageId, string> = {
   planner:   'nav.planner',
   itinerary: 'nav.itinerary',
   compare:   'nav.compare',
-  map:       'nav.map',
   wrapped:   'nav.wrapped',
   ftp:       'nav.ftp',
   'training-load': 'nav.trainingLoad',

@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Background : ring + body -->
+  <circle cx="512" cy="512" r="510" fill="#EFE5C9"/>
+  <circle cx="512" cy="512" r="494" fill="#F8F1DA"/>
+  <circle cx="512" cy="512" r="476" fill="#234C2E"/>
+
+  <!-- "THE LITTLE" top text with side rules -->
+  <line x1="320" y1="232" x2="430" y2="232" stroke="#EFE5C9" stroke-width="2.5" opacity="0.9"/>
+  <line x1="594" y1="232" x2="704" y2="232" stroke="#EFE5C9" stroke-width="2.5" opacity="0.9"/>
+  <text x="512" y="244" font-family="Helvetica, Arial, sans-serif" font-size="58" font-weight="600"
+        fill="#EFE5C9" text-anchor="middle" letter-spacing="14">THE LITTLE</text>
+  <line x1="380" y1="282" x2="644" y2="282" stroke="#EFE5C9" stroke-width="2"/>
+
+  <!-- Mountain silhouette behind the bike -->
+  <path d="M 90 700 L 230 510 L 360 660 L 480 540 L 600 670 L 740 520 L 880 700 L 880 740 L 90 740 Z"
+        fill="#163A1E" opacity="0.55"/>
+
+  <!-- Bike line-art, cream, vintage style -->
+  <g stroke="#EFE5C9" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Wheels -->
+    <circle cx="370" cy="610" r="118" stroke-width="14"/>
+    <circle cx="660" cy="610" r="118" stroke-width="14"/>
+    <!-- Hubs -->
+    <circle cx="370" cy="610" r="6" fill="#EFE5C9"/>
+    <circle cx="660" cy="610" r="6" fill="#EFE5C9"/>
+    <!-- Spokes (8 each, simplified) -->
+    <g stroke-width="3">
+      <line x1="370" y1="492" x2="370" y2="728"/>
+      <line x1="252" y1="610" x2="488" y2="610"/>
+      <line x1="287" y1="527" x2="453" y2="693"/>
+      <line x1="287" y1="693" x2="453" y2="527"/>
+      <line x1="660" y1="492" x2="660" y2="728"/>
+      <line x1="542" y1="610" x2="778" y2="610"/>
+      <line x1="577" y1="527" x2="743" y2="693"/>
+      <line x1="577" y1="693" x2="743" y2="527"/>
+    </g>
+    <!-- Frame (chainstay) -->
+    <line x1="370" y1="610" x2="660" y2="610" stroke-width="11"/>
+    <!-- Seat tube -->
+    <line x1="370" y1="610" x2="500" y2="470" stroke-width="11"/>
+    <!-- Down tube -->
+    <line x1="370" y1="610" x2="555" y2="488" stroke-width="11"/>
+    <!-- Top tube -->
+    <line x1="500" y1="470" x2="660" y2="490" stroke-width="11"/>
+    <!-- Seat post + saddle -->
+    <line x1="500" y1="470" x2="500" y2="442" stroke-width="11"/>
+    <line x1="464" y1="438" x2="528" y2="438" stroke-width="9"/>
+    <!-- Head tube + handlebar -->
+    <line x1="660" y1="490" x2="678" y2="442" stroke-width="11"/>
+    <line x1="678" y1="442" x2="660" y2="430" stroke-width="9"/>
+    <line x1="678" y1="442" x2="708" y2="430" stroke-width="9"/>
+    <!-- Crank to rear (chain hint) -->
+    <circle cx="555" cy="610" r="14" stroke-width="6"/>
+  </g>
+
+  <!-- Diamond ornament -->
+  <g transform="translate(512 800)" fill="#EFE5C9">
+    <line x1="-110" y1="0" x2="-30" y2="0" stroke="#EFE5C9" stroke-width="2" opacity="0.85"/>
+    <line x1="30" y1="0" x2="110" y2="0" stroke="#EFE5C9" stroke-width="2" opacity="0.85"/>
+    <polygon points="0,-12 12,0 0,12 -12,0"/>
+  </g>
+
+  <!-- "EXPLORER" big bottom text -->
+  <text x="512" y="930" font-family="Helvetica, Arial, sans-serif" font-size="138" font-weight="800"
+        fill="#EFE5C9" text-anchor="middle" letter-spacing="10">EXPLORER</text>
+</svg>

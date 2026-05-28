@@ -7,7 +7,6 @@ import { Sidebar, GlobalLangToggle, PageId, SportId, UserId } from './Sidebar';
 import { useT } from '@/i18n';
 import { useIsMobile } from './ui';
 import { FeedPage } from './pages/FeedPage';
-import { MapPage } from './pages/MapPage';
 import { PhotosPage } from './pages/PhotosPage';
 import { PlannerPage } from './pages/PlannerPage';
 import { PerformancePage } from './pages/PerformancePage';
@@ -23,7 +22,6 @@ const PAGE_PATHS: Record<PageId, string> = {
   planner:   '/planificateur',
   itinerary: '/itineraire',
   compare:   '/comparer',
-  map:       '/carte',
   wrapped:   '/bilan',
   ftp:       '/ftp',
   'training-load': '/charge',
@@ -35,7 +33,6 @@ function pathToPage(pathname: string): PageId {
   if (pathname.startsWith('/planificateur')) return 'planner';
   if (pathname.startsWith('/itineraire'))    return 'itinerary';
   if (pathname.startsWith('/comparer'))      return 'compare';
-  if (pathname.startsWith('/carte'))         return 'map';
   if (pathname.startsWith('/bilan'))         return 'wrapped';
   if (pathname.startsWith('/charge'))        return 'training-load';
   if (pathname.startsWith('/equipement'))    return 'equipment';
@@ -69,7 +66,6 @@ function pathToActivityId(pathname: string): number | null {
 
 export function ExplorerApp() {
   const [page, setPage] = useState<PageId>('feed');
-  const [selectedActivityForMap] = useState<Activity | null>(null);
   const [analysisActivity, setAnalysisActivity] = useState<Activity | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [stats, setStats] = useState<GlobalStats | null>(null);
@@ -338,7 +334,6 @@ export function ExplorerApp() {
       case 'planner':   return <PlannerPage activities={filteredActivities} user={user} initialTab="itineraire" />;
       case 'itinerary': return <PlannerPage activities={filteredActivities} user={user} initialTab="itineraire" />;
       case 'compare':   return <ComparePage activities={filteredActivities} />;
-      case 'map':       return <MapPage     activities={activities} selectedActivity={selectedActivityForMap} />;
       case 'wrapped':   return <WrappedPage activities={filteredActivities} sport={sport} />;
       // 'ftp' + 'training-load' both land on PerformancePage now —
       // the latter just preselects the Charge tab so legacy bookmarks
