@@ -22,6 +22,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { tokens } from '../tokens';
 import { Label, useIsMobile } from '../ui';
+import { ServiceLogPanel } from './ServiceLogPanel';
 
 type EquipmentKind =
   | 'frame' | 'fork'
@@ -135,6 +136,11 @@ export function EquipmentPage() {
   // editing item in state (rather than mounting a separate dialog per
   // row) lets the same UI handle both cases.
   const [editingItem, setEditingItem] = useState<Equipment | null>(null);
+  // Two tabs inside /equipement:
+  //   pieces    — the existing wear-item tracker (chain, brakes, …)
+  //   service   — the new carnet d'entretien (lube, bleed, tune, …)
+  // Local state, resets when navigating away.
+  const [tab, setTab] = useState<'pieces' | 'service'>('pieces');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -235,6 +241,11 @@ export function EquipmentPage() {
       <div style={{ maxWidth: 1080, margin: '0 auto' }}>
         <Header totalKm={totalKm} bikes={bikes} items={items} onAdd={() => setShowAdd(true)} onResetBike={resetInstalledKm} />
 
+        {/* Tab toggle — Pièces (wear tracker) vs Entretien (carnet).
+            Sits just under the header so the bike pills stay above
+            both views (they're shared context). */}
+        <TabBar tab={tab} onChange={setTab} />
+
         {error && (
           <div style={{
             padding: 14, marginBottom: 16, background: '#FEE',
@@ -245,45 +256,21 @@ export function EquipmentPage() {
           </div>
         )}
 
-        {/* Bulk-assign nudge — when the user has bikes synced from Strava
-            but pieces are still "any bike", their wear is inflated by
-            rides on the other bike. Surface a one-click fix per bike. */}
-        {!loading && unboundCount > 0 && bikes.length > 0 && (
-          <UnboundBanner count={unboundCount} bikes={bikes} onAssign={bulkAssign} />
-        )}
-
-        {loading ? (
-          <p style={{ color: tokens.inkLight, fontFamily: "'Space Grotesk'", fontSize: 13 }}>Chargement…</p>
-        ) : items.length === 0 ? (
-          <EmptyState onAdd={() => setShowAdd(true)} />
+        {tab === 'service' ? (
+          <ServiceLogPanel bikes={bikes} />
         ) : (
-          // Group items by category for display. Items whose `kind`
-          // isn't in KIND_META (shouldn't happen with the constraint
-          // but defensive) fall into 'autre'.
-          CATEGORY_ORDER.map(category => {
-            const itemsInCat = items.filter(it => (KIND_META[it.kind]?.category ?? 'autre') === category);
-            if (itemsInCat.length === 0) return null;
-            return (
-              <section key={category} style={{ marginBottom: 32 }}>
-                <CategoryHeader category={category} count={itemsInCat.length} />
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(320px, 1fr))',
-                  gap: 16,
-                }}>
-                  {itemsInCat.map(item => (
-                    <EquipmentCard
-                      key={item.id}
-                      item={item}
-                      onEdit={() => setEditingItem(item)}
-                      onReplaced={() => markReplaced(item.id)}
-                      onDelete={() => deleteItem(item.id)}
-                    />
-                  ))}
-                </div>
-              </section>
-            );
-          })
+          <PiecesPanel
+            loading={loading}
+            items={items}
+            unboundCount={unboundCount}
+            bikes={bikes}
+            isMobile={isMobile}
+            onAdd={() => setShowAdd(true)}
+            onBulkAssign={bulkAssign}
+            onEdit={setEditingItem}
+            onReplaced={markReplaced}
+            onDelete={deleteItem}
+          />
         )}
 
         {showAdd && (
@@ -304,6 +291,107 @@ export function EquipmentPage() {
         )}
       </div>
     </div>
+  );
+}
+
+// ── Tab bar + Pieces panel (extracted so the Entretien tab is a clean
+//    sibling of the Pièces tab without duplicating the loading/empty
+//    plumbing) ──────────────────────────────────────────────────────
+
+function TabBar({ tab, onChange }: { tab: 'pieces' | 'service'; onChange: (t: 'pieces' | 'service') => void }) {
+  const tabs: { id: 'pieces' | 'service'; label: string; icon: string }[] = [
+    { id: 'pieces',  label: 'Pièces d’usure', icon: '⚙' },
+    { id: 'service', label: 'Carnet d’entretien', icon: '✦' },
+  ];
+  return (
+    <div style={{
+      display: 'flex', gap: 0,
+      borderBottom: `1px solid ${tokens.creamBorder}`,
+      marginBottom: 24,
+    }}>
+      {tabs.map(t => {
+        const active = tab === t.id;
+        return (
+          <button
+            key={t.id}
+            onClick={() => onChange(t.id)}
+            style={{
+              padding: '10px 16px',
+              background: 'transparent', border: 'none',
+              borderBottom: `2px solid ${active ? tokens.terra : 'transparent'}`,
+              marginBottom: -1, cursor: 'pointer',
+              fontFamily: "'Space Grotesk'", fontSize: 13,
+              fontWeight: active ? 700 : 500, letterSpacing: '0.04em',
+              color: active ? tokens.terra : tokens.inkMid,
+              transition: 'color 0.12s, border-color 0.12s',
+            }}
+          >
+            <span style={{ marginRight: 6 }}>{t.icon}</span>{t.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function PiecesPanel({
+  loading, items, unboundCount, bikes, isMobile,
+  onAdd, onBulkAssign, onEdit, onReplaced, onDelete,
+}: {
+  loading: boolean;
+  items: Equipment[];
+  unboundCount: number;
+  bikes: Bike[];
+  isMobile: boolean;
+  onAdd: () => void;
+  onBulkAssign: (gearId: string, name: string) => Promise<void>;
+  onEdit: (item: Equipment) => void;
+  onReplaced: (id: string) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+}) {
+  return (
+    <>
+      {/* Bulk-assign nudge — when the user has bikes synced from Strava
+          but pieces are still "any bike", their wear is inflated by
+          rides on the other bike. Surface a one-click fix per bike. */}
+      {!loading && unboundCount > 0 && bikes.length > 0 && (
+        <UnboundBanner count={unboundCount} bikes={bikes} onAssign={onBulkAssign} />
+      )}
+
+      {loading ? (
+        <p style={{ color: tokens.inkLight, fontFamily: "'Space Grotesk'", fontSize: 13 }}>Chargement…</p>
+      ) : items.length === 0 ? (
+        <EmptyState onAdd={onAdd} />
+      ) : (
+        // Group items by category for display. Items whose `kind`
+        // isn't in KIND_META (shouldn't happen with the constraint
+        // but defensive) fall into 'autre'.
+        CATEGORY_ORDER.map(category => {
+          const itemsInCat = items.filter(it => (KIND_META[it.kind]?.category ?? 'autre') === category);
+          if (itemsInCat.length === 0) return null;
+          return (
+            <section key={category} style={{ marginBottom: 32 }}>
+              <CategoryHeader category={category} count={itemsInCat.length} />
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(320px, 1fr))',
+                gap: 16,
+              }}>
+                {itemsInCat.map(item => (
+                  <EquipmentCard
+                    key={item.id}
+                    item={item}
+                    onEdit={() => onEdit(item)}
+                    onReplaced={() => onReplaced(item.id)}
+                    onDelete={() => onDelete(item.id)}
+                  />
+                ))}
+              </div>
+            </section>
+          );
+        })
+      )}
+    </>
   );
 }
 

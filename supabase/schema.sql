@@ -305,6 +305,50 @@ alter table if exists public.bike_equipment
 create index if not exists bike_equipment_gear_idx
   on public.bike_equipment (gear_id) where gear_id is not null;
 
+-- ── Carnet d'entretien (service log) ───────────────────────────────────────
+-- One row per ad-hoc maintenance event the user performed: chain lube,
+-- brake bleed, wheel true, etc. This is the *event* layer that lives
+-- alongside bike_equipment's *piece lifecycle* layer:
+--   • bike_equipment    = "this chain is on at km 0, replaced at km 3200"
+--   • bike_service_events = "I lubed the chain at km 280, again at km 510"
+--
+-- The two together give the UI enough data to nag the user about
+-- preventive maintenance ("your chain was lubed 280 km ago — typical
+-- interval is 200 km, time to re-lube") without conflating the
+-- "install/replace" semantics of the wear tracker.
+--
+-- Closed-set `kind` mirrors the SERVICE_KIND_META map on the frontend
+-- (intervals, labels, icons).
+create table if not exists public.bike_service_events (
+  id            uuid primary key default uuid_generate_v4(),
+  user_id       uuid not null references next_auth.users(id) on delete cascade,
+  -- Strava gear_id. Nullable so legacy events (or "applies to any bike"
+  -- ones like "tire pressure pump tune-up") can exist — but the UI
+  -- always picks a bike when creating new ones.
+  gear_id       text,
+  kind          text not null check (kind in (
+    'chain_lube', 'chain_clean',
+    'brake_bleed', 'brake_pads_check',
+    'wheel_true', 'tire_pressure',
+    'derailleur_tune', 'bottom_bracket_check',
+    'cable_check', 'bike_wash', 'general_service',
+    'other'
+  )),
+  date          timestamptz not null default now(),
+  -- Bike's cumulative km at the moment of the event (snapshotted so
+  -- "next-due" math doesn't break when activities are re-synced).
+  km_at_event   numeric(10,2),
+  notes         text,
+  created_at    timestamptz not null default now()
+);
+create index if not exists bike_service_events_user_date_idx
+  on public.bike_service_events (user_id, date desc);
+create index if not exists bike_service_events_gear_idx
+  on public.bike_service_events (gear_id, date desc) where gear_id is not null;
+
+grant all on table public.bike_service_events to postgres;
+grant all on table public.bike_service_events to service_role;
+
 -- ── Helper RPC: find user by Strava athlete id (used by webhook) ────────────
 create or replace function public.user_by_athlete(p_athlete_id bigint)
 returns uuid
