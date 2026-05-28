@@ -217,7 +217,10 @@ export default function ProfilPage() {
 }
 
 const pageStyle: React.CSSProperties = {
-  minHeight:   '100dvh',
+  // body { overflow: hidden } in globals.css → page needs its own
+  // scroll context, not just minHeight (which gets clipped).
+  height:      '100dvh',
+  overflowY:   'auto',
   padding:     '40px 16px 40px',
   background:  tokens.cream,
 };

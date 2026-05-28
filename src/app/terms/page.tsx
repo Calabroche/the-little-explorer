@@ -36,9 +36,10 @@ export default function TermsPage() {
   const updatedAt = '26 mai 2026';
 
   return (
-    <>
+    // `body { overflow: hidden }` in globals.css clamps the page —
+    // wrap in our own scroll container so <main> + <Footer> can grow.
+    <div style={{ height: '100dvh', overflowY: 'auto', background: cream }}>
       <main style={{
-        minHeight:  '100dvh',
         background: cream,
         padding:    '40px 24px 80px',
         fontFamily: "'Space Grotesk', sans-serif",
@@ -235,7 +236,7 @@ export default function TermsPage() {
         </div>
       </main>
       <Footer />
-    </>
+    </div>
   );
 }
 

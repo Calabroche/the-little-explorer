@@ -140,8 +140,12 @@ export default function OnboardingPage() {
   };
 
   return (
+    // `body { overflow: hidden }` in globals.css clamps the page —
+    // <main> owns its own scroll context so the 4-step onboarding
+    // flow can grow past one viewport.
     <main style={{
-      minHeight:  '100dvh',
+      height:     '100dvh',
+      overflowY:  'auto',
       background: tokens.cream,
       padding:    '40px 24px 80px',
       fontFamily: "'Space Grotesk', sans-serif",
