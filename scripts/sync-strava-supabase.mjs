@@ -202,6 +202,9 @@ function activityRow(a, payload, userId) {
     duration_min:  Math.round((a.moving_time ?? 0) / 60),
     distance_km:   +((a.distance ?? 0) / 1000).toFixed(2),
     elevation_m:   Math.round(a.total_elevation_gain ?? 0),
+    // Bike/shoe id from Strava — lets the maintenance tracker scope
+    // wear per bike. Null for manual / non-tagged activities.
+    gear_id:       a.gear_id ?? null,
     payload,
   };
 }

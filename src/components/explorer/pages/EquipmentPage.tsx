@@ -57,9 +57,20 @@ interface Equipment {
   lifetime_km:     number;
   replaced_at:     string | null;
   notes:           string | null;
+  /** Strava gear_id this piece is bound to, or null for "all bikes". */
+  gear_id:         string | null;
+  /** The bike's nickname when known (server denormalizes this). */
+  gear_name:       string | null;
   totalKmToday:    number;
   kmSinceInstall:  number;
   wearRatio:       number;
+}
+
+interface Bike {
+  id:           string;
+  name:         string;
+  primary_bike: boolean;
+  totalKm:      number;
 }
 
 /** Per-kind UI metadata: category, icon, default lifetime, and the
@@ -115,6 +126,7 @@ export function EquipmentPage() {
   const isMobile = useIsMobile();
   const [items,   setItems]   = useState<Equipment[]>([]);
   const [totalKm, setTotalKm] = useState(0);
+  const [bikes,   setBikes]   = useState<Bike[]>([]);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -130,9 +142,10 @@ export function EquipmentPage() {
     try {
       const r = await fetch('/api/equipment');
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const data = await r.json() as { totalKm: number; items: Equipment[] };
+      const data = await r.json() as { totalKm: number; items: Equipment[]; bikes?: Bike[] };
       setItems(data.items);
       setTotalKm(data.totalKm);
+      setBikes(data.bikes ?? []);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -160,13 +173,38 @@ export function EquipmentPage() {
     await load();
   };
 
+  /**
+   * Bulk-assign every unbound piece to a target bike. Used by the
+   * banner that surfaces when the user has bikes but no pieces are
+   * scoped — common right after migrating from the pre-multi-bike
+   * version. Confirms once, then fires N parallel PATCHes.
+   */
+  const bulkAssign = async (targetGearId: string, targetName: string) => {
+    const unbound = items.filter(it => !it.gear_id);
+    if (unbound.length === 0) return;
+    const ok = confirm(
+      `Associer les ${unbound.length} pièces non liées à « ${targetName} » ? `
+      + `Leur usure sera désormais calculée sur les sorties de ce vélo uniquement.`,
+    );
+    if (!ok) return;
+    await Promise.all(unbound.map(it =>
+      fetch('/api/equipment', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: it.id, gear_id: targetGearId }),
+      }),
+    ));
+    await load();
+  };
+
+  const unboundCount = items.filter(it => !it.gear_id).length;
+
   return (
     // The parent ExplorerApp main is `overflow: hidden` — each page
     // must provide its own scroll container with `flex:1 + overflowY:
     // auto`. Same pattern as FtpPage / WrappedPage.
     <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '20px 16px' : '40px 24px', background: tokens.cream }}>
       <div style={{ maxWidth: 1080, margin: '0 auto' }}>
-        <Header totalKm={totalKm} onAdd={() => setShowAdd(true)} />
+        <Header totalKm={totalKm} bikes={bikes} onAdd={() => setShowAdd(true)} />
 
         {error && (
           <div style={{
@@ -176,6 +214,13 @@ export function EquipmentPage() {
           }}>
             {error}
           </div>
+        )}
+
+        {/* Bulk-assign nudge — when the user has bikes synced from Strava
+            but pieces are still "any bike", their wear is inflated by
+            rides on the other bike. Surface a one-click fix per bike. */}
+        {!loading && unboundCount > 0 && bikes.length > 0 && (
+          <UnboundBanner count={unboundCount} bikes={bikes} onAssign={bulkAssign} />
         )}
 
         {loading ? (
@@ -214,6 +259,7 @@ export function EquipmentPage() {
 
         {showAdd && (
           <AddDialog
+            bikes={bikes}
             onClose={() => setShowAdd(false)}
             onCreated={async () => { setShowAdd(false); await load(); }}
           />
@@ -222,6 +268,7 @@ export function EquipmentPage() {
         {editingItem && (
           <EditDialog
             item={editingItem}
+            bikes={bikes}
             onClose={() => setEditingItem(null)}
             onSaved={async () => { setEditingItem(null); await load(); }}
           />
@@ -233,7 +280,7 @@ export function EquipmentPage() {
 
 // ── Header ──────────────────────────────────────────────────────────
 
-function Header({ totalKm, onAdd }: { totalKm: number; onAdd: () => void }) {
+function Header({ totalKm, bikes, onAdd }: { totalKm: number; bikes: Bike[]; onAdd: () => void }) {
   return (
     <div style={{ marginBottom: 24, display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
       <div>
@@ -251,6 +298,29 @@ function Header({ totalKm, onAdd }: { totalKm: number; onAdd: () => void }) {
           fois que tu remplaces quelque chose. L&apos;usure se met à jour automatiquement
           à chaque nouvelle sortie vélo.
         </p>
+        {/* Per-bike km pills — visible breakdown so the user can tell
+            at a glance how the global total decomposes. Only shown when
+            we have ≥1 bike synced from Strava. */}
+        {bikes.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+            {bikes.map(b => (
+              <span key={b.id} style={{
+                display: 'inline-flex', alignItems: 'baseline', gap: 6,
+                padding: '4px 10px', background: tokens.surface,
+                border: `1px solid ${tokens.creamBorder}`, borderRadius: 3,
+                fontFamily: "'Space Grotesk'", fontSize: 11,
+              }}>
+                <span style={{ color: tokens.ink, fontWeight: 600 }}>{b.name}</span>
+                <span style={{ color: tokens.inkMid }}>{b.totalKm.toFixed(0)} km</span>
+                {b.primary_bike && (
+                  <span style={{ color: tokens.terra, fontSize: 9, fontWeight: 700, letterSpacing: '0.08em' }}>
+                    PRINCIPAL
+                  </span>
+                )}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
       <button onClick={onAdd} style={{
         padding: '12px 18px', background: tokens.terra, color: 'white',
@@ -258,6 +328,54 @@ function Header({ totalKm, onAdd }: { totalKm: number; onAdd: () => void }) {
         fontFamily: "'Space Grotesk'", fontSize: 12, fontWeight: 700,
         letterSpacing: '0.06em', textTransform: 'uppercase',
       }}>+ Ajouter une pièce</button>
+    </div>
+  );
+}
+
+/**
+ * Surfaces when ≥1 piece has no bike association AND ≥1 bike is known.
+ * Lets the user one-click reassign every orphan piece to a target bike
+ * — the typical case after rolling out per-bike scoping for the first
+ * time, where every existing piece is implicitly on the user's main
+ * bike but the row's gear_id is still NULL.
+ */
+function UnboundBanner({
+  count, bikes, onAssign,
+}: {
+  count: number;
+  bikes: Bike[];
+  onAssign: (gearId: string, name: string) => Promise<void>;
+}) {
+  return (
+    <div style={{
+      marginBottom: 20, padding: 14,
+      background: tokens.surface,
+      border: `1px solid ${tokens.terra}`,
+      borderLeft: `4px solid ${tokens.terra}`,
+      borderRadius: 4,
+    }}>
+      <p style={{ fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 700,
+                  letterSpacing: '0.1em', color: tokens.terra, textTransform: 'uppercase',
+                  margin: '0 0 6px' }}>
+        § {count} pièce{count > 1 ? 's' : ''} non rattachée{count > 1 ? 's' : ''} à un vélo
+      </p>
+      <p style={{ fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.inkMid, margin: '0 0 10px', lineHeight: 1.5 }}>
+        Sans rattachement, leur usure est calculée sur <strong>l&apos;ensemble</strong> de tes
+        sorties vélo (route + e-bike). Rattache-les à un vélo pour ne compter que les km roulés
+        avec ce vélo-là.
+      </p>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {bikes.map(b => (
+          <button key={b.id} onClick={() => onAssign(b.id, b.name)} style={{
+            padding: '7px 12px', background: 'transparent',
+            border: `1px solid ${tokens.terra}`, borderRadius: 3,
+            color: tokens.terra, fontFamily: "'Space Grotesk'", fontSize: 11,
+            fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer',
+          }}>
+            → Tout rattacher à {b.name}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -346,6 +464,30 @@ function EquipmentCard({
         </span>
       </div>
 
+      {/* Bike chip — empty (not "tous vélos") when unbound so the
+          user can see at a glance which pieces still need scoping. */}
+      {item.gear_name ? (
+        <div style={{
+          display: 'inline-block', padding: '2px 7px',
+          background: tokens.creamDark, borderRadius: 2,
+          fontFamily: "'Space Grotesk'", fontSize: 10, fontWeight: 600,
+          color: tokens.inkMid, marginBottom: 8,
+        }}>
+          {item.gear_name}
+        </div>
+      ) : (
+        <div style={{
+          display: 'inline-block', padding: '2px 7px',
+          background: 'transparent',
+          border: `1px dashed ${tokens.terra}`,
+          borderRadius: 2,
+          fontFamily: "'Space Grotesk'", fontSize: 10, fontWeight: 600,
+          color: tokens.terra, marginBottom: 8,
+        }}>
+          tous vélos (à rattacher)
+        </div>
+      )}
+
       {/* Wear bar */}
       <div style={{ marginTop: 12, marginBottom: 10 }}>
         <div style={{ height: 10, background: tokens.creamDark, borderRadius: 2, overflow: 'hidden', position: 'relative' }}>
@@ -399,8 +541,9 @@ function EquipmentCard({
 // ── Add dialog ─────────────────────────────────────────────────────
 
 function AddDialog({
-  onClose, onCreated,
+  bikes, onClose, onCreated,
 }: {
+  bikes: Bike[];
   onClose: () => void;
   onCreated: () => Promise<void>;
 }) {
@@ -410,6 +553,11 @@ function AddDialog({
   const [installedKm, setInstalledKm] = useState<number | ''>('');
   const [installedAt, setInstalledAt] = useState(new Date().toISOString().slice(0, 10));
   const [notes, setNotes]             = useState('');
+  // Default to the user's primary bike when present. Empty string =
+  // "tous vélos" (= null on the wire).
+  const [gearId, setGearId]           = useState<string>(
+    bikes.find(b => b.primary_bike)?.id ?? bikes[0]?.id ?? '',
+  );
   const [saving, setSaving]           = useState(false);
   const [error, setError]             = useState<string | null>(null);
 
@@ -434,6 +582,7 @@ function AddDialog({
           installed_at:    new Date(installedAt + 'T12:00:00Z').toISOString(),
           installed_at_km: typeof installedKm === 'number' ? installedKm : undefined,
           notes:           notes.trim() || undefined,
+          gear_id:         gearId || null,
         }),
       });
       if (!r.ok) {
@@ -487,6 +636,23 @@ function AddDialog({
           </select>
         </Field>
 
+        {/* Bike picker — only shown when we have bikes to pick from.
+            If the user has just one bike (or none synced yet), the
+            field is hidden and we send whatever gearId state was
+            pre-seeded with. */}
+        {bikes.length > 0 && (
+          <Field label="Vélo">
+            <select value={gearId} onChange={e => setGearId(e.target.value)} style={INPUT}>
+              {bikes.map(b => (
+                <option key={b.id} value={b.id}>
+                  {b.name}{b.primary_bike ? ' (principal)' : ''} · {b.totalKm.toFixed(0)} km
+                </option>
+              ))}
+              <option value="">Tous mes vélos (non-recommandé)</option>
+            </select>
+          </Field>
+        )}
+
         <Field label="Nom (libre)">
           <input value={name} onChange={e => setName(e.target.value)} maxLength={80} style={INPUT}
             placeholder="ex. Chaîne Shimano CN-HG901" />
@@ -538,15 +704,17 @@ function AddDialog({
  * retroactively and are best handled via "delete + re-add".
  */
 function EditDialog({
-  item, onClose, onSaved,
+  item, bikes, onClose, onSaved,
 }: {
   item: Equipment;
+  bikes: Bike[];
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
   const [name, setName]         = useState(item.name);
   const [lifetime, setLifetime] = useState(item.lifetime_km);
   const [notes, setNotes]       = useState(item.notes ?? '');
+  const [gearId, setGearId]     = useState<string>(item.gear_id ?? '');
   const [saving, setSaving]     = useState(false);
   const [error, setError]       = useState<string | null>(null);
 
@@ -562,6 +730,9 @@ function EditDialog({
           name:        name.trim(),
           lifetime_km: lifetime,
           notes:       notes.trim() || null,
+          // Send null explicitly when unbound so the server clears the
+          // binding (vs. undefined which is "don't touch").
+          gear_id:     gearId || null,
         }),
       });
       if (!r.ok && r.status !== 204) {
@@ -602,6 +773,19 @@ function EditDialog({
         <Field label="Nom">
           <input value={name} onChange={e => setName(e.target.value)} maxLength={80} style={INPUT} />
         </Field>
+
+        {bikes.length > 0 && (
+          <Field label="Vélo">
+            <select value={gearId} onChange={e => setGearId(e.target.value)} style={INPUT}>
+              {bikes.map(b => (
+                <option key={b.id} value={b.id}>
+                  {b.name}{b.primary_bike ? ' (principal)' : ''} · {b.totalKm.toFixed(0)} km
+                </option>
+              ))}
+              <option value="">Tous mes vélos (non-recommandé)</option>
+            </select>
+          </Field>
+        )}
 
         <Field label="Durée de vie estimée (km)">
           <input type="number" value={lifetime} min={100} max={50000} step={100}

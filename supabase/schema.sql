@@ -270,6 +270,41 @@ create index if not exists bike_equipment_user_idx
 grant all on table public.bike_equipment to postgres;
 grant all on table public.bike_equipment to service_role;
 
+-- ── Bike gears (= the user's bikes, as Strava knows them) ──────────────────
+-- Cached from Strava's /api/v3/athlete bikes[] on every sync. We need
+-- this to scope maintenance wear to a specific bike: if a user has a
+-- Canyon + an e-bike, the chain on the Canyon only wears with rides
+-- *on the Canyon* — summing both bikes' km gives a fake number.
+--
+-- Why text PK: Strava gear IDs are short strings (e.g. "b1234567"),
+-- not bigints, so we match their storage format directly.
+create table if not exists public.bike_gears (
+  id            text primary key,
+  user_id       uuid not null references next_auth.users(id) on delete cascade,
+  name          text not null,                       -- Strava nickname ("Rocket")
+  primary_bike  boolean not null default false,
+  created_at    timestamptz not null default now()
+);
+create index if not exists bike_gears_user_idx on public.bike_gears (user_id);
+grant all on table public.bike_gears to postgres;
+grant all on table public.bike_gears to service_role;
+
+-- Each activity is tagged with the Strava gear it was ridden on
+-- (nullable — manual / non-tagged activities have no gear).
+alter table if exists public.activities
+  add column if not exists gear_id text;
+create index if not exists activities_user_gear_idx
+  on public.activities (user_id, gear_id) where gear_id is not null;
+
+-- Each wear-item is bound to a specific bike. Null = legacy "any bike"
+-- behaviour (sums all cycling km). We deliberately don't add an FK to
+-- bike_gears because the user may install a piece before the gear sync
+-- runs — the route handler validates membership at write time.
+alter table if exists public.bike_equipment
+  add column if not exists gear_id text;
+create index if not exists bike_equipment_gear_idx
+  on public.bike_equipment (gear_id) where gear_id is not null;
+
 -- ── Helper RPC: find user by Strava athlete id (used by webhook) ────────────
 create or replace function public.user_by_athlete(p_athlete_id bigint)
 returns uuid

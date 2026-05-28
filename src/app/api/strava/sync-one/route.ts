@@ -198,6 +198,9 @@ export async function POST(req: NextRequest) {
     duration_min:  Math.round((a.moving_time ?? 0) / 60),
     distance_km:   +((a.distance ?? 0) / 1000).toFixed(2),
     elevation_m:   Math.round(a.total_elevation_gain ?? 0),
+    // Track which bike the ride was on — mirrors /api/strava/sync so
+    // the maintenance tracker can scope wear per bike.
+    gear_id:       (a.gear_id ?? null) as string | null,
     payload,
   };
 

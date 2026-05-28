@@ -218,6 +218,11 @@ export async function POST(req: NextRequest) {
         duration_min:  durationMin,
         distance_km:   distanceKm,
         elevation_m:   elevationM,
+        // Strava's gear_id tags which bike (or shoe) the activity used.
+        // Captured here so the maintenance tracker can scope wear to a
+        // specific bike (a chain on the Canyon shouldn't count e-bike
+        // km). May be null for manual / non-tagged activities.
+        gear_id:       (a.gear_id ?? null) as string | null,
         payload,
       };
     });
@@ -245,28 +250,116 @@ export async function POST(req: NextRequest) {
   const ids = rows.map(r => r.id);
   const { data: existingRows, error: existErr } = await supabaseAdmin()
     .from('activities')
-    .select('id')
+    .select('id, gear_id')
     .in('id', ids);
   if (existErr) {
     console.error('[strava-sync] existing-id query failed:', existErr.message);
     return NextResponse.json({ error: 'db_query_failed', detail: existErr.message }, { status: 500 });
   }
-  const existingIds = new Set((existingRows ?? []).map(r => Number(r.id)));
-  const newRows = rows.filter(r => !existingIds.has(Number(r.id)));
+  const existingById = new Map(
+    (existingRows ?? []).map(r => [Number(r.id), { gear_id: r.gear_id as string | null }]),
+  );
+  const newRows = rows.filter(r => !existingById.has(Number(r.id)));
 
-  if (newRows.length === 0) {
-    // Nothing actually new — the cron has already inserted everything
-    // we know about (with streams), so we deliberately do nothing.
-    return NextResponse.json({ ok: true, count: 0 });
+  if (newRows.length > 0) {
+    const { error: insertErr } = await supabaseAdmin()
+      .from('activities')
+      .insert(newRows);
+    if (insertErr) {
+      console.error('[strava-sync] insert failed:', insertErr.message);
+      return NextResponse.json({ error: 'db_insert_failed', detail: insertErr.message }, { status: 500 });
+    }
   }
 
-  const { error: insertErr } = await supabaseAdmin()
-    .from('activities')
-    .insert(newRows);
-  if (insertErr) {
-    console.error('[strava-sync] insert failed:', insertErr.message);
-    return NextResponse.json({ error: 'db_insert_failed', detail: insertErr.message }, { status: 500 });
+  // ── 6. Backfill gear_id on existing rows ───────────────────────────────
+  //
+  // Activities synced before we started capturing gear_id have a NULL
+  // value in that column. We re-fetched them from Strava in this same
+  // request (their summary is in `rows`), so we can patch the gear_id
+  // without touching the precious `payload` (which carries streams the
+  // cron filled in over time).
+  //
+  // Only update rows where:
+  //   (a) we have a fresh gear_id from Strava, AND
+  //   (b) the stored value differs (NULL or moved to a different bike).
+  const toBackfill = rows.filter(r => {
+    const existing = existingById.get(Number(r.id));
+    if (!existing) return false;                // already covered by insert
+    if (r.gear_id == null) return false;        // nothing to backfill
+    return existing.gear_id !== r.gear_id;
+  });
+  let backfilled = 0;
+  if (toBackfill.length > 0) {
+    // Batch parallel updates to keep round-trip count manageable.
+    const BATCH = 20;
+    for (let i = 0; i < toBackfill.length; i += BATCH) {
+      const slice = toBackfill.slice(i, i + BATCH);
+      const results = await Promise.all(
+        slice.map(r =>
+          supabaseAdmin()
+            .from('activities')
+            .update({ gear_id: r.gear_id })
+            .eq('id',      r.id)
+            .eq('user_id', userId),
+        ),
+      );
+      backfilled += results.filter(x => !x.error).length;
+      for (const x of results) {
+        if (x.error) console.warn('[strava-sync] gear_id backfill row failed:', x.error.message);
+      }
+    }
   }
 
-  return NextResponse.json({ ok: true, count: newRows.length });
+  // ── 7. Sync the user's bike list from /api/v3/athlete ──────────────────
+  //
+  // Strava exposes the user's bikes (and shoes) on the athlete profile.
+  // We only care about bikes — they're what the maintenance tracker
+  // binds to. Best-effort: a failure here doesn't fail the activity
+  // sync, since the user can still see their km without it.
+  const bikesUpserted = await syncBikes(userId, accessToken).catch(err => {
+    console.warn('[strava-sync] bike list sync failed:', (err as Error).message);
+    return 0;
+  });
+
+  return NextResponse.json({
+    ok:           true,
+    count:        newRows.length,
+    backfilled,
+    bikes:        bikesUpserted,
+  });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function syncBikes(userId: string, accessToken: string): Promise<number> {
+  const r = await fetch('https://www.strava.com/api/v3/athlete', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!r.ok) {
+    console.warn('[strava-sync.bikes] /athlete fetch failed:', r.status);
+    return 0;
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const athlete = await r.json() as { bikes?: Array<{ id: string; name: string; primary?: boolean }> };
+  const bikes = athlete.bikes ?? [];
+  if (bikes.length === 0) return 0;
+
+  // Upsert all bikes in one round-trip. We don't delete bikes that
+  // disappeared from Strava — the user may still have wear pieces tied
+  // to a retired bike and we want their history to stay readable.
+  const { error } = await supabaseAdmin()
+    .from('bike_gears')
+    .upsert(
+      bikes.map(b => ({
+        id:           b.id,
+        user_id:      userId,
+        name:         b.name,
+        primary_bike: Boolean(b.primary),
+      })),
+      { onConflict: 'id' },
+    );
+  if (error) {
+    console.warn('[strava-sync.bikes] upsert failed:', error.message);
+    return 0;
+  }
+  return bikes.length;
 }
