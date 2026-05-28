@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useSession, signIn } from 'next-auth/react';
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
@@ -528,6 +528,35 @@ export function FeedPage({ activities, stats, sport, onSelect }: Props) {
   const { t } = useT();
   const { data: session } = useSession();
 
+  // Bike filter — null means "all bikes". Only meaningful when the
+  // active sport is cycling AND the feed has activities tagged with
+  // at least two distinct bikes (otherwise there's nothing to choose
+  // between). Resets on every navigation since it's local state.
+  const [bikeFilter, setBikeFilter] = useState<string | null>(null);
+
+  // Distinct (gear_id, gear_name) pairs seen in the current activities
+  // list. We derive this from the data itself rather than calling
+  // /api/equipment a second time — the activities prop already
+  // carries gear_name (denormalized server-side).
+  const bikesSeen = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const a of activities) {
+      if (a.type === 'cycling' && a.gear_id && a.gear_name) {
+        map.set(a.gear_id, a.gear_name);
+      }
+    }
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [activities]);
+  const showBikeFilter = sport === 'cycling' && bikesSeen.length >= 2;
+
+  // Apply the bike filter to the feed. When null, return the input
+  // unchanged so the rest of the widgets (Last5Stats, Calendar, Goals,
+  // PersonalRecords, TrainingProgram) operate on the full dataset.
+  const filteredActivities = useMemo(() => {
+    if (!bikeFilter) return activities;
+    return activities.filter(a => a.gear_id === bikeFilter);
+  }, [activities, bikeFilter]);
+
   // Empty state — used when a user has just signed up but Strava isn't
   // linked yet (or the sync hasn't run). All the downstream widgets
   // (charts, calendar, records, training program) look broken on an
@@ -552,6 +581,17 @@ export function FeedPage({ activities, stats, sport, onSelect }: Props) {
         <em style={{ color: tokens.terra, fontStyle: 'italic', fontWeight: 700 }}>{t('feed.headlineEm')}</em>
       </h1>
 
+      {/* Bike filter — only visible for cycling users with ≥2 bikes.
+          Selecting a chip scopes every downstream widget (stats,
+          calendar, records, cards) to that bike only. */}
+      {showBikeFilter && (
+        <BikeFilterBar
+          bikes={bikesSeen}
+          selected={bikeFilter}
+          onSelect={setBikeFilter}
+        />
+      )}
+
       <div style={{
         display: 'flex',
         flexDirection: isMobile ? 'column' : 'row',
@@ -563,7 +603,7 @@ export function FeedPage({ activities, stats, sport, onSelect }: Props) {
             — which is driven by the taller right column (Calendar +
             Goals). Result: card grows downward to match Goals' bottom. */}
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-          <Last5Stats activities={activities} />
+          <Last5Stats activities={filteredActivities} />
         </div>
         {/* Right column inherits the parent's alignItems: stretch (no
             more alignSelf: flex-start), so it grows to match the
@@ -577,16 +617,101 @@ export function FeedPage({ activities, stats, sport, onSelect }: Props) {
           display: 'flex', flexDirection: 'column',
           justifyContent: isMobile ? 'flex-start' : 'space-between',
         }}>
-          <ActivityCalendar activities={activities} />
-          <Goals activities={activities} />
+          <ActivityCalendar activities={filteredActivities} />
+          <Goals activities={filteredActivities} />
         </div>
       </div>
-      <PersonalRecords activities={activities} sport={sport} />
-      {sport === 'running' && <RunPaceZones activities={activities} />}
+      <PersonalRecords activities={filteredActivities} sport={sport} />
+      {sport === 'running' && <RunPaceZones activities={filteredActivities} />}
       {/* Swapped down — TrainingProgram now lives where Last5Stats was. */}
-      <TrainingProgram activities={activities} />
+      <TrainingProgram activities={filteredActivities} />
 
-      {activities.map(a => <ActivityCard key={a.id} activity={a} onClick={onSelect} />)}
+      {/* If the bike filter is on but matches no activities, surface
+          a focused empty state with a one-click "Clear" — better than
+          a silent blank below the widgets. */}
+      {bikeFilter && filteredActivities.length === 0 ? (
+        <div style={{
+          marginTop: 24, padding: 28, textAlign: 'center',
+          background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
+          borderRadius: 4,
+        }}>
+          <div style={{ fontFamily: "'Playfair Display'", fontSize: 17, fontWeight: 700, color: tokens.ink, marginBottom: 6 }}>
+            Aucune sortie sur ce vélo
+          </div>
+          <p style={{ fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.inkMid, margin: '0 0 14px' }}>
+            Sur la période / le sport actuels, rien à afficher pour ce vélo.
+          </p>
+          <button
+            onClick={() => setBikeFilter(null)}
+            style={{
+              padding: '8px 14px', background: tokens.terra, color: '#fff',
+              border: 'none', borderRadius: 3,
+              fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 700,
+              letterSpacing: '0.04em', cursor: 'pointer',
+            }}
+          >
+            Voir tous les vélos
+          </button>
+        </div>
+      ) : (
+        filteredActivities.map(a => <ActivityCard key={a.id} activity={a} onClick={onSelect} />)
+      )}
     </div>
+  );
+}
+
+/**
+ * Bike filter chip row, surfaced only when ≥2 bikes are tagged in the
+ * current feed. Single-select: clicking the active chip un-selects
+ * (back to "Tous"). Lives between the headline and the stat widgets.
+ */
+function BikeFilterBar({
+  bikes, selected, onSelect,
+}: {
+  bikes: { id: string; name: string }[];
+  selected: string | null;
+  onSelect: (id: string | null) => void;
+}) {
+  const isMobile = useIsMobile();
+  return (
+    <div style={{
+      display: 'flex', flexWrap: 'wrap', gap: 8,
+      marginBottom: isMobile ? 16 : 24,
+      alignItems: 'center',
+    }}>
+      <Label style={{ marginRight: 4 }}>VÉLO</Label>
+      <Chip label="Tous"     active={selected === null} onClick={() => onSelect(null)} />
+      {bikes.map(b => (
+        <Chip
+          key={b.id}
+          label={b.name}
+          active={selected === b.id}
+          onClick={() => onSelect(selected === b.id ? null : b.id)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function Chip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        padding: '5px 12px',
+        background: active ? tokens.terra : tokens.surface,
+        border: `1px solid ${active ? tokens.terra : tokens.creamBorder}`,
+        borderRadius: 14,
+        color: active ? '#fff' : tokens.inkMid,
+        fontFamily: "'Space Grotesk'", fontSize: 11,
+        fontWeight: active ? 700 : 500,
+        letterSpacing: '0.04em',
+        cursor: 'pointer',
+        transition: 'background 0.12s, color 0.12s, border-color 0.12s',
+      }}
+    >
+      {label}
+    </button>
   );
 }
