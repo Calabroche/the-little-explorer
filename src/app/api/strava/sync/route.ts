@@ -310,13 +310,26 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ── 7. Sync the user's bike list from /api/v3/athlete ──────────────────
+  // ── 7. Sync the user's bike list from /api/v3/gear/{id} ────────────────
   //
-  // Strava exposes the user's bikes (and shoes) on the athlete profile.
-  // We only care about bikes — they're what the maintenance tracker
-  // binds to. Best-effort: a failure here doesn't fail the activity
-  // sync, since the user can still see their km without it.
-  const bikesUpserted = await syncBikes(userId, accessToken).catch(err => {
+  // We deliberately AVOID `/api/v3/athlete` here even though it exposes
+  // a `bikes[]` field — that field requires the `profile:read_all`
+  // scope to be populated, which our current OAuth scope doesn't
+  // include (and re-asking the user to re-authenticate to grant it is
+  // a worse UX than this alternative).
+  //
+  // Instead: collect the unique gear_ids we just observed in this
+  // user's activities, filter to bike-shaped ids (Strava prefixes bikes
+  // with "b" and shoes with "g"), and fetch each gear directly via
+  // /gear/{id} — that endpoint only needs `read` scope, which every
+  // user already has.
+  //
+  // Best-effort: a failure here doesn't fail the activity sync. The
+  // user can still see their km without per-bike scoping.
+  const observedGearIds = Array.from(new Set(
+    rows.map(r => r.gear_id).filter((id): id is string => id != null && id.startsWith('b')),
+  ));
+  const bikesUpserted = await syncBikes(userId, accessToken, observedGearIds).catch(err => {
     console.warn('[strava-sync] bike list sync failed:', (err as Error).message);
     return 0;
   });
@@ -329,31 +342,62 @@ export async function POST(req: NextRequest) {
   });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function syncBikes(userId: string, accessToken: string): Promise<number> {
-  const r = await fetch('https://www.strava.com/api/v3/athlete', {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (!r.ok) {
-    console.warn('[strava-sync.bikes] /athlete fetch failed:', r.status);
+interface StravaGear {
+  id:           string;
+  name?:        string;
+  nickname?:    string;     // some accounts surface the nickname under this key
+  primary?:     boolean;
+  brand_name?:  string;
+  model_name?:  string;
+  frame_type?:  number;
+}
+
+async function syncBikes(
+  userId: string,
+  accessToken: string,
+  gearIds: string[],
+): Promise<number> {
+  if (gearIds.length === 0) {
+    console.log('[strava-sync.bikes] no bike gear_ids observed, skipping');
     return 0;
   }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const athlete = await r.json() as { bikes?: Array<{ id: string; name: string; primary?: boolean }> };
-  const bikes = athlete.bikes ?? [];
-  if (bikes.length === 0) return 0;
 
-  // Upsert all bikes in one round-trip. We don't delete bikes that
-  // disappeared from Strava — the user may still have wear pieces tied
-  // to a retired bike and we want their history to stay readable.
+  // Fan-out one /gear/{id} per unique bike. 2 bikes → 2 calls; well
+  // under Strava's rate limit (100/15min).
+  const responses = await Promise.all(gearIds.map(async id => {
+    try {
+      const r = await fetch(`https://www.strava.com/api/v3/gear/${id}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!r.ok) {
+        const txt = await r.text();
+        console.warn(`[strava-sync.bikes] /gear/${id} fetch ${r.status}:`, txt.slice(0, 200));
+        return null;
+      }
+      return await r.json() as StravaGear;
+    } catch (err) {
+      console.warn(`[strava-sync.bikes] /gear/${id} threw:`, (err as Error).message);
+      return null;
+    }
+  }));
+
+  const bikes = responses.filter((g): g is StravaGear => g != null);
+  if (bikes.length === 0) {
+    console.warn('[strava-sync.bikes] all /gear fetches failed, nothing to upsert');
+    return 0;
+  }
+
+  // Strava exposes a nickname (the user-facing name from the Strava UI,
+  // e.g. "Rocket", "Elon musk") and a model name (e.g. "Endurace CF
+  // SLX"). Prefer the nickname — that's what the user typed.
   const { error } = await supabaseAdmin()
     .from('bike_gears')
     .upsert(
-      bikes.map(b => ({
-        id:           b.id,
+      bikes.map(g => ({
+        id:           g.id,
         user_id:      userId,
-        name:         b.name,
-        primary_bike: Boolean(b.primary),
+        name:         (g.nickname ?? g.name ?? g.brand_name ?? g.id).trim(),
+        primary_bike: Boolean(g.primary),
       })),
       { onConflict: 'id' },
     );
