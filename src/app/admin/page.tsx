@@ -108,9 +108,13 @@ export default function AdminPage() {
   useEffect(() => { refresh(); }, []);
 
   return (
+    // `body { overflow: hidden }` in globals.css clamps the page —
+    // give <main> its own scroll context or it can't reach the
+    // table rows below the fold.
     <main style={{
-      minHeight: '100vh',
-      padding:   '40px 24px',
+      height:     '100vh',
+      overflowY:  'auto',
+      padding:    '40px 24px',
       background: tokens.cream,
     }}>
       <div style={{ maxWidth: 1080, margin: '0 auto 16px', display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>

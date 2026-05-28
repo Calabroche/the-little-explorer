@@ -291,8 +291,13 @@ export default function SettingsPage() {
   };
 
   return (
-    <>
-    <main style={{ minHeight: '100vh', padding: '40px 24px', background: tokens.cream }}>
+    // `body { overflow: hidden }` in globals.css clamps everything,
+    // so the page needs its OWN scroll container. height:100vh +
+    // overflowY:auto here gives us a window-sized scrollable region
+    // that wraps both the form (which can grow tall: settings → export
+    // → security → danger zone) and the Strava attribution footer.
+    <div style={{ height: '100vh', overflowY: 'auto', background: tokens.cream }}>
+    <main style={{ padding: '40px 24px' }}>
       <div style={{ maxWidth: 560, margin: '0 auto 16px', display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
         <h1 style={{
           fontFamily: "'Playfair Display'", fontSize: 28, fontWeight: 800,
@@ -615,6 +620,6 @@ export default function SettingsPage() {
       </div>
     </main>
     <Footer />
-    </>
+    </div>
   );
 }

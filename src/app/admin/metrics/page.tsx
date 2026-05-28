@@ -58,9 +58,13 @@ export default function MetricsPage() {
   useEffect(() => { void load(); }, []);
 
   return (
+    // `body { overflow: hidden }` in globals.css clamps the page —
+    // give <main> its own scroll context or the metrics charts past
+    // the first viewport are unreachable.
     <main style={{
-      minHeight: '100vh',
-      padding:   '40px 24px',
+      height:     '100vh',
+      overflowY:  'auto',
+      padding:    '40px 24px',
       background: tokens.cream,
       fontFamily: "'Space Grotesk', sans-serif",
     }}>
