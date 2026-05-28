@@ -533,6 +533,10 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
 function ProfileSection() {
   const { data: session, status } = useSession();
   const [resyncState, setResyncState] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
+  // Collapsed by default — the sidebar's job is the nav, not the
+  // profile card. Click the header (name + chevron) to reveal the
+  // action stack (sync / settings / admin / logout).
+  const [expanded, setExpanded] = useState(false);
 
   // POST /api/strava/sync, then reload the page so /api/activities
   // re-fetches with the freshly inserted rows. We could do a softer
@@ -563,11 +567,32 @@ function ProfileSection() {
 
   return (
     <div style={{
-      margin: '12px 12px 0', padding: 12,
+      margin: '12px 12px 0',
       background: tokens.creamDark, borderRadius: 4,
       border: `1px solid ${tokens.creamBorder}`,
+      overflow: 'hidden',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+      {/* ── Always-visible header ──────────────────────────────────
+          Avatar + name (+ email when expanded) + chevron. The whole
+          strip is one button so the click target is generous. */}
+      <button
+        type="button"
+        onClick={() => setExpanded(v => !v)}
+        aria-expanded={expanded}
+        aria-label={expanded ? 'Réduire le profil' : 'Ouvrir le profil'}
+        style={{
+          width: '100%',
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: 12,
+          background: 'transparent',
+          border: 'none',
+          cursor: 'pointer',
+          textAlign: 'left',
+          transition: 'background 0.12s',
+        }}
+        onMouseEnter={e => (e.currentTarget.style.background = tokens.cream)}
+        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+      >
         {u.image ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={u.image} alt="" width={32} height={32} style={{ borderRadius: '50%', flexShrink: 0 }} />
@@ -581,17 +606,41 @@ function ProfileSection() {
         )}
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{
-            fontFamily: "'Space Grotesk'", fontSize: 12, fontWeight: 600,
+            fontFamily: "'Space Grotesk'", fontSize: 13, fontWeight: 600,
             color: tokens.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           }}>{displayName}</div>
-          {u.email && u.email !== displayName && (
+          {/* Email is hidden by default. Pops in below the name when
+              the panel expands, so the collapsed pill stays compact. */}
+          {expanded && u.email && u.email !== displayName && (
             <div style={{
               fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight,
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              marginTop: 2,
             }}>{u.email}</div>
           )}
         </div>
-      </div>
+        <span
+          aria-hidden
+          style={{
+            fontSize: 11, color: tokens.inkLight, flexShrink: 0,
+            transition: 'transform 0.18s ease',
+            transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+          }}
+        >▾</span>
+      </button>
+
+      {/* ── Collapsible action stack ────────────────────────────────
+          Smooth max-height + opacity transition so the panel slides
+          open instead of popping. 320px is a generous ceiling that
+          covers all four buttons even when the Strava-disconnected
+          case adds the "+ CONNECTER STRAVA" CTA. */}
+      <div style={{
+        maxHeight: expanded ? 320 : 0,
+        opacity:   expanded ? 1 : 0,
+        overflow:  'hidden',
+        transition: 'max-height 0.22s ease, opacity 0.18s ease',
+      }}>
+      <div style={{ padding: '0 12px 12px' }}>
 
       {!stravaLinked && (
         <button
@@ -698,6 +747,9 @@ function ProfileSection() {
       >
         SE DÉCONNECTER
       </button>
+
+      </div>{/* inner padding wrapper */}
+      </div>{/* max-height / opacity collapsible wrapper */}
     </div>
   );
 }
