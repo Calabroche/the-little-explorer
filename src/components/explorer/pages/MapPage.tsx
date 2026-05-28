@@ -1,5 +1,25 @@
 'use client';
 
+/**
+ * Heatmap — every GPS track stacked on one map, low-opacity polylines
+ * so overlapping rides accumulate visually into a density "heatmap"
+ * (a street ridden once is faint, a street ridden 20 times is solid).
+ *
+ * Why polylines + low opacity instead of a `leaflet.heat`-style point
+ * heatmap: our data is already polyline-shaped (consecutive GPS
+ * samples), and stacked semi-transparent strokes give a much more
+ * legible "where the route goes" than a blurred dot cloud. Same trick
+ * Strava uses for its global heatmap.
+ *
+ * Filters: sport (independent from the global sidebar pick so the user
+ * can browse all sports' routes from the cycling view), year, and bike
+ * (when sport=cycling and ≥2 bikes are present). All three stack.
+ *
+ * The old "single activity inspector" branch of this page (when a
+ * caller passed a `selectedActivity` prop) is gone — no UI exposes it
+ * and the ActivityCard's own embedded map handles the per-ride detail.
+ */
+
 import { useEffect, useMemo, useState, CSSProperties } from 'react';
 import dynamic from 'next/dynamic';
 import { tokens, Activity } from '../tokens';
@@ -10,20 +30,15 @@ import { useBasemap, BasemapToggle } from '../MapBasemap';
 
 const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapContainer), { ssr: false });
 const Polyline     = dynamic(() => import('react-leaflet').then(mod => mod.Polyline),     { ssr: false });
-const CircleMarker = dynamic(() => import('react-leaflet').then(mod => mod.CircleMarker), { ssr: false });
-const Popup        = dynamic(() => import('react-leaflet').then(mod => mod.Popup),        { ssr: false });
 const BasemapTiles = dynamic(() => import('../MapBasemap').then(m => m.BasemapTiles), { ssr: false });
-// Local helper: pans/zooms the map whenever the centroid changes.
-// Uses useMap() so it must be mounted inside MapContainer; lazy-loaded
-// because react-leaflet pokes at `window` at import time.
+// Lazy-loaded because react-leaflet pokes at `window` at import time.
 const RecenterCamera = dynamic(() => import('../MapCamera').then(m => m.RecenterCamera), { ssr: false });
 
 interface Props {
   activities: Activity[];
-  // Kept for backward-compat with the existing call site; when set, the
-  // single-activity inspector still works (e.g. tap a polyline → popup
-  // → "view full detail"). All-routes view is the default behaviour
-  // now to match iOS commit 3d0924a.
+  // Kept in the prop bag for API stability with ExplorerApp's router,
+  // but the page no longer reads it — the heatmap is always
+  // multi-activity.
   selectedActivity: Activity | null;
 }
 
@@ -45,7 +60,9 @@ const SPORT_ORDER: SportId[] = ['cycling', 'running', 'hiking', 'ski', 'snowshoe
 // drop the camera into a black ocean. Matches iOS.
 const DARDILLY: [number, number] = [45.81, 4.75];
 
-export function MapPage({ activities, selectedActivity }: Props) {
+const ALL_YEARS = 'all';
+
+export function MapPage({ activities }: Props) {
   const { t } = useT();
   const [basemap, setBasemap] = useBasemap();
   const darkMode = typeof document !== 'undefined' && document.documentElement.hasAttribute('data-dark');
@@ -53,26 +70,55 @@ export function MapPage({ activities, selectedActivity }: Props) {
   // Only activities with GPS data are eligible for the map.
   const withGps = useMemo(() => activities.filter(a => a.gps && a.gps.length > 1), [activities]);
 
-  // Sports actually present in the GPS data → drives the chip filter.
+  // Sports actually present in the GPS data → drives the sport chip filter.
   const availableSports = useMemo(() => {
     const present = new Set(withGps.map(a => a.type as SportId));
     return SPORT_ORDER.filter(s => present.has(s));
   }, [withGps]);
 
-  // Independent sport filter (not bound to the global sidebar toggle —
-  // the user can be on cycling globally but inspect their hiking
-  // routes on the map and back).
   const [sport, setSport] = useState<SportId>('cycling');
   useEffect(() => {
     if (availableSports.length === 0) return;
     if (!availableSports.includes(sport)) setSport(availableSports[0]);
   }, [availableSports, sport]);
 
-  const filtered = useMemo(() => withGps.filter(a => a.type === sport), [withGps, sport]);
+  // Years actually present in the GPS data — drives the year picker.
+  // We always keep "Toutes les années" as the implicit default.
+  const availableYears = useMemo(() => {
+    const years = new Set<number>();
+    for (const a of withGps) {
+      const d = a.rawDate ?? '';
+      const y = parseInt(d.slice(0, 4), 10);
+      if (Number.isFinite(y)) years.add(y);
+    }
+    return Array.from(years).sort((a, b) => b - a);   // most recent first
+  }, [withGps]);
+  const [year, setYear] = useState<string>(ALL_YEARS);
 
-  // Centroid of the START point of each filtered ride — "where you
-  // usually leave from" for that sport — with a span that scales with
-  // how spread the departures are (with a sensible floor).
+  // Bike filter — only meaningful for cycling. Derived from the sport-
+  // filtered subset so we don't surface bikes the user has never
+  // ridden under the current sport.
+  const bikesSeen = useMemo(() => {
+    if (sport !== 'cycling') return [];
+    const map = new Map<string, string>();
+    for (const a of withGps) {
+      if (a.type === 'cycling' && a.gear_id && a.gear_name) map.set(a.gear_id, a.gear_name);
+    }
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [withGps, sport]);
+  const [bikeFilter, setBikeFilter] = useState<string | null>(null);
+  // Reset bike filter whenever the sport switches away from cycling.
+  useEffect(() => { if (sport !== 'cycling') setBikeFilter(null); }, [sport]);
+
+  const filtered = useMemo(() => withGps.filter(a => {
+    if (a.type !== sport) return false;
+    if (year !== ALL_YEARS && !(a.rawDate ?? '').startsWith(year)) return false;
+    if (bikeFilter && a.gear_id !== bikeFilter) return false;
+    return true;
+  }), [withGps, sport, year, bikeFilter]);
+
+  // Camera: centroid of the start points + a span that scales with
+  // how spread the departures are (sensible floor to keep zoom usable).
   const centroid = useMemo<{ center: [number, number]; spanDeg: number }>(() => {
     const starts = filtered
       .map(a => a.gps[0])
@@ -86,53 +132,45 @@ export function MapPage({ activities, selectedActivity }: Props) {
     return { center: [cLat, cLng], spanDeg: Math.max(0.08, spread * 1.5) };
   }, [filtered]);
 
-  // ── Single-activity mode (legacy backward-compat) ───────────────────
-  if (selectedActivity) {
-    return (
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <Header title={selectedActivity.title} />
-        <div style={{ flex: 1, position: 'relative' }}>
-          <MapContainer center={[selectedActivity.gps[0].lat, selectedActivity.gps[0].lng]} zoom={13} style={{ height: '100%', width: '100%' }} maxZoom={18}>
-            <BasemapTiles basemap={basemap} darkMode={darkMode} />
-            <Polyline
-              positions={selectedActivity.gps.map(p => [p.lat, p.lng])}
-              pathOptions={{ color: SPORT_COLOR[selectedActivity.type as SportId] ?? tokens.terra, weight: 4 }}
-            />
-          </MapContainer>
-          <BasemapToggle basemap={basemap} onChange={setBasemap} />
-        </div>
-      </div>
-    );
-  }
+  // Density stats — surfaced in the legend so the user knows what the
+  // map represents quantitatively (rides shown, total km, total hours).
+  const stats = useMemo(() => {
+    const km    = Math.round(filtered.reduce((s, a) => s + (a.distance ?? 0), 0));
+    const mins  = filtered.reduce((s, a) => s + (a.duration_min ?? 0), 0);
+    const hours = Math.round(mins / 60);
+    return { count: filtered.length, km, hours };
+  }, [filtered]);
 
-  // ── All-routes-by-sport (default) ───────────────────────────────────
+  const color = SPORT_COLOR[sport] ?? tokens.terra;
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <Header title={null} />
+      <Header />
       <div style={{ flex: 1, position: 'relative' }}>
-        <MapContainer center={centroid.center} zoom={11} style={{ height: '100%', width: '100%' }} maxZoom={18}>
+        <MapContainer
+          center={centroid.center}
+          zoom={11}
+          style={{ height: '100%', width: '100%' }}
+          maxZoom={18}
+        >
           <BasemapTiles basemap={basemap} darkMode={darkMode} />
+          {/* Heatmap rendering: low-opacity stacked polylines. Overlap
+              accumulates visually so the streets the user rides often
+              go nearly opaque. Thin weight keeps everything legible
+              even when 100s of tracks pile up. */}
           {filtered.map((a, i) => (
             <Polyline
               key={a.id ?? i}
               positions={a.gps.map(p => [p.lat, p.lng])}
-              pathOptions={{ color: SPORT_COLOR[a.type as SportId] ?? tokens.terra, weight: 2.5, opacity: 0.55 }}
+              pathOptions={{ color, weight: 1.8, opacity: 0.12 }}
+              interactive={false}     // no per-track click — perf + clarity
             />
-          ))}
-          {filtered.map((a, i) => a.gps[0] && (
-            <CircleMarker key={`start-${a.id ?? i}`} center={[a.gps[0].lat, a.gps[0].lng]} radius={3}
-              pathOptions={{ fillColor: SPORT_COLOR[a.type as SportId] ?? tokens.terra, color: '#fff', weight: 1, fillOpacity: 0.9 }}
-            >
-              <Popup>
-                <span style={{ fontFamily: "'Space Grotesk'", fontSize: 12 }}>{a.title}</span>
-              </Popup>
-            </CircleMarker>
           ))}
           <RecenterCamera center={centroid.center} spanDeg={centroid.spanDeg} />
         </MapContainer>
         <BasemapToggle basemap={basemap} onChange={setBasemap} />
 
-        {/* Sport picker — top-left, scrollable when many sports present */}
+        {/* Sport picker — top-left */}
         {availableSports.length > 1 && (
           <div style={pickerStyle}>
             {availableSports.map(s => {
@@ -153,28 +191,107 @@ export function MapPage({ activities, selectedActivity }: Props) {
           </div>
         )}
 
-        {/* Legend — selected sport + ride count */}
+        {/* Density / stats legend — top-right.
+            Wraps the dynamic year + bike filters underneath so all the
+            "what am I looking at" controls live in one place. */}
         <div style={legendStyle}>
-          <Label style={{ display: 'block', marginBottom: 6 }}>LÉGENDE</Label>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 20, height: 2.5, background: SPORT_COLOR[sport], borderRadius: 2 }} />
-            <span style={{ fontFamily: "'Space Grotesk'", fontSize: 12, flex: 1 }}>{t(`type.${sport}`)}</span>
-            <span style={{ fontFamily: "'Playfair Display'", fontSize: 14, fontWeight: 700 }}>{filtered.length}</span>
+          <Label style={{ display: 'block', marginBottom: 6 }}>HEATMAP</Label>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 10 }}>
+            <div style={{ width: 20, height: 2.5, background: color, borderRadius: 2, alignSelf: 'center' }} />
+            <span style={{
+              fontFamily: "'Playfair Display'", fontSize: 20, fontWeight: 800, color: tokens.ink,
+            }}>{stats.count}</span>
+            <span style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkMid }}>
+              sortie{stats.count > 1 ? 's' : ''}
+            </span>
           </div>
+          <div style={{
+            display: 'flex', gap: 12, fontFamily: "'Space Grotesk'", fontSize: 11,
+            color: tokens.inkLight, marginBottom: 12,
+          }}>
+            <span><strong style={{ color: tokens.ink }}>{stats.km}</strong> km</span>
+            <span><strong style={{ color: tokens.ink }}>{stats.hours}</strong> h</span>
+          </div>
+
+          {/* Year picker (compact dropdown). Empty / single-year users
+              don't see it. */}
+          {availableYears.length > 1 && (
+            <div style={{ marginBottom: bikesSeen.length >= 2 ? 10 : 0 }}>
+              <Label style={{ display: 'block', marginBottom: 4 }}>ANNÉE</Label>
+              <select
+                value={year}
+                onChange={e => setYear(e.target.value)}
+                style={selectStyle}
+              >
+                <option value={ALL_YEARS}>Toutes</option>
+                {availableYears.map(y => (
+                  <option key={y} value={String(y)}>{y}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Bike picker — cycling-only, ≥2 bikes only. */}
+          {sport === 'cycling' && bikesSeen.length >= 2 && (
+            <div>
+              <Label style={{ display: 'block', marginBottom: 4 }}>VÉLO</Label>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                <BikeChip label="Tous" active={bikeFilter === null} onClick={() => setBikeFilter(null)} />
+                {bikesSeen.map(b => (
+                  <BikeChip
+                    key={b.id}
+                    label={b.name}
+                    active={bikeFilter === b.id}
+                    onClick={() => setBikeFilter(bikeFilter === b.id ? null : b.id)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function Header({ title }: { title: string | null }) {
+function Header() {
   return (
     <div style={{ padding: '32px 40px 24px', borderBottom: `1px solid ${tokens.creamBorder}`, background: tokens.surface }}>
-      <SectionTag num={2} title="CARTE DES PARCOURS" />
-      <h1 style={{ fontFamily: "'Playfair Display'", fontSize: 36, fontWeight: 900, color: tokens.ink }}>
-        {title ?? <>Mes <em style={{ color: tokens.green, fontStyle: 'italic' }}>territoires</em></>}
+      <SectionTag num={2} title="HEATMAP DES PARCOURS" />
+      <h1 style={{ fontFamily: "'Playfair Display'", fontSize: 36, fontWeight: 900, color: tokens.ink, margin: 0 }}>
+        Mes <em style={{ color: tokens.green, fontStyle: 'italic' }}>territoires</em>
       </h1>
+      <p style={{
+        fontFamily: "'Space Grotesk'", fontSize: 13, color: tokens.inkMid,
+        marginTop: 8, maxWidth: 640, lineHeight: 1.55,
+      }}>
+        Tes sorties empilées sur une seule carte. Plus une rue est foncée, plus tu l&apos;as
+        parcourue. Filtre par sport, année ou vélo pour isoler une période ou un usage.
+      </p>
     </div>
+  );
+}
+
+function BikeChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        padding: '4px 9px',
+        background: active ? tokens.terra : tokens.creamDark,
+        border: 'none',
+        borderRadius: 12,
+        color: active ? '#fff' : tokens.inkMid,
+        fontFamily: "'Space Grotesk'", fontSize: 10,
+        fontWeight: active ? 700 : 500,
+        letterSpacing: '0.04em',
+        cursor: 'pointer',
+        transition: 'background 0.12s, color 0.12s',
+      }}
+    >
+      {label}
+    </button>
   );
 }
 
@@ -189,5 +306,14 @@ const pickerStyle: CSSProperties = {
 const legendStyle: CSSProperties = {
   position: 'absolute', top: 16, right: 16, zIndex: 1000,
   background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
-  borderRadius: 4, padding: 14, minWidth: 180,
+  borderRadius: 4, padding: 14, minWidth: 200,
+  boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+};
+
+const selectStyle: CSSProperties = {
+  width: '100%', padding: '6px 8px',
+  background: tokens.creamDark, border: `1px solid ${tokens.creamBorder}`,
+  borderRadius: 3,
+  fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.ink,
+  cursor: 'pointer',
 };

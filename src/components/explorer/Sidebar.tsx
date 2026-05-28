@@ -28,6 +28,10 @@ export type UserId  = 'florian' | 'helena';
 const ALL_SPORTS: SportId[] = ['cycling', 'running', 'hiking', 'ski', 'snowshoe', 'walking', 'swim'];
 const ALL_NAV_ITEMS: { id: PageId; icon: string; label: string; sports: SportId[] }[] = [
   { id: 'feed',      icon: '◎', label: 'Activités',     sports: ALL_SPORTS },
+  // Heatmap = density-style aggregation of every GPS track on one
+  // map. Sits next to Activités because they're two views of the
+  // same data (list vs. spatial).
+  { id: 'map',       icon: '▩', label: 'Heatmap',       sports: ALL_SPORTS },
   // 'itinerary' is no longer a top-level destination — it lives as a
   // tab inside Planner. Kept as a PageId for backward-compat URLs
   // (/itineraire still works and lands on the itinerary tab).
