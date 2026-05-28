@@ -15,6 +15,16 @@ export type UserId  = 'florian' | 'helena';
 // Pages available for each sport. Only Planner / FTP are cycling-specific
 // (they rely on power computations); everything else makes sense for any
 // outdoor activity.
+//
+// Order matters — this is the literal sidebar order. Bilan sits LAST
+// because it's the "review" view (look back at what you've done) —
+// the natural reading order is Activities → Plan → Compare → Train →
+// Maintain → Review.
+//
+// `training-load` is gone from this list (lives as the second tab of
+// 'ftp' now) but stays in PageId for backward-compat with bookmarked
+// ?page=training-load URLs — ExplorerApp routes both ids to the same
+// combined PerformancePage with the right tab pre-selected.
 const ALL_SPORTS: SportId[] = ['cycling', 'running', 'hiking', 'ski', 'snowshoe', 'walking', 'swim'];
 const ALL_NAV_ITEMS: { id: PageId; icon: string; label: string; sports: SportId[] }[] = [
   { id: 'feed',      icon: '◎', label: 'Activités',     sports: ALL_SPORTS },
@@ -22,11 +32,10 @@ const ALL_NAV_ITEMS: { id: PageId; icon: string; label: string; sports: SportId[
   // tab inside Planner. Kept as a PageId for backward-compat URLs
   // (/itineraire still works and lands on the itinerary tab).
   { id: 'planner',   icon: '✦', label: 'Planificateur', sports: ['cycling'] },
-  { id: 'compare', icon: '⇄', label: 'Comparer',      sports: ALL_SPORTS },
-  { id: 'wrapped', icon: '✺', label: 'Bilan',         sports: ALL_SPORTS },
-  { id: 'ftp',     icon: '⚡', label: 'FTP',           sports: ['cycling'] },
-  { id: 'training-load', icon: '◐', label: 'Charge',  sports: ['cycling'] },
-  { id: 'equipment', icon: '⚙', label: 'Matériel', sports: ['cycling'] },
+  { id: 'compare',   icon: '⇄', label: 'Comparer',      sports: ALL_SPORTS },
+  { id: 'ftp',       icon: '⚡', label: 'FTP & Charge',  sports: ['cycling'] },
+  { id: 'equipment', icon: '⚙', label: 'Matériel',      sports: ['cycling'] },
+  { id: 'wrapped',   icon: '✺', label: 'Bilan',         sports: ALL_SPORTS },
 ];
 
 interface Props {

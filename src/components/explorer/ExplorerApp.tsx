@@ -10,9 +10,8 @@ import { FeedPage } from './pages/FeedPage';
 import { MapPage } from './pages/MapPage';
 import { PhotosPage } from './pages/PhotosPage';
 import { PlannerPage } from './pages/PlannerPage';
-import { FtpPage } from './pages/FtpPage';
-import { TrainingLoadPage } from './pages/TrainingLoadPage';
-import { EquipmentPage }    from './pages/EquipmentPage';
+import { PerformancePage } from './pages/PerformancePage';
+import { EquipmentPage }   from './pages/EquipmentPage';
 import { ComparePage } from './pages/ComparePage';
 import { WrappedPage } from './pages/WrappedPage';
 import { AnalysisPage } from './AnalysisPage';
@@ -341,8 +340,11 @@ export function ExplorerApp() {
       case 'compare':   return <ComparePage activities={filteredActivities} />;
       case 'map':       return <MapPage     activities={activities} selectedActivity={selectedActivityForMap} />;
       case 'wrapped':   return <WrappedPage activities={filteredActivities} sport={sport} />;
-      case 'ftp':       return <FtpPage     activities={filteredActivities} />;
-      case 'training-load': return <TrainingLoadPage activities={filteredActivities} />;
+      // 'ftp' + 'training-load' both land on PerformancePage now —
+      // the latter just preselects the Charge tab so legacy bookmarks
+      // still work.
+      case 'ftp':           return <PerformancePage activities={filteredActivities} initialTab="ftp" />;
+      case 'training-load': return <PerformancePage activities={filteredActivities} initialTab="charge" />;
       case 'equipment': return <EquipmentPage />;
       case 'photos':    return <PhotosPage  activities={filteredActivities} />;
     }

@@ -41,6 +41,9 @@ export const dict = {
     },
 
     // ── Sidebar ──────────────────────────────────────────────────────────────
+    // `ftp` now covers both FTP and Charge (merged into a tabbed page).
+    // `trainingLoad` is unused in the sidebar but kept here in case
+    // any other UI surface references it.
     nav: {
       activities:   'Activités',
       planner:      'Planificateur',
@@ -48,7 +51,7 @@ export const dict = {
       compare:      'Comparer',
       map:          'Carte',
       wrapped:      'Bilan',
-      ftp:          'FTP',
+      ftp:          'FTP & Charge',
       trainingLoad: 'Charge',
       equipment:    'Matériel',
       photos:       'Photos',
@@ -614,7 +617,7 @@ export const dict = {
       compare:      'Compare',
       map:          'Map',
       wrapped:      'Recap',
-      ftp:          'FTP',
+      ftp:          'FTP & Load',
       trainingLoad: 'Load',
       equipment:    'Equipment',
       photos:       'Photos',
