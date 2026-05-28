@@ -71,37 +71,43 @@ interface Equipment {
  *  The `category` field drives the grouped layout in the page —
  *  cards with the same category are rendered under a shared header.
  */
+// Defaults calibrated against real-world cycling wear data sources
+// (Shimano service intervals, Bicycle Quarterly, road.cc / CyclingTips
+// teardown reports). Per-kind reasoning is in the inline comments —
+// when in doubt, we err on the *lower* side for safety-critical
+// components (chain, brake pads) so the user gets a warning *before*
+// damage cascades to dependent parts (a worn chain destroys cassettes).
 const KIND_META: Record<EquipmentKind, { category: EquipmentCategory; icon: string; label: string; defaultLifetime: number }> = {
   // ─ Cadre ─────────────────────────────────────────────────────────
-  frame:              { category: 'cadre',        icon: '□', label: 'Cadre',                   defaultLifetime: 80000 },
-  fork:               { category: 'cadre',        icon: 'Y', label: 'Fourche',                 defaultLifetime: 60000 },
+  frame:              { category: 'cadre',        icon: '□', label: 'Cadre',                   defaultLifetime: 80000 },  // carbone, ne s'use pas vraiment
+  fork:               { category: 'cadre',        icon: 'Y', label: 'Fourche',                 defaultLifetime: 60000 },  // idem, un peu plus stressée
   // ─ Transmission ──────────────────────────────────────────────────
-  chain:              { category: 'transmission', icon: '⚙', label: 'Chaîne',                  defaultLifetime: 3000 },
-  cassette:           { category: 'transmission', icon: '◐', label: 'Cassette',                defaultLifetime: 10000 },
-  crankset:           { category: 'transmission', icon: '⊕', label: 'Pédalier',                defaultLifetime: 35000 },
-  bottom_bracket:     { category: 'transmission', icon: '◎', label: 'Boîtier de pédalier',     defaultLifetime: 15000 },
-  derailleur_rear:    { category: 'transmission', icon: '⊂', label: 'Dérailleur arrière',      defaultLifetime: 40000 },
-  derailleur_front:   { category: 'transmission', icon: '⊃', label: 'Dérailleur avant',        defaultLifetime: 40000 },
-  battery_di2:        { category: 'transmission', icon: '⚡', label: 'Batterie Di2',            defaultLifetime: 25000 },
+  chain:              { category: 'transmission', icon: '⚙', label: 'Chaîne',                  defaultLifetime: 3000 },   // 2000-4000 km, pièce la plus critique
+  cassette:           { category: 'transmission', icon: '◐', label: 'Cassette',                defaultLifetime: 10000 },  // 8000-12000, ≈ 2-3 chaînes
+  crankset:           { category: 'transmission', icon: '⊕', label: 'Pédalier',                defaultLifetime: 25000 },  // 20000-30000, ≈ 3-4 cassettes
+  bottom_bracket:     { category: 'transmission', icon: '◎', label: 'Boîtier de pédalier',     defaultLifetime: 15000 },  // Pressfit 10-20k
+  derailleur_rear:    { category: 'transmission', icon: '⊂', label: 'Dérailleur arrière',      defaultLifetime: 20000 },  // galets à 15-25k (le derailleur lui-même dure +)
+  derailleur_front:   { category: 'transmission', icon: '⊃', label: 'Dérailleur avant',        defaultLifetime: 20000 },  // idem pour cohérence
+  battery_di2:        { category: 'transmission', icon: '⚡', label: 'Batterie Di2',            defaultLifetime: 25000 },  // capacité baisse après plusieurs années
   // ─ Freins ────────────────────────────────────────────────────────
-  brake_mount:        { category: 'freins',       icon: '⌒', label: 'Adaptateur frein',        defaultLifetime: 100000 },
-  brake_lever_front:  { category: 'freins',       icon: '↿', label: 'Levier frein avant',      defaultLifetime: 45000 },
-  brake_lever_rear:   { category: 'freins',       icon: '↾', label: 'Levier frein arrière',    defaultLifetime: 45000 },
-  brake_pads_front:   { category: 'freins',       icon: '◉', label: 'Plaquettes avant',        defaultLifetime: 2500 },
-  brake_pads_rear:    { category: 'freins',       icon: '◉', label: 'Plaquettes arrière',      defaultLifetime: 2500 },
-  brake_rotor_front:  { category: 'freins',       icon: '◷', label: 'Disque avant',            defaultLifetime: 15000 },
-  brake_rotor_rear:   { category: 'freins',       icon: '◷', label: 'Disque arrière',          defaultLifetime: 15000 },
+  brake_mount:        { category: 'freins',       icon: '⌒', label: 'Adaptateur frein',        defaultLifetime: 100000 }, // métal, monitoring seulement
+  brake_lever_front:  { category: 'freins',       icon: '↿', label: 'Levier frein avant',      defaultLifetime: 45000 },  // quasi-illimité hors casse
+  brake_lever_rear:   { category: 'freins',       icon: '↾', label: 'Levier frein arrière',    defaultLifetime: 45000 },  // idem
+  brake_pads_front:   { category: 'freins',       icon: '◉', label: 'Plaquettes avant',        defaultLifetime: 2500 },   // 1500-4000, safety-critical (alerte tôt)
+  brake_pads_rear:    { category: 'freins',       icon: '◉', label: 'Plaquettes arrière',      defaultLifetime: 2500 },   // idem
+  brake_rotor_front:  { category: 'freins',       icon: '◷', label: 'Disque avant',            defaultLifetime: 20000 },  // 10000-30000, change when < 1.5mm
+  brake_rotor_rear:   { category: 'freins',       icon: '◷', label: 'Disque arrière',          defaultLifetime: 20000 },  // idem
   // ─ Roues ─────────────────────────────────────────────────────────
-  wheel_front:        { category: 'roues',        icon: '○', label: 'Roue avant',              defaultLifetime: 40000 },
-  wheel_rear:         { category: 'roues',        icon: '○', label: 'Roue arrière',            defaultLifetime: 30000 },
-  tire_front:         { category: 'roues',        icon: '◯', label: 'Pneu avant',              defaultLifetime: 6000 },
-  tire_rear:          { category: 'roues',        icon: '◯', label: 'Pneu arrière',            defaultLifetime: 4000 },
-  thru_axle_front:    { category: 'roues',        icon: '|', label: 'Axe traversant avant',    defaultLifetime: 100000 },
-  thru_axle_rear:     { category: 'roues',        icon: '|', label: 'Axe traversant arrière',  defaultLifetime: 100000 },
+  wheel_front:        { category: 'roues',        icon: '○', label: 'Roue avant',              defaultLifetime: 40000 },  // carbone, 30-60k
+  wheel_rear:         { category: 'roues',        icon: '○', label: 'Roue arrière',            defaultLifetime: 30000 },  // use plus vite (motrice)
+  tire_front:         { category: 'roues',        icon: '◯', label: 'Pneu avant',              defaultLifetime: 5500 },   // 3000-6000, use moins vite que l'arrière
+  tire_rear:          { category: 'roues',        icon: '◯', label: 'Pneu arrière',            defaultLifetime: 3500 },   // motrice + porte + freine
+  thru_axle_front:    { category: 'roues',        icon: '|', label: 'Axe traversant avant',    defaultLifetime: 100000 }, // métal, monitoring
+  thru_axle_rear:     { category: 'roues',        icon: '|', label: 'Axe traversant arrière',  defaultLifetime: 100000 }, // idem
   // ─ Autre ─────────────────────────────────────────────────────────
-  cables:             { category: 'autre',        icon: '⊥', label: 'Câbles + gaines',         defaultLifetime: 5000 },
-  bar_tape:           { category: 'autre',        icon: '⌒', label: 'Guidoline',               defaultLifetime: 3000 },
-  pedals:             { category: 'autre',        icon: '⌖', label: 'Pédales',                 defaultLifetime: 20000 },
+  cables:             { category: 'autre',        icon: '⊥', label: 'Câbles + gaines',         defaultLifetime: 5000 },   // sans objet en Di2
+  bar_tape:           { category: 'autre',        icon: '⌒', label: 'Guidoline',               defaultLifetime: 4000 },   // 1-2x/an confort
+  pedals:             { category: 'autre',        icon: '⌖', label: 'Pédales',                 defaultLifetime: 20000 },  // long-lasting
   other:              { category: 'autre',        icon: '+', label: 'Autre',                    defaultLifetime: 5000 },
 };
 
