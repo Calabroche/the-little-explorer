@@ -24,14 +24,28 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 type EquipmentKind =
-  | 'chain' | 'brake_pads_front' | 'brake_pads_rear'
-  | 'tire_front' | 'tire_rear' | 'cassette' | 'cables'
-  | 'bar_tape' | 'bottom_bracket' | 'pedals' | 'other';
+  | 'frame' | 'fork'
+  | 'chain' | 'cassette' | 'crankset' | 'bottom_bracket'
+  | 'derailleur_front' | 'derailleur_rear' | 'battery_di2'
+  | 'brake_lever_front' | 'brake_lever_rear'
+  | 'brake_pads_front' | 'brake_pads_rear'
+  | 'brake_rotor_front' | 'brake_rotor_rear' | 'brake_mount'
+  | 'wheel_front' | 'wheel_rear'
+  | 'tire_front' | 'tire_rear'
+  | 'thru_axle_front' | 'thru_axle_rear'
+  | 'cables' | 'bar_tape' | 'pedals' | 'other';
 
 const ALLOWED_KINDS: ReadonlySet<EquipmentKind> = new Set<EquipmentKind>([
-  'chain', 'brake_pads_front', 'brake_pads_rear', 'tire_front',
-  'tire_rear', 'cassette', 'cables', 'bar_tape', 'bottom_bracket',
-  'pedals', 'other',
+  'frame', 'fork',
+  'chain', 'cassette', 'crankset', 'bottom_bracket',
+  'derailleur_front', 'derailleur_rear', 'battery_di2',
+  'brake_lever_front', 'brake_lever_rear',
+  'brake_pads_front', 'brake_pads_rear',
+  'brake_rotor_front', 'brake_rotor_rear', 'brake_mount',
+  'wheel_front', 'wheel_rear',
+  'tire_front', 'tire_rear',
+  'thru_axle_front', 'thru_axle_rear',
+  'cables', 'bar_tape', 'pedals', 'other',
 ]);
 
 interface EquipmentRow {

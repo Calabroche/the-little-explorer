@@ -24,9 +24,29 @@ import { tokens } from '../tokens';
 import { Label, useIsMobile } from '../ui';
 
 type EquipmentKind =
-  | 'chain' | 'brake_pads_front' | 'brake_pads_rear'
-  | 'tire_front' | 'tire_rear' | 'cassette' | 'cables'
-  | 'bar_tape' | 'bottom_bracket' | 'pedals' | 'other';
+  | 'frame' | 'fork'
+  | 'chain' | 'cassette' | 'crankset' | 'bottom_bracket'
+  | 'derailleur_front' | 'derailleur_rear' | 'battery_di2'
+  | 'brake_lever_front' | 'brake_lever_rear'
+  | 'brake_pads_front' | 'brake_pads_rear'
+  | 'brake_rotor_front' | 'brake_rotor_rear' | 'brake_mount'
+  | 'wheel_front' | 'wheel_rear'
+  | 'tire_front' | 'tire_rear'
+  | 'thru_axle_front' | 'thru_axle_rear'
+  | 'cables' | 'bar_tape' | 'pedals' | 'other';
+
+type EquipmentCategory = 'cadre' | 'transmission' | 'freins' | 'roues' | 'autre';
+
+const CATEGORY_LABEL: Record<EquipmentCategory, string> = {
+  cadre:        'Cadre',
+  transmission: 'Transmission',
+  freins:       'Freins',
+  roues:        'Roues',
+  autre:        'Autre',
+};
+
+// Display order of categories in the page.
+const CATEGORY_ORDER: EquipmentCategory[] = ['cadre', 'transmission', 'freins', 'roues', 'autre'];
 
 interface Equipment {
   id:              string;
@@ -42,21 +62,47 @@ interface Equipment {
   wearRatio:       number;
 }
 
-/** Per-kind UI metadata: icon, default lifetime, and the human name we
- *  surface in the type picker. Aligned with the SQL kind enum + the
- *  default lifetimes a typical road cyclist would use. */
-const KIND_META: Record<EquipmentKind, { icon: string; label: string; defaultLifetime: number }> = {
-  chain:            { icon: '⚙', label: 'Chaîne',                 defaultLifetime: 3000 },
-  cassette:         { icon: '◐', label: 'Cassette',               defaultLifetime: 9000 },
-  brake_pads_front: { icon: '◉', label: 'Plaquettes avant',       defaultLifetime: 2500 },
-  brake_pads_rear:  { icon: '◉', label: 'Plaquettes arrière',     defaultLifetime: 2500 },
-  tire_front:       { icon: '○', label: 'Pneu avant',             defaultLifetime: 5000 },
-  tire_rear:        { icon: '○', label: 'Pneu arrière',           defaultLifetime: 4000 },
-  cables:           { icon: '⊥', label: 'Câbles + gaines',        defaultLifetime: 5000 },
-  bar_tape:         { icon: '⌒', label: 'Guidoline',              defaultLifetime: 3000 },
-  bottom_bracket:   { icon: '◎', label: 'Boîtier de pédalier',    defaultLifetime: 15000 },
-  pedals:           { icon: '⌖', label: 'Pédales',                defaultLifetime: 20000 },
-  other:            { icon: '+', label: 'Autre',                   defaultLifetime: 5000 },
+/** Per-kind UI metadata: category, icon, default lifetime, and the
+ *  human label we surface in the type picker. Aligned with the SQL
+ *  kind enum + sensible defaults from real-world cycling wear data
+ *  (5500 km for a chain comes from 3000-8000 km typical range; 30000
+ *  km rear wheel from 25-50k road carbon range; etc).
+ *
+ *  The `category` field drives the grouped layout in the page —
+ *  cards with the same category are rendered under a shared header.
+ */
+const KIND_META: Record<EquipmentKind, { category: EquipmentCategory; icon: string; label: string; defaultLifetime: number }> = {
+  // ─ Cadre ─────────────────────────────────────────────────────────
+  frame:              { category: 'cadre',        icon: '□', label: 'Cadre',                   defaultLifetime: 80000 },
+  fork:               { category: 'cadre',        icon: 'Y', label: 'Fourche',                 defaultLifetime: 60000 },
+  // ─ Transmission ──────────────────────────────────────────────────
+  chain:              { category: 'transmission', icon: '⚙', label: 'Chaîne',                  defaultLifetime: 3000 },
+  cassette:           { category: 'transmission', icon: '◐', label: 'Cassette',                defaultLifetime: 10000 },
+  crankset:           { category: 'transmission', icon: '⊕', label: 'Pédalier',                defaultLifetime: 35000 },
+  bottom_bracket:     { category: 'transmission', icon: '◎', label: 'Boîtier de pédalier',     defaultLifetime: 15000 },
+  derailleur_rear:    { category: 'transmission', icon: '⊂', label: 'Dérailleur arrière',      defaultLifetime: 40000 },
+  derailleur_front:   { category: 'transmission', icon: '⊃', label: 'Dérailleur avant',        defaultLifetime: 40000 },
+  battery_di2:        { category: 'transmission', icon: '⚡', label: 'Batterie Di2',            defaultLifetime: 25000 },
+  // ─ Freins ────────────────────────────────────────────────────────
+  brake_mount:        { category: 'freins',       icon: '⌒', label: 'Adaptateur frein',        defaultLifetime: 100000 },
+  brake_lever_front:  { category: 'freins',       icon: '↿', label: 'Levier frein avant',      defaultLifetime: 45000 },
+  brake_lever_rear:   { category: 'freins',       icon: '↾', label: 'Levier frein arrière',    defaultLifetime: 45000 },
+  brake_pads_front:   { category: 'freins',       icon: '◉', label: 'Plaquettes avant',        defaultLifetime: 2500 },
+  brake_pads_rear:    { category: 'freins',       icon: '◉', label: 'Plaquettes arrière',      defaultLifetime: 2500 },
+  brake_rotor_front:  { category: 'freins',       icon: '◷', label: 'Disque avant',            defaultLifetime: 15000 },
+  brake_rotor_rear:   { category: 'freins',       icon: '◷', label: 'Disque arrière',          defaultLifetime: 15000 },
+  // ─ Roues ─────────────────────────────────────────────────────────
+  wheel_front:        { category: 'roues',        icon: '○', label: 'Roue avant',              defaultLifetime: 40000 },
+  wheel_rear:         { category: 'roues',        icon: '○', label: 'Roue arrière',            defaultLifetime: 30000 },
+  tire_front:         { category: 'roues',        icon: '◯', label: 'Pneu avant',              defaultLifetime: 6000 },
+  tire_rear:          { category: 'roues',        icon: '◯', label: 'Pneu arrière',            defaultLifetime: 4000 },
+  thru_axle_front:    { category: 'roues',        icon: '|', label: 'Axe traversant avant',    defaultLifetime: 100000 },
+  thru_axle_rear:     { category: 'roues',        icon: '|', label: 'Axe traversant arrière',  defaultLifetime: 100000 },
+  // ─ Autre ─────────────────────────────────────────────────────────
+  cables:             { category: 'autre',        icon: '⊥', label: 'Câbles + gaines',         defaultLifetime: 5000 },
+  bar_tape:           { category: 'autre',        icon: '⌒', label: 'Guidoline',               defaultLifetime: 3000 },
+  pedals:             { category: 'autre',        icon: '⌖', label: 'Pédales',                 defaultLifetime: 20000 },
+  other:              { category: 'autre',        icon: '+', label: 'Autre',                    defaultLifetime: 5000 },
 };
 
 export function EquipmentPage() {
@@ -131,21 +177,33 @@ export function EquipmentPage() {
         ) : items.length === 0 ? (
           <EmptyState onAdd={() => setShowAdd(true)} />
         ) : (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(320px, 1fr))',
-            gap: 16,
-          }}>
-            {items.map(item => (
-              <EquipmentCard
-                key={item.id}
-                item={item}
-                onEdit={() => setEditingItem(item)}
-                onReplaced={() => markReplaced(item.id)}
-                onDelete={() => deleteItem(item.id)}
-              />
-            ))}
-          </div>
+          // Group items by category for display. Items whose `kind`
+          // isn't in KIND_META (shouldn't happen with the constraint
+          // but defensive) fall into 'autre'.
+          CATEGORY_ORDER.map(category => {
+            const itemsInCat = items.filter(it => (KIND_META[it.kind]?.category ?? 'autre') === category);
+            if (itemsInCat.length === 0) return null;
+            return (
+              <section key={category} style={{ marginBottom: 32 }}>
+                <CategoryHeader category={category} count={itemsInCat.length} />
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(320px, 1fr))',
+                  gap: 16,
+                }}>
+                  {itemsInCat.map(item => (
+                    <EquipmentCard
+                      key={item.id}
+                      item={item}
+                      onEdit={() => setEditingItem(item)}
+                      onReplaced={() => markReplaced(item.id)}
+                      onDelete={() => deleteItem(item.id)}
+                    />
+                  ))}
+                </div>
+              </section>
+            );
+          })
         )}
 
         {showAdd && (
@@ -194,6 +252,33 @@ function Header({ totalKm, onAdd }: { totalKm: number; onAdd: () => void }) {
         fontFamily: "'Space Grotesk'", fontSize: 12, fontWeight: 700,
         letterSpacing: '0.06em', textTransform: 'uppercase',
       }}>+ Ajouter une pièce</button>
+    </div>
+  );
+}
+
+/**
+ * Header above each category group. Acts as a visual anchor when the
+ * user has many parts — without it the page is just a wall of cards.
+ * Tag-style label matches the editorial system used across the rest
+ * of the app ("§ MONTÉES DÉTECTÉES", "§ PLAN", etc.).
+ */
+function CategoryHeader({ category, count }: { category: EquipmentCategory; count: number }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+      gap: 12, marginBottom: 12, paddingBottom: 8,
+      borderBottom: `1px solid ${tokens.creamBorder}`,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
+        <span style={{
+          fontFamily: "'Space Grotesk'", fontSize: 10, fontWeight: 700,
+          letterSpacing: '0.12em', color: tokens.terra, textTransform: 'uppercase',
+        }}>§ {CATEGORY_LABEL[category]}</span>
+        <span style={{ width: 24, height: 1, background: tokens.creamBorder, alignSelf: 'center' }} />
+        <span style={{ fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight }}>
+          {count} pièce{count > 1 ? 's' : ''}
+        </span>
+      </div>
     </div>
   );
 }
@@ -379,9 +464,20 @@ function AddDialog({
 
         <Field label="Type">
           <select value={kind} onChange={e => handleKindChange(e.target.value as EquipmentKind)} style={INPUT}>
-            {(Object.keys(KIND_META) as EquipmentKind[]).map(k => (
-              <option key={k} value={k}>{KIND_META[k].icon} {KIND_META[k].label}</option>
-            ))}
+            {CATEGORY_ORDER.map(cat => {
+              // Group options by category for clarity — `<optgroup>`
+              // is the native HTML way and works in all browsers.
+              const kindsInCat = (Object.keys(KIND_META) as EquipmentKind[])
+                .filter(k => KIND_META[k].category === cat);
+              if (kindsInCat.length === 0) return null;
+              return (
+                <optgroup key={cat} label={CATEGORY_LABEL[cat]}>
+                  {kindsInCat.map(k => (
+                    <option key={k} value={k}>{KIND_META[k].icon} {KIND_META[k].label}</option>
+                  ))}
+                </optgroup>
+              );
+            })}
           </select>
         </Field>
 

@@ -218,12 +218,26 @@ create table if not exists public.bike_equipment (
   id              uuid primary key default uuid_generate_v4(),
   user_id         uuid not null references next_auth.users(id) on delete cascade,
   name            text not null,
-  -- Closed set so the UI can pick icons + default lifetimes. Add new
-  -- types here (and in the front-end TYPE_META map) when needed.
+  -- Closed set so the UI can pick icons, default lifetimes, AND group
+  -- the cards by category (cadre / transmission / freins / roues /
+  -- autre). The frontend KIND_META map in EquipmentPage.tsx must stay
+  -- in sync with these values. Add new types here when needed.
   kind            text not null check (kind in (
-    'chain', 'brake_pads_front', 'brake_pads_rear', 'tire_front',
-    'tire_rear', 'cassette', 'cables', 'bar_tape', 'bottom_bracket',
-    'pedals', 'other'
+    -- Cadre
+    'frame', 'fork',
+    -- Transmission
+    'chain', 'cassette', 'crankset', 'bottom_bracket',
+    'derailleur_front', 'derailleur_rear', 'battery_di2',
+    -- Freins
+    'brake_lever_front', 'brake_lever_rear',
+    'brake_pads_front', 'brake_pads_rear',
+    'brake_rotor_front', 'brake_rotor_rear', 'brake_mount',
+    -- Roues
+    'wheel_front', 'wheel_rear',
+    'tire_front', 'tire_rear',
+    'thru_axle_front', 'thru_axle_rear',
+    -- Autre
+    'cables', 'bar_tape', 'pedals', 'other'
   )),
   installed_at    timestamptz not null default now(),
   installed_at_km numeric(10,2) not null default 0,
@@ -232,6 +246,24 @@ create table if not exists public.bike_equipment (
   notes           text,
   created_at      timestamptz not null default now()
 );
+-- Re-runnable migration: existing installs need the constraint
+-- relaxed so new kinds work. CHECK constraints can't be ALTERed in
+-- place; drop + recreate.
+alter table if exists public.bike_equipment
+  drop constraint if exists bike_equipment_kind_check;
+alter table if exists public.bike_equipment
+  add constraint bike_equipment_kind_check check (kind in (
+    'frame', 'fork',
+    'chain', 'cassette', 'crankset', 'bottom_bracket',
+    'derailleur_front', 'derailleur_rear', 'battery_di2',
+    'brake_lever_front', 'brake_lever_rear',
+    'brake_pads_front', 'brake_pads_rear',
+    'brake_rotor_front', 'brake_rotor_rear', 'brake_mount',
+    'wheel_front', 'wheel_rear',
+    'tire_front', 'tire_rear',
+    'thru_axle_front', 'thru_axle_rear',
+    'cables', 'bar_tape', 'pedals', 'other'
+  ));
 create index if not exists bike_equipment_user_idx
   on public.bike_equipment (user_id, replaced_at);
 
