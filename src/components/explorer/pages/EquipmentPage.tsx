@@ -327,8 +327,10 @@ function Header({
         </p>
         <h1 style={{ fontFamily: "'Playfair Display'", fontSize: 32, fontWeight: 800,
                      color: tokens.ink, margin: 0, lineHeight: 1.15 }}>
-          Suivi d&apos;usure{' '}
-          <em style={{ color: tokens.terra, fontStyle: 'italic' }}>{totalKm.toFixed(0)} km</em>
+          {/* Le total global est désormais déclinable par vélo dans la
+              rangée de pills juste en dessous — pas besoin de le
+              dupliquer dans le titre. */}
+          Suivi d&apos;usure
         </h1>
         <p style={{ fontFamily: "'Space Grotesk'", fontSize: 13, color: tokens.inkMid, lineHeight: 1.55, marginTop: 8, maxWidth: 640 }}>
           Suis l&apos;usure de chaîne, plaquettes, pneus, câbles… Ajoute une pièce à chaque
