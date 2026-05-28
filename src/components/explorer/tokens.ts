@@ -79,6 +79,12 @@ export interface Activity {
     s3600: number | null;
   } | null;
   original_type?: string;
+  /** Strava gear_id — present on cycling activities tagged with a bike. */
+  gear_id?: string | null;
+  /** Bike nickname denormalized server-side from bike_gears.name
+   *  (e.g. "Rocket", "Elon musk"). Null when gear_id is null or
+   *  when the bike row hasn't been synced yet. */
+  gear_name?: string | null;
   ftp?: number;
   rider_kg?: number;
   total_mass?: number;

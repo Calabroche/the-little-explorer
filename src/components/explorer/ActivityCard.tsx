@@ -54,9 +54,29 @@ export function ActivityCard({ activity, onClick }: { activity: Activity; onClic
       <div style={{ flex: 1, padding: isMobile ? 16 : 24, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, flexWrap: 'wrap', gap: 6 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <TypeBadge type={activity.type} />
               <Label>{localizedDate} · {activity.location}</Label>
+              {/* Bike chip — cycling only, shown when we know which
+                  bike Strava tagged this ride with. Lets the user tell
+                  at a glance whether they were on the Canyon or the
+                  e-bike (or any other bike, for users with more than
+                  the two we test against). */}
+              {activity.type === 'cycling' && activity.gear_name && (
+                <span style={{
+                  padding: '2px 8px',
+                  background: tokens.creamDark,
+                  border: `1px solid ${tokens.creamBorder}`,
+                  borderRadius: 2,
+                  fontFamily: "'Space Grotesk'",
+                  fontSize: 10,
+                  fontWeight: 600,
+                  letterSpacing: '0.04em',
+                  color: tokens.inkMid,
+                }}>
+                  ⛁ {activity.gear_name}
+                </span>
+              )}
             </div>
             {activity.weather && !isMobile && <WeatherBadge w={activity.weather} />}
           </div>

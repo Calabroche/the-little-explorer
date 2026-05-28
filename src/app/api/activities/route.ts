@@ -389,7 +389,7 @@ function transform(
 async function loadFromSupabase(userId: string): Promise<any[]> {
   const { data, error } = await supabaseAdmin()
     .from('activities')
-    .select('payload')
+    .select('payload, gear_id')
     .eq('user_id', userId)
     .order('start_date', { ascending: false });
   if (error) {
@@ -398,8 +398,25 @@ async function loadFromSupabase(userId: string): Promise<any[]> {
   }
   // Each row's `payload` JSONB column holds the original raw activity
   // (same shape as the legacy JSON files), so downstream code is unchanged.
+  // We mix `gear_id` into the payload so the transform sees it as just
+  // another field on the raw activity — no signature change needed.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (data ?? []).map(r => r.payload as any);
+  return (data ?? []).map(r => ({ ...(r.payload as any), gear_id: r.gear_id as string | null }));
+}
+
+/** Look up the user's Strava bikes once per request so each activity
+ *  can render its bike nickname ("Rocket", "Elon musk") without a
+ *  client-side join. Returns a Map keyed by Strava gear_id. */
+async function loadBikes(userId: string): Promise<Map<string, string>> {
+  const { data, error } = await supabaseAdmin()
+    .from('bike_gears')
+    .select('id, name')
+    .eq('user_id', userId);
+  if (error) {
+    console.warn('[activities] bike_gears lookup failed:', error.message);
+    return new Map();
+  }
+  return new Map((data ?? []).map(r => [r.id as string, r.name as string]));
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -482,6 +499,10 @@ export async function GET(req: NextRequest) {
   // when their auto-derivation goes stale (e.g., after a long break).
   const ftp = profile.customFtp ?? deriveFtpFromBests(enriched);
 
+  // Single bike-gear lookup so each cycling activity can render its
+  // bike nickname inline (no client-side join needed).
+  const bikesById = isSupabaseConfigured() ? await loadBikes(userId) : new Map<string, string>();
+
   // Pass 3: transform each activity with the dynamic FTP + profile.
   const activities = await Promise.all(
     enriched.map(async ({ raw, powerStream, bestEfforts }) => {
@@ -489,7 +510,9 @@ export async function GET(req: NextRequest) {
       const lat    = raw.gps?.[0]?.[0] ?? 0;
       const lng    = raw.gps?.[0]?.[1] ?? 0;
       const weather = (lat && lng) ? await getWeather(raw.id, lat, lng, raw.date) : null;
-      return { ...act, weather };
+      const gearId  = (raw.gear_id ?? null) as string | null;
+      const gearName = gearId ? (bikesById.get(gearId) ?? null) : null;
+      return { ...act, weather, gear_id: gearId, gear_name: gearName };
     })
   );
 
