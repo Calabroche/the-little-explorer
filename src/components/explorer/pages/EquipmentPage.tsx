@@ -198,13 +198,42 @@ export function EquipmentPage() {
 
   const unboundCount = items.filter(it => !it.gear_id).length;
 
+  /**
+   * Reset `installed_at_km = 0` on every piece bound to `gearId`.
+   *
+   * Used after the legacy → per-bike migration: pieces still carry an
+   * `installed_at_km` from the all-bikes era (e.g. 160 km of mixed
+   * Canyon + e-bike rides at install time), which under per-bike
+   * scoping subtracts wrongly and under-reports wear by exactly that
+   * amount. Resetting to 0 treats the piece as "new at this bike's
+   * km=0" — the right model when you've just assigned a brand-new
+   * inventory to a brand-new bike.
+   */
+  const resetInstalledKm = async (gearId: string, gearName: string) => {
+    const onBike = items.filter(it => it.gear_id === gearId);
+    if (onBike.length === 0) return;
+    const ok = confirm(
+      `Réinitialiser le km de pose à 0 pour les ${onBike.length} pièces sur « ${gearName} » ? `
+      + `L'usure repartira à 0 km et augmentera au rythme des sorties sur ce vélo. `
+      + `Utile après une migration depuis le suivi global.`,
+    );
+    if (!ok) return;
+    await Promise.all(onBike.map(it =>
+      fetch('/api/equipment', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: it.id, installed_at_km: 0 }),
+      }),
+    ));
+    await load();
+  };
+
   return (
     // The parent ExplorerApp main is `overflow: hidden` — each page
     // must provide its own scroll container with `flex:1 + overflowY:
     // auto`. Same pattern as FtpPage / WrappedPage.
     <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '20px 16px' : '40px 24px', background: tokens.cream }}>
       <div style={{ maxWidth: 1080, margin: '0 auto' }}>
-        <Header totalKm={totalKm} bikes={bikes} onAdd={() => setShowAdd(true)} />
+        <Header totalKm={totalKm} bikes={bikes} items={items} onAdd={() => setShowAdd(true)} onResetBike={resetInstalledKm} />
 
         {error && (
           <div style={{
@@ -280,7 +309,15 @@ export function EquipmentPage() {
 
 // ── Header ──────────────────────────────────────────────────────────
 
-function Header({ totalKm, bikes, onAdd }: { totalKm: number; bikes: Bike[]; onAdd: () => void }) {
+function Header({
+  totalKm, bikes, items, onAdd, onResetBike,
+}: {
+  totalKm: number;
+  bikes: Bike[];
+  items: Equipment[];
+  onAdd: () => void;
+  onResetBike: (gearId: string, gearName: string) => Promise<void>;
+}) {
   return (
     <div style={{ marginBottom: 24, display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
       <div>
@@ -299,26 +336,48 @@ function Header({ totalKm, bikes, onAdd }: { totalKm: number; bikes: Bike[]; onA
           à chaque nouvelle sortie vélo.
         </p>
         {/* Per-bike km pills — visible breakdown so the user can tell
-            at a glance how the global total decomposes. Only shown when
-            we have ≥1 bike synced from Strava. */}
+            at a glance how the global total decomposes. Each pill is
+            actionable: it carries a "reset install km" affordance for
+            pieces bound to that bike (one-shot fix-up for the legacy
+            global → per-bike migration). */}
         {bikes.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
-            {bikes.map(b => (
-              <span key={b.id} style={{
-                display: 'inline-flex', alignItems: 'baseline', gap: 6,
-                padding: '4px 10px', background: tokens.surface,
-                border: `1px solid ${tokens.creamBorder}`, borderRadius: 3,
-                fontFamily: "'Space Grotesk'", fontSize: 11,
-              }}>
-                <span style={{ color: tokens.ink, fontWeight: 600 }}>{b.name}</span>
-                <span style={{ color: tokens.inkMid }}>{b.totalKm.toFixed(0)} km</span>
-                {b.primary_bike && (
-                  <span style={{ color: tokens.terra, fontSize: 9, fontWeight: 700, letterSpacing: '0.08em' }}>
-                    PRINCIPAL
-                  </span>
-                )}
-              </span>
-            ))}
+            {bikes.map(b => {
+              const piecesOnBike = items.filter(it => it.gear_id === b.id);
+              return (
+                <span key={b.id} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 8,
+                  padding: '4px 4px 4px 10px', background: tokens.surface,
+                  border: `1px solid ${tokens.creamBorder}`, borderRadius: 3,
+                  fontFamily: "'Space Grotesk'", fontSize: 11,
+                }}>
+                  <span style={{ color: tokens.ink, fontWeight: 600 }}>{b.name}</span>
+                  <span style={{ color: tokens.inkMid }}>{b.totalKm.toFixed(0)} km</span>
+                  {b.primary_bike && (
+                    <span style={{ color: tokens.terra, fontSize: 9, fontWeight: 700, letterSpacing: '0.08em' }}>
+                      PRINCIPAL
+                    </span>
+                  )}
+                  {piecesOnBike.length > 0 && (
+                    <button
+                      onClick={() => onResetBike(b.id, b.name)}
+                      title={`Réinitialiser km de pose pour les ${piecesOnBike.length} pièces sur ${b.name}`}
+                      style={{
+                        padding: '2px 6px',
+                        background: tokens.creamDark,
+                        border: `1px solid ${tokens.creamBorder}`,
+                        borderRadius: 2,
+                        color: tokens.inkMid,
+                        fontFamily: "'Space Grotesk'", fontSize: 10, fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      ↻ km
+                    </button>
+                  )}
+                </span>
+              );
+            })}
           </div>
         )}
       </div>

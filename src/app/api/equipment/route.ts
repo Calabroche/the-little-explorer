@@ -273,6 +273,10 @@ interface UpdateBody {
   notes?:       string | null;
   /** Rebind the piece to a different bike (or unbind with null). */
   gear_id?:     string | null;
+  /** Override the install-time km baseline. Setting this to 0 treats
+   *  the piece as "new at the bike's km=0", which is the right value
+   *  after migrating from the legacy global-scope tracker. */
+  installed_at_km?: number;
 }
 
 export async function PATCH(req: NextRequest) {
@@ -302,6 +306,12 @@ export async function PATCH(req: NextRequest) {
   if (body.notes !== undefined) update.notes = body.notes?.toString().slice(0, 200) ?? null;
   if (body.replaced === true) {
     update.replaced_at = new Date().toISOString();
+  }
+  if (body.installed_at_km !== undefined) {
+    if (typeof body.installed_at_km !== 'number' || body.installed_at_km < 0 || body.installed_at_km > 1_000_000) {
+      return NextResponse.json({ error: 'invalid_installed_at_km' }, { status: 400 });
+    }
+    update.installed_at_km = body.installed_at_km;
   }
   // gear_id: explicit null clears the binding, a string sets it.
   // Undefined means "don't touch" — same convention as `notes`.
