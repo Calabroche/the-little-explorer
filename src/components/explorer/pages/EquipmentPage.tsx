@@ -66,6 +66,11 @@ export function EquipmentPage() {
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  // Editing surfaces the same modal as AddDialog but pre-filled with
+  // the row's current values + PATCHes instead of POSTing. Keeping the
+  // editing item in state (rather than mounting a separate dialog per
+  // row) lets the same UI handle both cases.
+  const [editingItem, setEditingItem] = useState<Equipment | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -135,6 +140,7 @@ export function EquipmentPage() {
               <EquipmentCard
                 key={item.id}
                 item={item}
+                onEdit={() => setEditingItem(item)}
                 onReplaced={() => markReplaced(item.id)}
                 onDelete={() => deleteItem(item.id)}
               />
@@ -146,6 +152,14 @@ export function EquipmentPage() {
           <AddDialog
             onClose={() => setShowAdd(false)}
             onCreated={async () => { setShowAdd(false); await load(); }}
+          />
+        )}
+
+        {editingItem && (
+          <EditDialog
+            item={editingItem}
+            onClose={() => setEditingItem(null)}
+            onSaved={async () => { setEditingItem(null); await load(); }}
           />
         )}
       </div>
@@ -209,9 +223,10 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
 // ── Card ────────────────────────────────────────────────────────────
 
 function EquipmentCard({
-  item, onReplaced, onDelete,
+  item, onEdit, onReplaced, onDelete,
 }: {
   item: Equipment;
+  onEdit: () => void;
   onReplaced: () => void;
   onDelete: () => void;
 }) {
@@ -266,7 +281,13 @@ function EquipmentCard({
         </p>
       )}
 
-      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+      <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+        <button onClick={onEdit} style={{
+          padding: '6px 12px', background: 'transparent',
+          border: `1px solid ${tokens.creamBorder}`, borderRadius: 3,
+          color: tokens.inkMid, fontFamily: "'Space Grotesk'", fontSize: 11,
+          fontWeight: 600, letterSpacing: '0.04em', cursor: 'pointer',
+        }}>ÉDITER</button>
         <button onClick={onReplaced} style={{
           padding: '6px 12px', background: 'transparent',
           border: `1px solid ${tokens.terra}`, borderRadius: 3,
@@ -277,6 +298,7 @@ function EquipmentCard({
           padding: '6px 12px', background: 'transparent',
           border: `1px solid ${tokens.creamBorder}`, borderRadius: 3,
           color: tokens.inkLight, fontFamily: "'Space Grotesk'", fontSize: 11, cursor: 'pointer',
+          marginLeft: 'auto',
         }}>×</button>
       </div>
     </div>
@@ -398,6 +420,107 @@ function AddDialog({
             border: 'none', borderRadius: 3, cursor: 'pointer',
             fontFamily: "'Space Grotesk'", fontSize: 12, fontWeight: 700, letterSpacing: '0.06em',
           }}>{saving ? 'AJOUT…' : 'AJOUTER'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Edit dialog ────────────────────────────────────────────────────
+
+/**
+ * Edit an existing equipment item. Sibling of AddDialog but pre-fills
+ * the inputs from the current row's values and PATCHes instead of
+ * POSTing. Only `name`, `lifetime_km`, and `notes` are editable — the
+ * type / install date / starting km would change wear math
+ * retroactively and are best handled via "delete + re-add".
+ */
+function EditDialog({
+  item, onClose, onSaved,
+}: {
+  item: Equipment;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const [name, setName]         = useState(item.name);
+  const [lifetime, setLifetime] = useState(item.lifetime_km);
+  const [notes, setNotes]       = useState(item.notes ?? '');
+  const [saving, setSaving]     = useState(false);
+  const [error, setError]       = useState<string | null>(null);
+
+  const submit = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const r = await fetch('/api/equipment', {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          id:          item.id,
+          name:        name.trim(),
+          lifetime_km: lifetime,
+          notes:       notes.trim() || null,
+        }),
+      });
+      if (!r.ok && r.status !== 204) {
+        const err = await r.json().catch(() => ({})) as { error?: string };
+        throw new Error(err.error ?? `HTTP ${r.status}`);
+      }
+      await onSaved();
+    } catch (e) {
+      setError((e as Error).message);
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+    }} onClick={onClose}>
+      <div style={{
+        background: tokens.surface, borderRadius: 4, padding: 28, maxWidth: 480, width: '90%',
+        boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+      }} onClick={e => e.stopPropagation()}>
+        <h2 style={{ fontFamily: "'Playfair Display'", fontSize: 20, fontWeight: 700, color: tokens.ink, margin: '0 0 8px' }}>
+          Éditer
+        </h2>
+        <p style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight, margin: '0 0 20px' }}>
+          Type, date de pose et km initiaux ne sont pas éditables ici (ils changeraient le calcul d&apos;usure rétroactivement). Si tu veux les corriger : supprime + re-ajoute.
+        </p>
+
+        {error && (
+          <div style={{
+            padding: 10, marginBottom: 14, background: '#FEE',
+            border: '1px solid #FCC', borderRadius: 4, color: '#A00',
+            fontFamily: "'Space Grotesk'", fontSize: 12,
+          }}>{error}</div>
+        )}
+
+        <Field label="Nom">
+          <input value={name} onChange={e => setName(e.target.value)} maxLength={80} style={INPUT} />
+        </Field>
+
+        <Field label="Durée de vie estimée (km)">
+          <input type="number" value={lifetime} min={100} max={50000} step={100}
+            onChange={e => setLifetime(Number(e.target.value))} style={INPUT} />
+        </Field>
+
+        <Field label="Notes (optionnel)">
+          <input value={notes} onChange={e => setNotes(e.target.value)} maxLength={200} style={INPUT}
+            placeholder="ex. KMC X11, achetée chez Décathlon" />
+        </Field>
+
+        <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} disabled={saving} style={{
+            padding: '10px 18px', background: 'transparent', border: `1px solid ${tokens.creamBorder}`,
+            borderRadius: 3, color: tokens.inkMid, fontFamily: "'Space Grotesk'", fontSize: 12, cursor: 'pointer',
+          }}>Annuler</button>
+          <button onClick={submit} disabled={saving || name.trim().length === 0} style={{
+            padding: '10px 20px', background: tokens.terra, color: 'white',
+            border: 'none', borderRadius: 3, cursor: 'pointer',
+            fontFamily: "'Space Grotesk'", fontSize: 12, fontWeight: 700, letterSpacing: '0.06em',
+          }}>{saving ? 'SAUVEGARDE…' : 'SAUVEGARDER'}</button>
         </div>
       </div>
     </div>
