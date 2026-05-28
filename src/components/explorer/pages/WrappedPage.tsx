@@ -5,6 +5,7 @@ import { Activity, tokens } from '../tokens';
 import { useIsMobile } from '../ui';
 import { useT, formatDateLocale } from '@/i18n';
 import type { SportId } from '../Sidebar';
+import { renderWrappedVideo, VideoStats } from '@/lib/wrapped-video';
 
 interface Props {
   activities: Activity[];
@@ -542,6 +543,8 @@ export function WrappedPage({ activities }: Props) {
             background: card.fg === '#fff' ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.06)',
             color: card.fg === '#fff' ? '#fff' : tokens.inkMid,
           }}>{paused ? t('wrapped.play') : t('wrapped.pause')}</button>
+          <ExportVideoButton stats={yearStats} year={year ?? new Date().getFullYear()} accent={card.fg} />
+
         </div>
       </div>
 
@@ -574,5 +577,68 @@ export function WrappedPage({ activities }: Props) {
         {isMobile ? t('wrapped.hint.tap') : t('wrapped.hint.click')}
       </div>
     </div>
+  );
+}
+
+/**
+ * "Exporter en vidéo" button — renders the year recap as an
+ * Instagram-square animated WebM the user can share. Recording
+ * takes ~15s (real-time MediaRecorder capture); button shows a
+ * spinner then auto-downloads the blob.
+ */
+function ExportVideoButton({
+  stats, year, accent,
+}: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  stats: any; // local YearStats stays untyped here — we only read 5 fields
+  year: number;
+  accent: string;
+}) {
+  const [phase, setPhase] = useState<'idle' | 'rendering'>('idle');
+  const onLight = accent !== '#fff';
+
+  const generate = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (phase !== 'idle') return;
+    setPhase('rendering');
+    try {
+      const videoStats: VideoStats = {
+        year,
+        count:        stats.count,
+        distance:     stats.distance,
+        elevation:    stats.elevation,
+        hours:        stats.hours,
+        longest:      stats.longest      ? { title: stats.longest.title,      distance:  stats.longest.distance }      : null,
+        biggestClimb: stats.biggestClimb ? { title: stats.biggestClimb.title, elevation: stats.biggestClimb.elevation } : null,
+        fastest:      stats.fastest      ? { title: stats.fastest.title,      speed:     stats.fastest.speed }          : null,
+        topSport:     stats.topSport     ? { id: stats.topSport.id,           count:     stats.topSport.count }         : null,
+      };
+      const blob = await renderWrappedVideo(videoStats);
+      const url  = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `tle-bilan-${year}.webm`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('[wrapped-video] render failed:', err);
+      alert('Export vidéo échoué. Essaie depuis un navigateur Chrome / Safari récent.');
+    } finally {
+      setPhase('idle');
+    }
+  };
+
+  return (
+    <button onClick={generate} disabled={phase === 'rendering'} style={{
+      fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 700,
+      letterSpacing: '0.1em',
+      padding: '4px 10px', border: 'none', borderRadius: 12, cursor: phase === 'rendering' ? 'wait' : 'pointer',
+      background: onLight ? tokens.terra : '#fff',
+      color: onLight ? '#fff' : tokens.ink,
+    }}>
+      {phase === 'rendering' ? '⏳ EXPORT…' : '▶ EXPORT VIDÉO'}
+    </button>
   );
 }
