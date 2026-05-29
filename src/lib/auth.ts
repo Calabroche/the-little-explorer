@@ -75,8 +75,19 @@ function stravaProvider() {
     authorization: {
       url:    STRAVA_AUTH_URL,
       params: {
-        scope:          'read,activity:read_all',
-        approval_prompt: 'auto',
+        // `activity:write` is REQUIRED for /api/strava/upload-activity
+        // (Watch standalone rides → Strava). Without it, Strava
+        // returns 403 on every POST to /api/v3/uploads with no
+        // recovery path. Users who connected before this scope was
+        // added need to disconnect + reconnect Strava once from
+        // /settings to re-grant — there's no in-place way to upgrade
+        // a token's scope on Strava's API.
+        scope:          'read,activity:read_all,activity:write',
+        // Force the consent screen even for users who previously
+        // authorized — Strava skips the prompt when scopes look
+        // familiar, which would silently re-issue a token *without*
+        // the new write scope.
+        approval_prompt: 'force',
         response_type:  'code',
       },
     },
