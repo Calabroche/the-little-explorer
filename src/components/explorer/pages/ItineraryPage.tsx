@@ -260,6 +260,10 @@ export function ItineraryPage({ user, embedded }: Props) {
   const [geometry, setGeometry]       = useState<[number, number][] | null>(null);
   const [distanceM, setDistanceM]     = useState<number | null>(null);
   const [durationS, setDurationS]     = useState<number | null>(null);
+  // Turn-by-turn maneuvers from OSRM — Phase E.2. Stored alongside
+  // geometry so saved itineraries carry voice-nav cues without
+  // needing a second routing call.
+  const [steps, setSteps]             = useState<import('../itinerary/types').NavStep[] | null>(null);
   const [routing, setRouting]         = useState(false);
   const [routeError, setRouteError]   = useState<string | null>(null);
   const [extending, setExtending]     = useState(false);
@@ -299,7 +303,7 @@ export function ItineraryPage({ user, embedded }: Props) {
     return next;
   });
   const clearAll = () => {
-    setWaypoints([]); setGeometry(null); setDistanceM(null); setDurationS(null);
+    setWaypoints([]); setGeometry(null); setDistanceM(null); setDurationS(null); setSteps(null);
     setName(''); setActiveId(null); setRouteError(null);
     setElevSeries([]); setElevations(null); setElevIndices(null); setAscent(0); setDescent(0);
   };
@@ -317,13 +321,19 @@ export function ItineraryPage({ user, embedded }: Props) {
       const res = await fetch('/api/route-bike', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ waypoints: eff.map(w => [w.lat, w.lng]) }),
+        body: JSON.stringify({
+          waypoints: eff.map(w => [w.lat, w.lng]),
+          // Always request turn-by-turn steps so the Watch can do
+          // voice nav (Phase E.2). 10-25 KB extra payload is fine.
+          steps: true,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
       setGeometry(data.geometry);
       setDistanceM(data.distance_m);
       setDurationS(data.duration_s);
+      setSteps(data.steps ?? null);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setRouteError(msg);
@@ -408,6 +418,7 @@ export function ItineraryPage({ user, embedded }: Props) {
       distanceKm:  distanceM != null ? +(distanceM / 1000).toFixed(1) : undefined,
       durationMin: durationS != null ? Math.round(durationS / 60)     : undefined,
       geometry:    geometry ?? undefined,
+      steps:       steps ?? undefined,
       elevSampleIndices: elevIndices ?? undefined,
       elevations:        elevations ?? undefined,
       totalAscent:       ascent || undefined,

@@ -25,6 +25,19 @@ export interface Waypoint {
   kind?:   'housenumber' | 'street' | 'locality' | 'municipality';
 }
 
+/// Trimmed OSRM maneuver shape — same as the NavStep returned by
+/// /api/route-bike when called with `steps: true`. Used by the Watch
+/// to fire voice nav cues at the right moments.
+export interface NavStep {
+  start:    [number, number];     // [lat, lng] where the maneuver happens
+  type:     string;               // OSRM type: turn, depart, arrive, fork, …
+  modifier: string;               // OSRM modifier: left, right, slight left, …
+  exit:     number | null;        // for roundabouts
+  name:     string;               // street name after the maneuver
+  distance: number;               // meters of this step
+  duration: number;               // seconds of this step
+}
+
 export interface Itinerary {
   id:           string;
   name:         string;     // user-given title
@@ -36,6 +49,11 @@ export interface Itinerary {
   distanceKm?:  number;
   durationMin?: number;
   geometry?:    [number, number][]; // ordered [lat, lng] polyline
+  /// Turn-by-turn maneuvers used by the Watch's voice navigation.
+  /// Optional because older itineraries saved before this field
+  /// existed won't have it — the Watch falls back to silent map
+  /// guidance in that case.
+  steps?:       NavStep[];
   // Cached elevation profile (downsampled to ≤100 points along the polyline).
   elevSampleIndices?: number[];
   elevations?:        number[];
