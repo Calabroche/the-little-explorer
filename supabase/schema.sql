@@ -349,6 +349,32 @@ create index if not exists bike_service_events_gear_idx
 grant all on table public.bike_service_events to postgres;
 grant all on table public.bike_service_events to service_role;
 
+-- ── Saved itineraries ──────────────────────────────────────────────────────
+-- A planned tour the user built on /planificateur (web) or in the iOS
+-- RouteBuilder. Stored as a single `payload` JSONB blob because we
+-- only ever fetch / write the whole thing — we never query INSIDE the
+-- waypoints / geometry arrays. Storing as JSONB keeps the schema
+-- flexible if the Itinerary struct gains new fields without a migration.
+--
+-- `distance_km` is denormalised for cheap sorting and list display
+-- (the iOS list view needs it before fetching the full payload).
+--
+-- id is a text key matching the client-generated `Itinerary.newId()`
+-- format ("itin_<ts>_<rand>") so the same id round-trips between the
+-- iPhone, the web app, and the Watch cache.
+create table if not exists public.itineraries (
+  id          text primary key,
+  user_id     uuid not null references next_auth.users(id) on delete cascade,
+  name        text not null,
+  payload     jsonb not null,
+  distance_km numeric(8,2),
+  created_at  timestamptz not null default now()
+);
+create index if not exists itineraries_user_created_idx
+  on public.itineraries (user_id, created_at desc);
+grant all on table public.itineraries to postgres;
+grant all on table public.itineraries to service_role;
+
 -- ── Helper RPC: find user by Strava athlete id (used by webhook) ────────────
 create or replace function public.user_by_athlete(p_athlete_id bigint)
 returns uuid

@@ -7,7 +7,7 @@ import { SectionTag, Label, useIsMobile } from '../ui';
 import { useT } from '@/i18n';
 import { UserId } from '../Sidebar';
 import { Waypoint, Itinerary } from '../itinerary/types';
-import { loadAll, upsert, remove, newId } from '../itinerary/storage';
+import { loadAll, upsert, remove, newId, syncFromServer } from '../itinerary/storage';
 import { downsampleByDistance, buildElevationSeries, ascentDescent, haversineM } from '../itinerary/elevation';
 import { ElevationChart } from '../itinerary/ElevationChart';
 import { buildGpx, downloadGpx, slugify as gpxSlug } from '../itinerary/gpx';
@@ -278,7 +278,13 @@ export function ItineraryPage({ user, embedded }: Props) {
 
   const [library, setLibrary]         = useState<Itinerary[]>([]);
 
-  useEffect(() => { setLibrary(loadAll(user)); }, [user]);
+  // Render the cache instantly, then reconcile with the server (so a
+  // freshly-logged-in user pulls their itineraries down without
+  // needing a manual refresh).
+  useEffect(() => {
+    setLibrary(loadAll(user));
+    void syncFromServer(user).then(setLibrary).catch(() => { /* keep cache */ });
+  }, [user]);
 
   // ── Waypoint manipulation ────────────────────────────────────────────────
   const addWaypoint  = (w: Waypoint) => setWaypoints(prev =>
@@ -407,7 +413,10 @@ export function ItineraryPage({ user, embedded }: Props) {
       totalAscent:       ascent || undefined,
       totalDescent:      descent || undefined,
     };
-    setLibrary(upsert(user, it));
+    // upsert mutates the local cache synchronously before the network
+    // round-trip, so reading loadAll() gives us the latest immediately.
+    void upsert(user, it);
+    setLibrary(loadAll(user));
     setActiveId(it.id);
     setName(it.name);
   };
@@ -437,8 +446,8 @@ export function ItineraryPage({ user, embedded }: Props) {
 
   const handleDelete = (id: string) => {
     if (!window.confirm(t('itinerary.confirmDelete'))) return;
-    const next = remove(user, id);
-    setLibrary(next);
+    void remove(user, id);
+    setLibrary(loadAll(user));
     if (activeId === id) clearAll();
   };
 
@@ -463,7 +472,7 @@ export function ItineraryPage({ user, embedded }: Props) {
         totalAscent:       ascent || undefined,
         totalDescent:      descent || undefined,
       };
-      upsert(user, it);
+      void upsert(user, it);
       id = it.id;
       setActiveId(id);
       setLibrary(loadAll(user));
