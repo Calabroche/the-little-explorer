@@ -41,6 +41,16 @@ export interface ClimbThresholds {
   minElevationM:              number;
   /** 3 % minimum average grade. */
   minAvgGradePct:             number;
+  /**
+   * Upper sanity cap on avg grade. Even Mauna Kea (the worst road
+   * climb on Earth) averages 12 %, Mortirolo & Angliru top out at
+   * 13 %. A "climb" averaging more than 15 % almost always means
+   * GPS-altitude corruption (signal lost under a tunnel / canopy,
+   * recorder reporting altitude = 0 for a stretch, then jumping
+   * back to the real value). Rejecting it here is more honest
+   * than letting a phantom Mortirolo into the list.
+   */
+  maxAvgGradePct:             number;
   /** 8 m tolerance for a dip mid-climb before we close the climb at the peak. */
   maxNetDescentDuringClimb:   number;
 }
@@ -59,6 +69,7 @@ export const DEFAULT_THRESHOLDS: ClimbThresholds = {
   minDistanceM:             500,  // 500 m mini
   minElevationM:            30,   // 30 m de gain
   minAvgGradePct:           3,    // 3 % moyens
+  maxAvgGradePct:           15,   // 15 % — au-delà = artefact GPS
   maxNetDescentDuringClimb: 8,    // 8 m de creux toléré au milieu
 };
 
@@ -77,9 +88,18 @@ export function detectClimbs(
   if (altitude.length < 30) return [];
   if (altitude.length !== distanceM.length) return [];
 
-  // 30-sample centered moving average smooths the ±3 m GPS bounce that
-  // would otherwise fragment a single climb into 20 micro-climbs.
-  const smoothed = smoothAltitude(altitude, 30);
+  // STEP 1 — outlier rejection.
+  // A single sample of `altitude = 0` (recorder briefly loses
+  // vertical lock under a tunnel / dense canopy) survives moving-
+  // average smoothing as a 200-300 m altitude dip. The dip then
+  // generates a phantom climb on the recovery side that averages
+  // 25-30 % grade. Clean BEFORE smoothing so the average isn't
+  // polluted by the outlier.
+  const cleaned = cleanAltitudeOutliers(altitude);
+  // STEP 2 — 30-sample centered moving average smooths the ±3 m GPS
+  // bounce that would otherwise fragment a single climb into 20
+  // micro-climbs.
+  const smoothed = smoothAltitude(cleaned, 30);
   const climbs: Climb[] = [];
   const n = smoothed.length;
 
@@ -112,7 +132,7 @@ export function detectClimbs(
 
     if (elev >= thresholds.minElevationM && dist >= thresholds.minDistanceM) {
       const avg = (elev / Math.max(dist, 1)) * 100;
-      if (avg >= thresholds.minAvgGradePct) {
+      if (avg >= thresholds.minAvgGradePct && avg <= thresholds.maxAvgGradePct) {
         const maxGrade = peakSustainedGrade(start, end, smoothed, distanceM);
         const duration = (timeS && timeS[start] != null && timeS[end] != null)
           ? Math.max(0, timeS[end] - timeS[start])
@@ -137,6 +157,63 @@ export function detectClimbs(
 }
 
 // ── Internals ──────────────────────────────────────────────────────────────
+
+/**
+ * Replace clearly-corrupt altitude samples with a linear interpolation
+ * between their valid neighbors. Two checks:
+ *   1. `altitude === 0` — the sentinel a GPS chipset writes when it has
+ *      horizontal lock but no vertical fix. Real road cycling samples are
+ *      essentially never exactly zero.
+ *   2. Single-sample spikes — a value that differs from BOTH its
+ *      neighbors by more than 30 m. 30 m/sec vertical = 108 km/h vertical
+ *      descent, physically out of reach for a bike. Anything past that
+ *      is GPS noise.
+ * Runs of invalid samples are interpolated linearly between the last
+ * valid sample before and the first valid sample after. Leading /
+ * trailing invalid runs are filled with the nearest valid value.
+ */
+function cleanAltitudeOutliers(alt: number[]): number[] {
+  const n = alt.length;
+  if (n < 3) return alt.slice();
+
+  // Validity mask.
+  const valid = new Array<boolean>(n).fill(true);
+  for (let i = 0; i < n; i++) if (alt[i] === 0) valid[i] = false;
+  // Spike check on still-valid positions only.
+  for (let i = 1; i < n - 1; i++) {
+    if (!valid[i]) continue;
+    const prev = alt[i - 1];
+    const next = alt[i + 1];
+    if (Math.abs(alt[i] - prev) > 30 && Math.abs(alt[i] - next) > 30) {
+      valid[i] = false;
+    }
+  }
+
+  // Interpolate invalid runs.
+  const out = alt.slice();
+  let i = 0;
+  while (i < n) {
+    if (valid[i]) { i += 1; continue; }
+    const runStart = i;
+    while (i < n && !valid[i]) i += 1;
+    const runEnd = i;  // exclusive
+    const before: number | null = runStart > 0 ? out[runStart - 1] : null;
+    const after:  number | null = runEnd  < n ? out[runEnd]       : null;
+    if (before != null && after != null) {
+      const span = runEnd - runStart + 1;
+      for (let k = runStart; k < runEnd; k++) {
+        const t = (k - runStart + 1) / span;
+        out[k] = before + (after - before) * t;
+      }
+    } else if (before != null) {
+      for (let k = runStart; k < runEnd; k++) out[k] = before;
+    } else if (after != null) {
+      for (let k = runStart; k < runEnd; k++) out[k] = after;
+    }
+    // both null → whole series invalid, leave alone
+  }
+  return out;
+}
 
 /**
  * Centered moving average. Returns an array the same length as input.
