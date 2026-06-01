@@ -552,10 +552,18 @@ function ProfileSection() {
         // Try to surface the server's error code so the user can
         // tell "token expired" from "strava_not_connected" from
         // an unknown 500 — otherwise every failure looks identical.
+        // activities_fetch_failed also carries the upstream Strava
+        // status code; show it so the rider knows whether Strava
+        // itself was 500'ing or rejecting their token.
         let detail = `HTTP ${r.status}`;
         try {
-          const body = await r.json() as { error?: string };
-          if (body?.error) detail = `${body.error} (HTTP ${r.status})`;
+          const body = await r.json() as { error?: string; stravaStatus?: number };
+          if (body?.error) {
+            detail = `${body.error} (HTTP ${r.status})`;
+            if (body.stravaStatus) {
+              detail += ` · Strava: ${body.stravaStatus}`;
+            }
+          }
         } catch { /* response wasn't JSON */ }
         throw new Error(detail);
       }

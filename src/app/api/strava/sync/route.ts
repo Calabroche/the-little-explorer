@@ -148,16 +148,46 @@ export async function POST(req: NextRequest) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const activities: any[] = [];
   for (let page = 1; page <= MAX_PAGES; page++) {
-    const r = await fetch(`${STRAVA_ACTIVITIES_URL}?per_page=200&page=${page}`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (!r.ok) {
-      const txt = await r.text();
-      console.error(`[strava-sync] page ${page} fetch failed:`, r.status, txt.slice(0, 200));
+    // Retry on 5xx with linear backoff. Strava's /athlete/activities
+    // is flaky right after a fresh OAuth — they need ~30 s to "warm
+    // up" the new athlete's view. Two retries (so up to 3 attempts
+    // total, 1 s + 3 s of backoff) catches the common transient
+    // window without making the UI feel slow.
+    let r: Response | null = null;
+    let attempt = 0;
+    let lastStravaStatus = 0;
+    let lastStravaBody = '';
+    while (attempt < 3) {
+      r = await fetch(`${STRAVA_ACTIVITIES_URL}?per_page=200&page=${page}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (r.ok) break;
+      lastStravaStatus = r.status;
+      lastStravaBody = (await r.text()).slice(0, 200);
+      console.error(`[strava-sync] page ${page} attempt ${attempt + 1} failed:`, r.status, lastStravaBody);
+      // 401/403 = auth issue — retrying won't help.
+      // 429 = rate limit — retrying immediately just makes it worse.
+      // Only retry 5xx (Strava server-side glitch).
+      if (r.status < 500) break;
+      attempt += 1;
+      if (attempt < 3) {
+        await new Promise(res => setTimeout(res, attempt * 1000));
+      }
+    }
+    if (!r || !r.ok) {
       // On the very first page we have nothing to return; on later pages
-      // we keep what we already pulled and stop.
+      // we keep what we already pulled and stop. Include the actual
+      // Strava status code so the client (Sidebar's error banner) can
+      // tell the user whether to retry, reconnect Strava, or write to us.
       if (page === 1) {
-        return NextResponse.json({ error: 'activities_fetch_failed' }, { status: 502 });
+        return NextResponse.json(
+          {
+            error:        'activities_fetch_failed',
+            stravaStatus: lastStravaStatus,
+            stravaBody:   lastStravaBody,
+          },
+          { status: 502 },
+        );
       }
       break;
     }
