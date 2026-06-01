@@ -74,7 +74,11 @@ export async function GET(req: NextRequest) {
   authUrl.searchParams.set('client_id',       clientId);
   authUrl.searchParams.set('redirect_uri',    redirectUri);
   authUrl.searchParams.set('response_type',   'code');
-  authUrl.searchParams.set('scope',           'read,activity:read_all,activity:write');
+  // `activity:write` removed — see lib/auth.ts comment for the
+  // full rationale. tl;dr: without Strava's "Upload to Strava"
+  // approval, requesting this scope makes Strava 500 on every
+  // subsequent API call including /athlete, breaking OAuth itself.
+  authUrl.searchParams.set('scope',           'read,activity:read_all');
   // 'force' makes Strava always show the consent screen — without
   // it, returning users silently re-issue a token that may not
   // include the writes scope we added later.

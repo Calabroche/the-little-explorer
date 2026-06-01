@@ -75,18 +75,22 @@ function stravaProvider() {
     authorization: {
       url:    STRAVA_AUTH_URL,
       params: {
-        // `activity:write` is REQUIRED for /api/strava/upload-activity
-        // (Watch standalone rides → Strava). Without it, Strava
-        // returns 403 on every POST to /api/v3/uploads with no
-        // recovery path. Users who connected before this scope was
-        // added need to disconnect + reconnect Strava once from
-        // /settings to re-grant — there's no in-place way to upgrade
-        // a token's scope on Strava's API.
-        scope:          'read,activity:read_all,activity:write',
+        // `activity:write` REMOVED — Strava requires manual
+        // "Upload to Strava" approval to grant this scope. Without
+        // approval their servers respond with a HARD 500 (not 401)
+        // on every subsequent API call including /athlete, which
+        // breaks OAuth sign-in entirely. Symptom: Vercel logs show
+        // `OPError: expected 200 OK, got: 500 Internal Server
+        // Error at BaseClient.userinfo` and the user sees
+        // ?error=OAuthCallback. Re-add this scope once Strava
+        // approves the upload tier; in the meantime
+        // /api/strava/upload-activity will 403 on Watch rides and
+        // the Watch app falls back to local-only ride storage.
+        scope:          'read,activity:read_all',
         // Force the consent screen even for users who previously
         // authorized — Strava skips the prompt when scopes look
-        // familiar, which would silently re-issue a token *without*
-        // the new write scope.
+        // familiar, which would silently re-issue an out-of-date
+        // token if we ever change scopes again.
         approval_prompt: 'force',
         response_type:  'code',
       },

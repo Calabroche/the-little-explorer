@@ -122,13 +122,14 @@ export async function GET(req: NextRequest) {
 
   // 3a. Update the user's row with athlete_id + scope so the sidebar
   // recognises them as a Strava-linked user (drives the "Connecter
-  // Strava" button visibility).
+  // Strava" button visibility). Scope matches the authorize call —
+  // see lib/auth.ts for why activity:write is dropped for now.
   const { error: userErr } = await supabase
     .schema('next_auth')
     .from('users')
     .update({
       athlete_id:   athleteId,
-      strava_scope: 'read,activity:read_all,activity:write',
+      strava_scope: 'read,activity:read_all',
     })
     .eq('id', sessionUserId);
   if (userErr) {
@@ -148,7 +149,7 @@ export async function GET(req: NextRequest) {
     access_token:      tokens.access_token,
     expires_at:        tokens.expires_at,
     token_type:        'Bearer',
-    scope:             'read,activity:read_all,activity:write',
+    scope:             'read,activity:read_all',
   };
   // Clean up any existing row that would collide on insert. Two
   // possible collisions:
