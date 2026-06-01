@@ -117,7 +117,19 @@ export async function POST(req: NextRequest) {
   if (!tokenRes.ok) {
     const txt = await tokenRes.text();
     console.error('[strava-sync] token refresh failed:', tokenRes.status, txt.slice(0, 200));
-    return NextResponse.json({ error: 'token_refresh_failed' }, { status: 502 });
+    // 400 / 401 mean the refresh_token is gone (revoked by the
+    // rider via strava.com, or rotated past the one we cached).
+    // Surface that as `needs_reconnect` so the sidebar shows a
+    // "Reconnecter Strava" CTA instead of just an error.
+    const status = tokenRes.status;
+    return NextResponse.json(
+      {
+        error:           status === 400 || status === 401 ? 'token_revoked_needs_reconnect' : 'token_refresh_failed',
+        stravaStatus:    status,
+        stravaBody:      txt.slice(0, 200),
+      },
+      { status: 502 },
+    );
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tokenData = await tokenRes.json() as any;

@@ -542,10 +542,12 @@ function ProfileSection() {
   // refetch via a parent callback, but a full reload is simpler and
   // matches what the auto-sync useEffect does after a first connection.
   const [resyncErrorMessage, setResyncErrorMessage] = useState<string | null>(null);
+  const [resyncNeedsReconnect, setResyncNeedsReconnect] = useState(false);
   const resync = useCallback(async () => {
     if (resyncState === 'busy') return;
     setResyncState('busy');
     setResyncErrorMessage(null);
+    setResyncNeedsReconnect(false);
     try {
       const r = await fetch('/api/strava/sync', { method: 'POST' });
       if (!r.ok) {
@@ -559,15 +561,23 @@ function ProfileSection() {
         try {
           const body = await r.json() as { error?: string; stravaStatus?: number; athleteEndpointStatus?: number; athleteEndpointBody?: string };
           if (body?.error) {
-            detail = `${body.error} (HTTP ${r.status})`;
-            if (body.stravaStatus) {
-              detail += ` · Strava /activities: ${body.stravaStatus}`;
-            }
-            if (body.athleteEndpointStatus) {
-              detail += ` · /athlete: ${body.athleteEndpointStatus}`;
-            }
-            if (body.athleteEndpointBody && body.athleteEndpointStatus !== 200) {
-              detail += ` · body: ${body.athleteEndpointBody.slice(0, 120)}`;
+            // Revoked-token case has its own dedicated UX path —
+            // a "Reconnecter Strava" button replaces the generic
+            // retry. Set a flag so the JSX below renders it.
+            if (body.error === 'token_revoked_needs_reconnect') {
+              setResyncNeedsReconnect(true);
+              detail = "Ton autorisation Strava a été révoquée (ou a expiré). Reconnecte-toi pour générer un nouveau token.";
+            } else {
+              detail = `${body.error} (HTTP ${r.status})`;
+              if (body.stravaStatus) {
+                detail += ` · Strava /activities: ${body.stravaStatus}`;
+              }
+              if (body.athleteEndpointStatus) {
+                detail += ` · /athlete: ${body.athleteEndpointStatus}`;
+              }
+              if (body.athleteEndpointBody && body.athleteEndpointStatus !== 200) {
+                detail += ` · body: ${body.athleteEndpointBody.slice(0, 120)}`;
+              }
             }
           }
         } catch { /* response wasn't JSON */ }
@@ -734,6 +744,28 @@ function ProfileSection() {
         }}>
           {resyncErrorMessage}
         </div>
+      )}
+      {resyncNeedsReconnect && (
+        // Dedicated CTA for the revoked-token case. /api/connect/strava/start
+        // re-runs the OAuth flow and writes fresh tokens to the
+        // existing user row — no extra plumbing needed.
+        <button
+          onClick={() => { window.location.href = '/api/connect/strava/start'; }}
+          style={{
+            width: '100%',
+            padding: '8px 10px',
+            marginBottom: 8,
+            background: '#FC4C02',
+            border: '1px solid #FC4C02',
+            borderRadius: 3,
+            color: '#fff',
+            fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 700,
+            letterSpacing: '0.04em',
+            cursor: 'pointer',
+          }}
+        >
+          ↻ RECONNECTER STRAVA
+        </button>
       )}
 
       <a
