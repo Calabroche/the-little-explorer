@@ -181,14 +181,23 @@ export async function GET(req: NextRequest) {
     return redirectWithError(req, 'strava_persist_account');
   }
 
-  // ── 4. Kick off a background sync so activities show up fast ──
-  // Fire-and-forget — the home page will refetch on focus anyway.
-  const proto = req.headers.get('x-forwarded-proto') ?? 'https';
-  const host  = req.headers.get('host') ?? req.nextUrl.host;
-  void fetch(`${proto}://${host}/api/strava/sync?force=1`, {
-    method:  'POST',
-    headers: { cookie: req.headers.get('cookie') ?? '' },
-  }).catch(err => console.warn('[connect/strava] kickoff sync failed:', err));
+  // ── 4. NO automatic kickoff sync. ─────────────────────────────
+  //
+  // We intentionally do NOT auto-fire /api/strava/sync from here.
+  //
+  // Strava rotates the refresh_token on every /oauth/token call
+  // (the new token in the response invalidates the old one). If we
+  // fire-and-forget a sync here AND the user clicks "RE-SYNCER" on
+  // the home page before the kickoff finishes its DB UPDATE,
+  // both calls race for the same refresh_token — one rotates it,
+  // the other 400s with "invalid refresh_token". The UI then shows
+  // "✗ ÉCHEC — RÉESSAYER" even though the connection itself worked.
+  //
+  // Resolution: the home page shows "Synchronisation en cours…" and
+  // the sidebar's RE-SYNCER button gives the user a clear, single-
+  // attempt manual trigger. One click → one token rotation → done.
+  // A future cron job can replace the manual click once the multi-
+  // user surface is bigger; for now manual is more robust.
 
   // ── 5. Redirect home with a success banner. ───────────────────
   const successUrl = new URL('/', req.url);

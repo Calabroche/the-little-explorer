@@ -541,17 +541,30 @@ function ProfileSection() {
   // re-fetches with the freshly inserted rows. We could do a softer
   // refetch via a parent callback, but a full reload is simpler and
   // matches what the auto-sync useEffect does after a first connection.
+  const [resyncErrorMessage, setResyncErrorMessage] = useState<string | null>(null);
   const resync = useCallback(async () => {
     if (resyncState === 'busy') return;
     setResyncState('busy');
+    setResyncErrorMessage(null);
     try {
       const r = await fetch('/api/strava/sync', { method: 'POST' });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      if (!r.ok) {
+        // Try to surface the server's error code so the user can
+        // tell "token expired" from "strava_not_connected" from
+        // an unknown 500 — otherwise every failure looks identical.
+        let detail = `HTTP ${r.status}`;
+        try {
+          const body = await r.json() as { error?: string };
+          if (body?.error) detail = `${body.error} (HTTP ${r.status})`;
+        } catch { /* response wasn't JSON */ }
+        throw new Error(detail);
+      }
       setResyncState('done');
       // Reload so all the cached activities + stats pick up the new data.
       window.location.reload();
     } catch (err) {
       console.error('[resync] failed:', err);
+      setResyncErrorMessage((err as Error).message || 'inconnue');
       setResyncState('error');
     }
   }, [resyncState]);
@@ -689,6 +702,24 @@ function ProfileSection() {
               ? '✗ ÉCHEC — RÉESSAYER'
               : '↻ RE-SYNCER STRAVA'}
         </button>
+      )}
+      {resyncState === 'error' && resyncErrorMessage && (
+        // Show the actual server error code so the user can either
+        // act on it themselves (e.g. "token_refresh_failed" → reconnect
+        // Strava) or paste it into a message to Florian. Without this
+        // every failure mode looked the same.
+        <div style={{
+          marginBottom: 8,
+          padding: '6px 8px',
+          background: '#FFF4F4',
+          border: '1px solid #FCC',
+          borderRadius: 3,
+          fontFamily: "'Space Grotesk'", fontSize: 10,
+          color: '#A00', lineHeight: 1.45,
+          wordBreak: 'break-word',
+        }}>
+          {resyncErrorMessage}
+        </div>
       )}
 
       <a
