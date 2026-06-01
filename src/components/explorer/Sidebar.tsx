@@ -557,7 +557,7 @@ function ProfileSection() {
         // itself was 500'ing or rejecting their token.
         let detail = `HTTP ${r.status}`;
         try {
-          const body = await r.json() as { error?: string; stravaStatus?: number; athleteEndpointStatus?: number };
+          const body = await r.json() as { error?: string; stravaStatus?: number; athleteEndpointStatus?: number; athleteEndpointBody?: string };
           if (body?.error) {
             detail = `${body.error} (HTTP ${r.status})`;
             if (body.stravaStatus) {
@@ -565,6 +565,9 @@ function ProfileSection() {
             }
             if (body.athleteEndpointStatus) {
               detail += ` · /athlete: ${body.athleteEndpointStatus}`;
+            }
+            if (body.athleteEndpointBody && body.athleteEndpointStatus !== 200) {
+              detail += ` · body: ${body.athleteEndpointBody.slice(0, 120)}`;
             }
           }
         } catch { /* response wasn't JSON */ }

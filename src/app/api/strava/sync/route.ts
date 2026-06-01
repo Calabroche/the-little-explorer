@@ -147,14 +147,23 @@ export async function POST(req: NextRequest) {
   // The result is surfaced into the error payload below so the
   // sidebar can show a more specific message.
   let tokenSanityStatus = 0;
+  let tokenSanityBody = '';
   try {
     const athleteRes = await fetch('https://www.strava.com/api/v3/athlete', {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     tokenSanityStatus = athleteRes.status;
+    tokenSanityBody   = (await athleteRes.text()).slice(0, 500);
+    // Log everything (status + truncated body + truncated token)
+    // so we can root-cause the Strava-500-on-/athlete pattern that
+    // multiple users are hitting. Token is logged at first/last 6
+    // chars only — enough to verify on subsequent calls without
+    // pasting a full credential into Vercel logs.
+    const tokenFingerprint = `${accessToken.slice(0, 6)}…${accessToken.slice(-6)}`;
     if (!athleteRes.ok) {
-      const body = (await athleteRes.text()).slice(0, 200);
-      console.warn('[strava-sync] /athlete sanity returned', athleteRes.status, body);
+      console.warn('[strava-sync] /athlete sanity FAILED status=' + athleteRes.status + ' tok=' + tokenFingerprint + ' body=' + tokenSanityBody);
+    } else {
+      console.log('[strava-sync] /athlete sanity OK tok=' + tokenFingerprint);
     }
   } catch (err) {
     console.warn('[strava-sync] /athlete sanity threw:', err);
@@ -210,6 +219,7 @@ export async function POST(req: NextRequest) {
             // tell "Strava is down for me on activities only" vs
             // "Strava rejects everything" (probably a token issue).
             athleteEndpointStatus: tokenSanityStatus,
+            athleteEndpointBody:   tokenSanityBody,
           },
           { status: 502 },
         );
