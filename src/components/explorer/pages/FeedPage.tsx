@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSession, signIn } from 'next-auth/react';
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
@@ -24,8 +24,52 @@ import { useT } from '@/i18n';
 //
 // Both paths bypass the rest of the feed UI (charts, widgets, goals…)
 // which all look broken on an empty data set.
+/**
+ * Maps `?error=strava_*` codes that come back from
+ * /api/connect/strava/callback into a French explanation.
+ * `?strava=connected` instead surfaces a green success banner.
+ * Returns null when there's nothing to surface (the common case).
+ */
+function useConnectStravaBanner(): { tone: 'ok' | 'err'; text: string } | null {
+  const [banner, setBanner] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const ok  = params.get('strava');
+    const err = params.get('error');
+    if (ok === 'connected') {
+      setBanner({ tone: 'ok', text: 'Strava connecté — tes sorties commencent à apparaître ci-dessous.' });
+    } else if (err?.startsWith('strava_')) {
+      const reasons: Record<string, string> = {
+        strava_no_session:        "Ta session a expiré pendant la connexion. Recharge la page et réessaie.",
+        strava_denied:            "Tu as refusé l'autorisation côté Strava. Reclique \"Connecter Strava\" si c'était par accident.",
+        strava_no_code:           "Strava n'a pas renvoyé de code d'autorisation. Réessaie.",
+        strava_no_state_cookie:   "Le cookie de sécurité a expiré (10 min). Reclique \"Connecter Strava\".",
+        strava_bad_cookie:        "Cookie de sécurité corrompu. Reclique \"Connecter Strava\".",
+        strava_state_mismatch:    "Le code de sécurité ne matche pas. Reclique \"Connecter Strava\".",
+        strava_state_expired:     "La demande a expiré. Reclique \"Connecter Strava\".",
+        strava_misconfigured:     "L'app a un souci de config Strava — écris à Florian.",
+        strava_token_exchange:    "Strava a refusé d'échanger ton code. Si ça persiste, écris à Florian.",
+        strava_no_athlete:        "Strava n'a pas renvoyé d'identifiant d'athlète. Très inhabituel — écris à Florian.",
+        strava_persist_user:      "Connexion OK mais on n'a pas pu sauver ton profil. Recharge et réessaie.",
+        strava_persist_account:   "Connexion OK mais on n'a pas pu sauver tes credentials. Recharge et réessaie.",
+      };
+      setBanner({ tone: 'err', text: reasons[err] ?? 'Connexion Strava échouée — réessaie.' });
+    }
+    // Clean the URL so a refresh doesn't keep showing the banner.
+    if (ok || err?.startsWith('strava_')) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('strava');
+      url.searchParams.delete('error');
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, []);
+  return banner;
+}
+
 function EmptyFeedState({ athleteId, displayName }: { athleteId: number | null; displayName: string }) {
   const isMobile = useIsMobile();
+  const banner   = useConnectStravaBanner();
   return (
     <div style={{
       maxWidth: 720,
@@ -50,6 +94,22 @@ function EmptyFeedState({ athleteId, displayName }: { athleteId: number | null; 
           {athleteId ? 'Synchronisation en cours…' : 'Ton compte est créé.'}
         </em>
       </h2>
+
+      {banner && (
+        <div style={{
+          padding:      '10px 12px',
+          marginBottom: 16,
+          background:   banner.tone === 'ok' ? '#EFF7EE' : '#FEE',
+          border:       `1px solid ${banner.tone === 'ok' ? '#CDE5C9' : '#FCC'}`,
+          color:        banner.tone === 'ok' ? '#2E5C2A' : '#A00',
+          borderRadius: 4,
+          fontFamily:   "'Space Grotesk'",
+          fontSize:     12,
+          lineHeight:   1.55,
+        }}>
+          {banner.text}
+        </div>
+      )}
 
       {athleteId == null ? (
         <>

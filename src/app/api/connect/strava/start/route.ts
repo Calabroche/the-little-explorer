@@ -86,7 +86,11 @@ export async function GET(req: NextRequest) {
     name:     'tle_strava_link',
     value:    stateCookieValue,
     httpOnly: true,
-    secure:   true,
+    // `secure: true` would block the cookie on local http://
+    // localhost dev. Gate it on NODE_ENV so prod (always HTTPS on
+    // Vercel) still gets the strict behaviour but `next dev` works
+    // for the developer testing the link flow.
+    secure:   process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path:     '/',
     maxAge:   60 * 10,  // 10 minutes

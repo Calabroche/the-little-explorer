@@ -274,7 +274,7 @@ export function buildAuthOptions(): AuthOptions {
             const { data } = await supabaseAdmin()
               .schema('next_auth')
               .from('users')
-              .select('session_invalidated_at, onboarded_at')
+              .select('session_invalidated_at, onboarded_at, athlete_id')
               .eq('id', token.uid)
               .maybeSingle();
             const cutoff = data?.session_invalidated_at
@@ -290,6 +290,18 @@ export function buildAuthOptions(): AuthOptions {
               // middleware sees the latest value within one request
               // after /api/me/onboarding/complete fires.
               token.onboardedAt = data?.onboarded_at ?? null;
+              // Also refresh athleteId on every read — critical for
+              // the post-link flow: when a user goes through
+              // /api/connect/strava and that custom endpoint writes
+              // athlete_id directly to the DB (bypassing NextAuth's
+              // user creation), the JWT in their cookie still says
+              // null until they sign out/in. Re-reading here surfaces
+              // the new value on the next request so the sidebar's
+              // "+ Connecter Strava" button correctly disappears
+              // without forcing a manual log out.
+              if (data?.athlete_id != null) {
+                token.athleteId = Number(data.athlete_id);
+              }
             }
           } catch (err) {
             console.error('[auth] session/onboarded lookup failed:', err);

@@ -150,16 +150,27 @@ export async function GET(req: NextRequest) {
     token_type:        'Bearer',
     scope:             'read,activity:read_all,activity:write',
   };
-  // No native UPSERT path through PostgREST without a primary key
-  // touch, so do delete-then-insert in a single roundtrip pair.
-  // If the user re-connects (re-grants scope), this cleanly replaces
-  // the old row instead of duplicating it.
+  // Clean up any existing row that would collide on insert. Two
+  // possible collisions:
+  //   1. (userId, provider) — same TLE user re-connecting Strava.
+  //   2. (provider, providerAccountId) — UNIQUE constraint on the
+  //      table. Hit when the same Strava athlete was previously
+  //      connected to a different TLE user (rare but possible:
+  //      account merging / abandoned dummy accounts).
+  // We delete on BOTH match patterns so the INSERT below always
+  // succeeds.
   await supabase
     .schema('next_auth')
     .from('accounts')
     .delete()
     .eq('userId',   sessionUserId)
     .eq('provider', 'strava');
+  await supabase
+    .schema('next_auth')
+    .from('accounts')
+    .delete()
+    .eq('provider',          'strava')
+    .eq('providerAccountId', String(athleteId));
 
   const { error: accountErr } = await supabase
     .schema('next_auth')
