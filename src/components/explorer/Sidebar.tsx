@@ -643,7 +643,11 @@ function ProfileSection() {
 
       {!stravaLinked && (
         <button
-          onClick={() => signIn('strava', { callbackUrl: '/' })}
+          // /api/connect/strava/start links Strava to the existing
+          // signed-in user. NextAuth's signIn('strava') would try to
+          // create a new user and fail — see the start route for the
+          // full rationale.
+          onClick={() => { window.location.href = '/api/connect/strava/start'; }}
           style={{
             width: '100%',
             padding: '8px 10px',

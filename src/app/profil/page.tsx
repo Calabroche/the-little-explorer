@@ -131,7 +131,11 @@ export default function ProfilPage() {
           {/* Connect-Strava CTA when not linked */}
           {!stravaLinked && (
             <button
-              onClick={() => signIn('strava', { callbackUrl: '/' })}
+              // Custom link-account endpoint, not NextAuth's signIn —
+              // user is already authed (otherwise they couldn't see
+              // /profil), so we ATTACH Strava to the current row
+              // instead of letting NextAuth fork a new user.
+              onClick={() => { window.location.href = '/api/connect/strava/start'; }}
               style={{
                 ...buttonStyle,
                 background: '#FC4C02',

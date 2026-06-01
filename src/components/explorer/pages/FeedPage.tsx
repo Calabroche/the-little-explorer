@@ -63,7 +63,12 @@ function EmptyFeedState({ athleteId, displayName }: { athleteId: number | null; 
               cap or Strava ever revokes it. */}
 
           <button
-            onClick={() => signIn('strava', { callbackUrl: '/' })}
+            // Custom link-account endpoint, NOT NextAuth's signIn —
+            // signIn('strava') would try to create a brand-new user
+            // because Strava's synthetic email doesn't match the
+            // user's Google email. /api/connect/strava/start
+            // attaches Strava to the *existing* signed-in user.
+            onClick={() => { window.location.href = '/api/connect/strava/start'; }}
             style={{
               padding: '12px 22px',
               background: '#FC4C02',

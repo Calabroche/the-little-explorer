@@ -119,7 +119,12 @@ export default function OnboardingPage() {
   const connectStrava = async () => {
     await fireEvent('onboarding_step_strava_connected', { sport });
     await markComplete();
-    void signIn('strava', { callbackUrl: '/' });
+    // Use the custom link-account endpoint instead of NextAuth's
+    // signIn — the user is already authed here (Google), so we want
+    // to ATTACH Strava credentials to the existing account, not
+    // create a parallel "strava-only" user that NextAuth would
+    // otherwise spawn (and then fail to link).
+    window.location.href = '/api/connect/strava/start';
   };
 
   const skipStrava = async () => {
