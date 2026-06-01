@@ -17,8 +17,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { buildAuthOptions } from '@/lib/auth';
+import { getAuthedUser } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/db';
 
 interface StateCookie {
@@ -46,11 +45,14 @@ function redirectWithError(req: NextRequest, code: string): NextResponse {
 }
 
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(buildAuthOptions());
-  const sessionUserId = (session as unknown as { user?: { id?: string } })?.user?.id;
-  if (!sessionUserId) {
+  // Same helper the rest of /api/* uses — handles both NextAuth
+  // cookie and Bearer-token auth, and is App-Router-safe (unlike a
+  // raw 'next-auth' import).
+  const authed = await getAuthedUser(req);
+  if (!authed?.id) {
     return redirectWithError(req, 'strava_no_session');
   }
+  const sessionUserId = authed.id;
 
   // ── 1. Validate state ─────────────────────────────────────────
   const url     = new URL(req.url);

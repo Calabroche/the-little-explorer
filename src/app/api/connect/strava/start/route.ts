@@ -26,20 +26,25 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { buildAuthOptions } from '@/lib/auth';
+import { getAuthedUser } from '@/lib/api-auth';
 import crypto from 'crypto';
 
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(buildAuthOptions());
-  // Cast through `unknown`: NextAuth's default Session type doesn't
-  // declare user.id, but our session callback in auth.ts sets it.
-  const userId = (session as unknown as { user?: { id?: string } })?.user?.id;
-  if (!userId) {
+  // Use the shared getAuthedUser helper instead of getServerSession
+  // directly — it knows about both the NextAuth cookie path and the
+  // Bearer-token path used by the iOS client, and routes through
+  // 'next-auth/next' which is the App-Router-compatible entrypoint.
+  // An earlier version of this file imported from 'next-auth' which
+  // returned null sessions in App-Router route handlers (despite a
+  // valid cookie), trapping users in a redirect loop on the
+  // welcome page.
+  const authed = await getAuthedUser(req);
+  if (!authed?.id) {
     const url = new URL('/login', req.url);
     url.searchParams.set('callbackUrl', '/');
     return NextResponse.redirect(url);
   }
+  const userId = authed.id;
 
   const clientId = process.env.STRAVA_CLIENT_ID;
   if (!clientId) {
