@@ -139,6 +139,27 @@ export async function POST(req: NextRequest) {
       .eq('provider', 'strava');
   }
 
+  // ── 2.5 Token sanity check ─────────────────────────
+  // Hit a cheap endpoint first (/athlete returns the rider's
+  // profile) so we can distinguish "Strava rejecting the token"
+  // (401/403) from "Strava broken on /activities specifically"
+  // (500) from "this rider's account is broken" (500 everywhere).
+  // The result is surfaced into the error payload below so the
+  // sidebar can show a more specific message.
+  let tokenSanityStatus = 0;
+  try {
+    const athleteRes = await fetch('https://www.strava.com/api/v3/athlete', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    tokenSanityStatus = athleteRes.status;
+    if (!athleteRes.ok) {
+      const body = (await athleteRes.text()).slice(0, 200);
+      console.warn('[strava-sync] /athlete sanity returned', athleteRes.status, body);
+    }
+  } catch (err) {
+    console.warn('[strava-sync] /athlete sanity threw:', err);
+  }
+
   // ── 3. Fetch full list of activities (paginated) ──
   // Strava caps per_page at 200. Loop until we get a short page (= last
   // one) or hit the MAX_PAGES safety cap. 10 pages = 2000 activities,
@@ -182,9 +203,13 @@ export async function POST(req: NextRequest) {
       if (page === 1) {
         return NextResponse.json(
           {
-            error:        'activities_fetch_failed',
-            stravaStatus: lastStravaStatus,
-            stravaBody:   lastStravaBody,
+            error:             'activities_fetch_failed',
+            stravaStatus:      lastStravaStatus,
+            stravaBody:        lastStravaBody,
+            // Sanity check on a different endpoint helps the user
+            // tell "Strava is down for me on activities only" vs
+            // "Strava rejects everything" (probably a token issue).
+            athleteEndpointStatus: tokenSanityStatus,
           },
           { status: 502 },
         );
