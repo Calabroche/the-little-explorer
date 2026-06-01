@@ -154,6 +154,17 @@ export function buildAuthOptions(): AuthOptions {
     // accounts; only the session itself lives in the JWT now.
     session: { strategy: 'jwt' as const },
     secret:  process.env.NEXTAUTH_SECRET,
+    // Trust the request's Host header rather than locking everything
+    // to NEXTAUTH_URL. Vercel routinely surfaces the app under both
+    // the production domain (the-little-explorer-app.vercel.app) AND
+    // preview deployment URLs (PR-specific). Without trustHost,
+    // NextAuth signs the OAuth state cookie for one host and refuses
+    // it on the other, producing a phantom OAuthCallback error.
+    trustHost: true,
+    // Temporarily ON in prod while we hunt down a recurring
+    // OAuthCallback on Strava sign-in. Drop back to NODE_ENV !==
+    // 'production' once we have a stable diagnosis.
+    debug: true,
     callbacks: {
       /**
        * Fired after the OAuth flow returns. For Strava we use this hook to

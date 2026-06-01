@@ -265,6 +265,13 @@ export default function LoginPage() {
                 lineHeight:   1.5,
               }}>
                 {friendlyAuthError(error)}
+                {/* Raw NextAuth code in a small caption so Florian can
+                    paste it in a debug message — and so the friendly
+                    text isn't the only signal during the active hunt
+                    for the Strava-callback failure. */}
+                <div style={{ marginTop: 6, fontSize: 10, fontWeight: 600, opacity: 0.75 }}>
+                  code : <code>{error}</code>
+                </div>
               </div>
             )}
 
