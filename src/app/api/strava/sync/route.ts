@@ -104,15 +104,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'strava_client_not_configured' }, { status: 500 });
   }
 
+  // Use form-encoded body + explicit User-Agent + Accept. Strava's
+  // OAuth endpoint accepts JSON but some of its edge nodes return
+  // a vague 500 ({"message":"error"}) when called without a
+  // User-Agent — a known footgun for Vercel functions, whose
+  // default `fetch` omits the header. Belt-and-suspenders here so
+  // the refresh path is bulletproof.
   const tokenRes = await fetch(STRAVA_TOKEN_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Accept':       'application/json',
+      'User-Agent':   'TheLittleExplorer/0.1 (+https://the-little-explorer-app.vercel.app)',
+    },
+    body: new URLSearchParams({
       client_id:     clientId,
       client_secret: clientSecret,
       grant_type:    'refresh_token',
       refresh_token: refreshToken,
-    }),
+    }).toString(),
   });
   if (!tokenRes.ok) {
     const txt = await tokenRes.text();
@@ -162,7 +172,11 @@ export async function POST(req: NextRequest) {
   let tokenSanityBody = '';
   try {
     const athleteRes = await fetch('https://www.strava.com/api/v3/athlete', {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept:        'application/json',
+        'User-Agent':  'TheLittleExplorer/0.1 (+https://the-little-explorer-app.vercel.app)',
+      },
     });
     tokenSanityStatus = athleteRes.status;
     tokenSanityBody   = (await athleteRes.text()).slice(0, 500);
@@ -201,7 +215,11 @@ export async function POST(req: NextRequest) {
     let lastStravaBody = '';
     while (attempt < 3) {
       r = await fetch(`${STRAVA_ACTIVITIES_URL}?per_page=200&page=${page}`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept:        'application/json',
+          'User-Agent':  'TheLittleExplorer/0.1 (+https://the-little-explorer-app.vercel.app)',
+        },
       });
       if (r.ok) break;
       lastStravaStatus = r.status;

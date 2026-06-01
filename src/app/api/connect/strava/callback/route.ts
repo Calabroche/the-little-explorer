@@ -95,7 +95,14 @@ export async function GET(req: NextRequest) {
 
   const tokenRes = await fetch('https://www.strava.com/api/v3/oauth/token', {
     method:  'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Accept':       'application/json',
+      // Vercel-fetch omits User-Agent by default. Strava's edge
+      // sometimes 500s on Bearer requests without one. Send a
+      // proper UA for every Strava call we make.
+      'User-Agent':   'TheLittleExplorer/0.1 (+https://the-little-explorer-app.vercel.app)',
+    },
     body:    new URLSearchParams({
       client_id:     clientId,
       client_secret: clientSecret,
