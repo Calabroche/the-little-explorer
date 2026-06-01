@@ -127,18 +127,20 @@ const STYLES = `
 
 /**
  * Map raw NextAuth error codes (?error=…) to French explanations.
- * Specifically: OAuthCallback hits when Strava's API rejects a token
- * exchange — which on this app almost always means we've hit the
- * 1-athlete quota cap. Surfacing that explicitly is way kinder than
- * "Erreur de connexion : OAuthCallback".
+ * Most failures here are transient (network blip, user denied the
+ * authorize prompt, expired state token). The Strava 1-athlete-quota
+ * scenario that used to be the dominant case is gone — Strava
+ * approved the 10-athlete tier — so the copy now reads as a
+ * generic "try again" instead of pointing every user at the dev.
  */
 function friendlyAuthError(code: string): string {
   switch (code) {
     case 'OAuthCallback':
-    case 'OAuthAccountNotLinked':
     case 'OAuthSignin':
     case 'Callback':
-      return "Strava n'a pas pu valider ta connexion. C'est presque toujours le quota 1-athlète : Florian doit ajouter ton adresse à la liste autorisée. En attendant tu peux continuer en Google ; ton Strava se branchera tout seul une fois validé.";
+      return "La connexion Strava a échoué. Réessaie dans un instant — si ça persiste, signe en Google et écris à Florian.";
+    case 'OAuthAccountNotLinked':
+      return "Cet email est déjà lié à un autre compte. Utilise le même fournisseur que la première fois (Google ou Strava).";
     case 'AccessDenied':
       return "Tu as refusé l'autorisation côté Strava — clique à nouveau si c'était par accident.";
     case 'Verification':
@@ -246,25 +248,9 @@ export default function LoginPage() {
               ton compte sera créé automatiquement.
             </p>
 
-            {/* Strava quota notice — visible until Strava grants the
-                multi-athlete quota increase. Removable once they reply. */}
-            <div style={{
-              padding:      '10px 12px',
-              marginBottom: 24,
-              background:   '#FFF4E6',
-              border:       '1px solid #FFD8A6',
-              borderRadius: 4,
-              fontFamily:   "'Space Grotesk'",
-              fontSize:     11,
-              color:        '#8A4A00',
-              lineHeight:   1.55,
-            }}>
-              ℹ️ <strong>Accès Strava temporairement limité</strong> — l&apos;API
-              Strava plafonne l&apos;app à 1 athlète connecté pour l&apos;instant.
-              On a demandé l&apos;augmentation à Strava, en attente de réponse.
-              Si tu n&apos;es pas Florian : signe en Google pour le moment,
-              il activera ton Strava dès que possible.
-            </div>
+            {/* Strava quota notice removed — Strava granted the
+                10-athlete tier (2026-06). Re-add a banner if we ever
+                approach the cap or if Strava revokes it. */}
 
             {error && (
               <div style={{

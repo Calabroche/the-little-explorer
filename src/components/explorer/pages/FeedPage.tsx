@@ -58,30 +58,9 @@ function EmptyFeedState({ athleteId, displayName }: { athleteId: number | null; 
             et objectifs, il faut lier ton compte Strava à ton profil.
           </p>
 
-          {/* The quota disclaimer — same wording as /login so users
-              who arrive here from email/share recognise the situation. */}
-          <div style={{
-            padding: '12px 14px',
-            marginBottom: 20,
-            background: '#FFF4E6',
-            border: '1px solid #FFD8A6',
-            borderRadius: 4,
-            fontFamily: "'Space Grotesk'",
-            fontSize: 12,
-            color: '#8A4A00',
-            lineHeight: 1.55,
-          }}>
-            ℹ️ <strong>Note importante</strong> — l&apos;API Strava plafonne
-            actuellement l&apos;app à <strong>1 athlète connecté</strong>.
-            Florian (le dev) a demandé l&apos;augmentation à Strava et attend
-            la validation. Si tu cliques le bouton ci-dessous et que ça
-            renvoie une erreur 403, c&apos;est normal — c&apos;est juste
-            que Strava n&apos;a pas encore activé ton accès.
-            <br /><br />
-            En attendant, tu peux explorer l&apos;app et tes données
-            apparaîtront dès que Strava t&apos;ajoute. Pour précipiter
-            les choses, ping Florian directement (florian.calabrese@gmail.com).
-          </div>
+          {/* Quota disclaimer removed — Strava granted the 10-athlete
+              tier (2026-06). Re-add a banner here if we approach the
+              cap or Strava ever revokes it. */}
 
           <button
             onClick={() => signIn('strava', { callbackUrl: '/' })}
