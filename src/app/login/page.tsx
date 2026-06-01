@@ -26,7 +26,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { signIn } from 'next-auth/react';
+import { signIn, useSession } from 'next-auth/react';
 import { tokens } from '@/components/explorer/tokens';
 
 const BUTTON_BASE: React.CSSProperties = {
@@ -125,10 +125,34 @@ const STYLES = `
   }
 `;
 
+/**
+ * Map raw NextAuth error codes (?error=…) to French explanations.
+ * Specifically: OAuthCallback hits when Strava's API rejects a token
+ * exchange — which on this app almost always means we've hit the
+ * 1-athlete quota cap. Surfacing that explicitly is way kinder than
+ * "Erreur de connexion : OAuthCallback".
+ */
+function friendlyAuthError(code: string): string {
+  switch (code) {
+    case 'OAuthCallback':
+    case 'OAuthAccountNotLinked':
+    case 'OAuthSignin':
+    case 'Callback':
+      return "Strava n'a pas pu valider ta connexion. C'est presque toujours le quota 1-athlète : Florian doit ajouter ton adresse à la liste autorisée. En attendant tu peux continuer en Google ; ton Strava se branchera tout seul une fois validé.";
+    case 'AccessDenied':
+      return "Tu as refusé l'autorisation côté Strava — clique à nouveau si c'était par accident.";
+    case 'Verification':
+      return "Le lien de vérification a expiré. Reconnecte-toi pour en demander un autre.";
+    default:
+      return `Erreur de connexion : ${code}`;
+  }
+}
+
 export default function LoginPage() {
   const [error, setError]             = useState<string>('');
   const [busy, setBusy]               = useState<'' | 'google' | 'strava'>('');
   const [callbackUrl, setCallbackUrl] = useState<string>('/');
+  const { data: session, status }     = useSession();
 
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -142,6 +166,13 @@ export default function LoginPage() {
     const cb = url.searchParams.get('callbackUrl');
     if (cb && cb.startsWith('/')) setCallbackUrl(cb);
   }, []);
+
+  // If the user is already signed in (Google) and was bounced here
+  // by a Strava-OAuth failure mid-link, don't make them sign in again
+  // — show a short "you're already in" banner with a Return-to-app
+  // button. Prevents the loop where Hélena hits /login + error,
+  // clicks Strava again, hits the same 403, lands back on /login.
+  const alreadySignedIn = status === 'authenticated' && session?.user;
 
   const onClick = (provider: 'google' | 'strava') => {
     setBusy(provider);
@@ -245,10 +276,50 @@ export default function LoginPage() {
                 fontFamily:   "'Space Grotesk'",
                 fontSize:     12,
                 color:        '#A00',
+                lineHeight:   1.5,
               }}>
-                Erreur de connexion : <code style={{ fontWeight: 700 }}>{error}</code>
+                {friendlyAuthError(error)}
               </div>
             )}
+
+            {alreadySignedIn ? (
+              // User got bounced here mid-flow (typically: signed in
+              // via Google, tried to *link* Strava from /onboarding,
+              // Strava rejected → NextAuth dropped them on /login).
+              // Don't pretend they're logged out — give them a way
+              // back into the app instead.
+              <div style={{
+                padding: '14px 12px',
+                marginBottom: 12,
+                background: '#EFF7EE',
+                border: '1px solid #CDE5C9',
+                borderRadius: 4,
+                fontFamily: "'Space Grotesk'",
+                fontSize: 12,
+                color: '#2E5C2A',
+                lineHeight: 1.55,
+              }}>
+                Tu es déjà connecté(e) en tant que{' '}
+                <strong>{session?.user?.name ?? session?.user?.email ?? 'utilisateur'}</strong>.
+                Pas besoin de se reconnecter — Strava sera activé dès que possible.
+                <a
+                  href="/"
+                  style={{
+                    display: 'inline-block',
+                    marginTop: 10,
+                    padding: '8px 14px',
+                    background: tokens.terra,
+                    color: '#fff',
+                    fontWeight: 700,
+                    fontSize: 12,
+                    textDecoration: 'none',
+                    borderRadius: 3,
+                  }}
+                >
+                  Retour à l&apos;app →
+                </a>
+              </div>
+            ) : null}
 
             <button type="button" onClick={() => onClick('google')} disabled={busy !== ''} style={BUTTON_BASE}>
               <span style={{ fontSize: 16, fontWeight: 800 }}>G</span>
