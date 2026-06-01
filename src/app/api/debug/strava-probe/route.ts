@@ -154,5 +154,42 @@ export async function GET(req: NextRequest) {
     responseHeaders: captureHeaders(actRes),
   });
 
+  // 5. Try alternative endpoints. If /athlete is endpoint-specific
+  // broken on Strava's side but /athletes/{id} or /athletes/{id}/stats
+  // works, we can rewrite the sync to use those instead.
+  const athleteId = row.providerAccountId;
+  const altRes = await fetch(`https://www.strava.com/api/v3/athletes/${athleteId}/stats`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept:        'application/json',
+      'User-Agent':  UA,
+    },
+  });
+  const altBody = await altRes.text();
+  steps.push({
+    step:            `GET_athlete_stats(${athleteId})`,
+    ok:              altRes.ok,
+    status:          altRes.status,
+    bodyExcerpt:     altBody.slice(0, 600),
+    responseHeaders: captureHeaders(altRes),
+  });
+
+  // 6. Also try /athletes/{id} (specific athlete profile).
+  const altRes2 = await fetch(`https://www.strava.com/api/v3/athletes/${athleteId}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept:        'application/json',
+      'User-Agent':  UA,
+    },
+  });
+  const altBody2 = await altRes2.text();
+  steps.push({
+    step:            `GET_athletes_by_id(${athleteId})`,
+    ok:              altRes2.ok,
+    status:          altRes2.status,
+    bodyExcerpt:     altBody2.slice(0, 600),
+    responseHeaders: captureHeaders(altRes2),
+  });
+
   return NextResponse.json({ steps }, { status: 200 });
 }
