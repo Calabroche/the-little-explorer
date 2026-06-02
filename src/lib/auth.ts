@@ -286,12 +286,27 @@ export function buildAuthOptions(): AuthOptions {
         // `user` is populated) — fields are written from `user` then.
         if (!user && token?.uid) {
           try {
-            const { data } = await supabaseAdmin()
+            const { data, error } = await supabaseAdmin()
               .schema('next_auth')
               .from('users')
               .select('session_invalidated_at, onboarded_at, athlete_id')
               .eq('id', token.uid)
               .maybeSingle();
+
+            // User row is GONE — an admin deleted this account from
+            // /admin. Strip the identity so the session callback surfaces
+            // a null user id: the middleware (authorized: !!token.uid)
+            // refuses the next navigation and the client AuthGuard forces
+            // a clean sign-out to /login. We act only on a genuine "no
+            // row" (data null AND no error); a transient DB error leaves
+            // the token untouched so a blip doesn't log everyone out.
+            if (!error && data == null) {
+              delete token.uid;
+              delete token.athleteId;
+              delete token.onboardedAt;
+              return token;
+            }
+
             const cutoff = data?.session_invalidated_at
               ? Math.floor(new Date(data.session_invalidated_at as string).getTime() / 1000)
               : 0;

@@ -61,6 +61,17 @@ export default withAuth(
   },
   {
     pages: { signIn: '/login' },
+    callbacks: {
+      // A valid session always carries `uid` (set in the jwt callback on
+      // sign-in). When an admin deletes a user, that same callback strips
+      // `uid` on the next session read — so a token without `uid` means a
+      // deleted / invalidated account. Treat it as unauthenticated so
+      // withAuth bounces it to /login instead of letting the stale cookie
+      // through. (Default `authorized` is just `!!token`, which would
+      // wave a uid-less token straight in.)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      authorized: ({ token }: { token: any }) => Boolean(token?.uid),
+    },
   },
 );
 
