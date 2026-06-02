@@ -144,23 +144,58 @@ export default function AdminPage() {
         .tle-admin-title { font-size: 22px; }
         .tle-admin-header { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
         .tle-admin-header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        /* Mobile: every row is its own single-column stack — labels
+           inline. Headers (.tle-admin-table-head) hidden because
+           each card carries its own labels via .tle-admin-meta-label. */
+        .tle-admin-table { display: grid; grid-template-columns: 1fr; gap: 12px; }
         .tle-admin-userrow { display: grid; grid-template-columns: 1fr; gap: 12px; }
+        .tle-admin-table-head { display: none; }
         @media (min-width: 768px) {
           .tle-admin-title { font-size: 28px; }
           .tle-admin-header { flex-direction: row; align-items: baseline; justify-content: space-between; }
-          .tle-admin-userrow {
+          /* Desktop: the outer grid defines the column track widths
+             once. Each .tle-admin-userrow uses display: subgrid so
+             every cell aligns to the same vertical line across rows.
+             This was the missing piece on the previous redesign — each
+             row was its OWN grid with auto columns, so column widths
+             varied row-to-row and the table looked staggered. */
+          .tle-admin-table {
             grid-template-columns:
-              minmax(0, 1.8fr)      /* identity (avatar + name + uuid) */
-              minmax(0, 1.6fr)      /* email */
-              auto                   /* providers */
-              auto                   /* strava id */
-              auto                   /* activity count */
-              auto                   /* date */
-              auto;                  /* delete button */
+              minmax(220px, 1.6fr)   /* identity (avatar + name + uuid) */
+              minmax(180px, 1.4fr)   /* email */
+              140px                   /* providers */
+              110px                   /* strava id */
+              60px                    /* activity count */
+              110px                   /* date */
+              110px;                  /* delete button */
+            gap: 8px;
             align-items: center;
+          }
+          .tle-admin-userrow {
+            grid-template-columns: subgrid;
+            grid-column: 1 / -1;
             gap: 16px;
           }
+          /* Header row — same grid as the cards. Sits flush on top of
+             the first card with a subtle bottom border so the headers
+             feel like a proper table head. */
+          .tle-admin-table-head {
+            display: grid;
+            grid-template-columns: subgrid;
+            grid-column: 1 / -1;
+            padding: 4px 16px 8px;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--ink-light, #B0A99A);
+          }
           .tle-admin-meta-label { display: none !important; }
+          /* Activity count cell + the delete-button cell get
+             right-alignment so the column tracks themselves are
+             flush with the right-aligned header labels. */
+          .tle-admin-cell-activities { text-align: right; }
         }
       `}</style>
 
@@ -212,10 +247,22 @@ export default function AdminPage() {
               {loading ? 'Chargement…' : `${users.length} utilisateur${users.length > 1 ? 's' : ''}`}
             </div>
 
-            {/* Card stack on mobile, single-line grid row on
-                desktop — same JSX, the CSS up top swaps the
-                grid-template-columns based on viewport. */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {/* Card stack on mobile, sub-grid table rows on desktop.
+                On desktop the .tle-admin-table parent defines the
+                column track widths; the header row and every card
+                use grid-template-columns: subgrid so all rows align
+                cleanly. The header is hidden on mobile (CSS) since
+                each card carries its own inline labels there. */}
+            <div className="tle-admin-table">
+              <div className="tle-admin-table-head">
+                <div>Utilisateur</div>
+                <div>Email</div>
+                <div>Providers</div>
+                <div>Strava ID</div>
+                <div style={{ textAlign: 'right' }}>Sorties</div>
+                <div>Inscrit</div>
+                <div style={{ textAlign: 'right' }}>Actions</div>
+              </div>
               {users.map(u => (
                 <div
                   key={u.id}
@@ -289,8 +336,9 @@ export default function AdminPage() {
                     {u.athleteId ?? <span style={{ color: tokens.inkLight }}>—</span>}
                   </div>
 
-                  {/* Activities count */}
-                  <div style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: tokens.ink }}>
+                  {/* Activities count — right-aligned on desktop so the
+                      numbers stack visually under the "SORTIES" header. */}
+                  <div className="tle-admin-cell-activities" style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: tokens.ink }}>
                     <span className="tle-admin-meta-label" style={metaLabel}>Activités </span>
                     {u.activities}
                   </div>

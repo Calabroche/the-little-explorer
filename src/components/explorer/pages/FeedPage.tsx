@@ -607,6 +607,63 @@ export function FeedPage({ activities, stats, sport, onSelect }: Props) {
   const { t } = useT();
   const { data: session } = useSession();
 
+  // Auto-complete the sync pipeline on first landing. Some flows
+  // (signing in via Strava on /login → no ?strava=connected param)
+  // leave the user with a Strava-linked account but ZERO synced
+  // activities, or with summaries but no streams. Without this
+  // effect they'd have to find the RE-SYNCER STRAVA button to get
+  // a complete dashboard — every new user reported that.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sessionUser = session?.user as any;
+  const sessionAthleteId = sessionUser?.athleteId as number | null | undefined;
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!sessionAthleteId) return;
+    // Once-per-load guard so navigating sport tabs doesn't refire
+    // the sync chain mid-page.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((window as any).__tleAutoSyncFired) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).__tleAutoSyncFired = true;
+
+    // Three triggers to fire the auto-chain:
+    //   (a) freshly-linked Strava with zero activities → /sync
+    //       hasn't been run yet at all, kick the whole pipeline.
+    //   (b) we have summaries but a non-trivial number of rows are
+    //       missing GPS — typical post-bulk-import state.
+    // The endpoint loops idempotently and skips already-marked
+    // rows via the _streams_fetched_at sentinel, so even if (a)
+    // and (b) both fire, the net cost is one full sweep.
+    const noActivitiesYet  = activities.length === 0;
+    const missingMaps      = activities.filter(a => !a.gps || a.gps.length < 2).length;
+    const someMissing      = missingMaps > 0;
+
+    if (!noActivitiesYet && !someMissing) return;
+
+    void (async () => {
+      try {
+        if (noActivitiesYet) {
+          const r = await fetch('/api/strava/sync', { method: 'POST' });
+          if (!r.ok) return;
+        }
+        // Loop streams backfill until done — bounded by the
+        // endpoint's BATCH_SIZE (10/call), 50-iter outer cap so a
+        // pathological user with 500 stream-less rows still
+        // terminates.
+        for (let i = 0; i < 50; i++) {
+          const rr = await fetch('/api/strava/backfill-streams', { method: 'POST' });
+          if (!rr.ok) break;
+          const d = await rr.json() as { processed?: number; remaining?: number; done?: boolean };
+          if (d.done || ((d.processed ?? 0) === 0 && (d.remaining ?? 0) === 0)) break;
+        }
+        // Reload so the cards rerender against the freshly-synced
+        // payloads. Without this the user would have to manually
+        // refresh to see their just-loaded maps.
+        window.location.reload();
+      } catch { /* silent — manual RE-SYNCER STRAVA button still works */ }
+    })();
+  }, [sessionAthleteId, activities]);
+
   // Bike filter — null means "all bikes". Only meaningful when the
   // active sport is cycling AND the feed has activities tagged with
   // at least two distinct bikes (otherwise there's nothing to choose
