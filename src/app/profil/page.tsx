@@ -22,19 +22,50 @@ import { isAdminEmail } from '@/lib/admin';
 export default function ProfilPage() {
   const { data: session, status } = useSession();
   const [resyncState, setResyncState] = useState<'idle' | 'busy' | 'error'>('idle');
+  /// Sub-phase shown on the button while the resync is running.
+  /// Mirrors the desktop sidebar — "SYNCHRO ACTIVITÉS" while /sync
+  /// is hitting Strava, then "CHARGEMENT TRACÉS x/y" while we loop
+  /// /backfill-streams. Without this the mobile rider had no way to
+  /// tell whether their click did anything.
+  const [phase, setPhase]                 = useState<'syncing' | 'streaming' | null>(null);
+  const [streamProgress, setStreamProgress] = useState<{ done: number; total: number } | null>(null);
 
   const resync = useCallback(async () => {
     if (resyncState === 'busy') return;
     setResyncState('busy');
+    setPhase('syncing');
+    setStreamProgress(null);
     try {
       const r = await fetch('/api/strava/sync', { method: 'POST' });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
+
+      // Chain the streams backfill so the mobile rider gets maps +
+      // charts in one click, same as the desktop "RE-SYNCER STRAVA"
+      // button does. Without this, /profil's resync used to fetch
+      // summaries only, leaving every activity detail page with
+      // blank chart cards until the rider found the desktop sidebar
+      // button — which doesn't exist on mobile.
+      setPhase('streaming');
+      let totalProcessed = 0;
+      let initialRemaining: number | null = null;
+      for (let i = 0; i < 50; i++) {
+        const rr = await fetch('/api/strava/backfill-streams', { method: 'POST' });
+        if (!rr.ok) break;  // soft-fail — the summaries are saved, charts can come later
+        const d = await rr.json() as { processed: number; remaining: number; done: boolean };
+        totalProcessed += d.processed;
+        if (initialRemaining == null) initialRemaining = totalProcessed + d.remaining;
+        setStreamProgress({ done: totalProcessed, total: initialRemaining });
+        if (d.done || (d.processed === 0 && d.remaining === 0)) break;
+      }
+
       // Full reload so /api/activities re-fetches with the freshly
       // inserted rows. Matches the desktop ProfileSection behaviour.
       window.location.href = '/';
     } catch (err) {
       console.error('[resync] failed:', err);
       setResyncState('error');
+    } finally {
+      setPhase(null);
     }
   }, [resyncState]);
 
@@ -160,11 +191,15 @@ export default function ProfilPage() {
                 cursor:      resyncState === 'busy' ? 'wait' : 'pointer',
               }}
             >
-              {resyncState === 'busy'
-                ? 'SYNCHRO…'
-                : resyncState === 'error'
-                  ? '✗ ÉCHEC — RÉESSAYER'
-                  : '↻ RE-SYNCER STRAVA'}
+              {resyncState === 'busy' && phase === 'syncing'
+                ? 'SYNCHRO ACTIVITÉS…'
+                : resyncState === 'busy' && phase === 'streaming' && streamProgress
+                  ? `CHARGEMENT TRACÉS ${streamProgress.done}/${streamProgress.total}…`
+                  : resyncState === 'busy'
+                    ? 'SYNCHRO…'
+                    : resyncState === 'error'
+                      ? '✗ ÉCHEC — RÉESSAYER'
+                      : '↻ RE-SYNCER STRAVA'}
             </button>
           )}
 
