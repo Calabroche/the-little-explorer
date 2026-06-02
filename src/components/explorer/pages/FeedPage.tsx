@@ -32,6 +32,14 @@ import { useT } from '@/i18n';
  */
 function useConnectStravaBanner(): { tone: 'ok' | 'err'; text: string } | null {
   const [banner, setBanner] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
+  // Same JWT-cache problem as /onboarding: /api/connect/strava/callback
+  // wrote athleteId to next_auth.users, but our session cookie still
+  // has athleteId=null until we hit /api/auth/session. update() does
+  // exactly that. Without this, the sidebar's "+ Connecter Strava"
+  // button stays visible AND the middleware-side gating reads the
+  // stale token. Triggering it once on detect ?strava=connected
+  // closes the gap.
+  const { update: refreshSession } = useSession();
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
@@ -47,6 +55,9 @@ function useConnectStravaBanner(): { tone: 'ok' | 'err'; text: string } | null {
       // populated feed.
       void (async () => {
         try {
+          // Refresh the JWT cookie first so the rest of the page
+          // (and the next navigation) sees the new athleteId.
+          await refreshSession();
           const r = await fetch('/api/strava/sync', { method: 'POST' });
           if (!r.ok) return;  // ResyncErrorBanner via the sidebar will surface this on next click
           // Loop backfill until done, ignoring failures silently

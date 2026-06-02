@@ -29,7 +29,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { signIn } from 'next-auth/react';
+import { signIn, useSession } from 'next-auth/react';
 import { tokens } from '@/components/explorer/tokens';
 
 type Sport = 'cycling' | 'running' | 'both';
@@ -44,6 +44,13 @@ interface MeResponse {
 
 export default function OnboardingPage() {
   const router  = useRouter();
+  // `update` triggers NextAuth to re-issue the JWT cookie with the
+  // freshly-read onboarded_at — without it the middleware sees the
+  // pre-onboarding token and bounces back to /onboarding even after
+  // markComplete writes the DB. Without this fix, a user has to
+  // refresh / re-attempt several times before the redirect takes;
+  // 52c8bead-…-c7e4 reported filling out the flow 3 times.
+  const { update: refreshSession } = useSession();
   const [step,        setStep]        = useState<1 | 2 | 3>(1);
   const [me,          setMe]          = useState<MeResponse | null>(null);
   const [sport,       setSport]       = useState<Sport | null>(null);
@@ -136,12 +143,31 @@ export default function OnboardingPage() {
 
   const markComplete = async () => {
     try {
-      await fetch('/api/me/onboarding', {
+      const r = await fetch('/api/me/onboarding', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ op: 'complete', props: { sport } }),
       });
-    } catch { /* best-effort */ }
+      if (!r.ok) {
+        // Don't swallow the failure silently — the rider would
+        // otherwise be looped back to /onboarding indefinitely on
+        // next nav, with no clue why. We just log; the caller still
+        // proceeds to redirect, and the middleware will catch the
+        // missing onboarded_at and bring them back here so they can
+        // retry the final click.
+        console.error('[onboarding] markComplete returned non-OK:', r.status);
+      }
+    } catch (err) {
+      console.error('[onboarding] markComplete threw:', err);
+    }
+    // Critical: force NextAuth to hit /api/auth/session, which re-runs
+    // the jwt callback (which reads the FRESH onboarded_at + writes
+    // a new JWT cookie). Without this, the middleware on the next
+    // request reads the stale cookie and redirects right back here.
+    // The user who reported having to fill the flow 3 times was
+    // racing this exact gap — eventually the cookie naturally
+    // refreshed and the gate opened.
+    await refreshSession();
   };
 
   return (
