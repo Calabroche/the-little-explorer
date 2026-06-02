@@ -73,7 +73,14 @@ function pickBestPace(activities: Activity[], targetKm: number): PaceP | null {
 
 export function PersonalRecords({ activities, sport }: {
   activities: Activity[];
-  sport: 'cycling' | 'running' | 'hiking' | 'ski' | 'snowshoe' | 'walking' | 'swim' | 'yoga' | 'workout' | 'other';
+  sport:
+    | 'cycling' | 'running' | 'hiking' | 'walking' | 'swim' | 'snowshoe'
+    | 'ski' | 'snowboard' | 'iceSkate'
+    | 'yoga' | 'workout' | 'cardio'
+    | 'rowing' | 'kayak' | 'paddle' | 'surf' | 'sail'
+    | 'inlineSkate' | 'skateboard'
+    | 'climbing' | 'racket' | 'soccer' | 'golf' | 'wheelchair'
+    | 'other';
 }) {
   const { t, lang } = useT();
   const isMobile = useIsMobile();

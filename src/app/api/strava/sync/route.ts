@@ -45,50 +45,70 @@ const STRAVA_ACTIVITIES_URL = 'https://www.strava.com/api/v3/athlete/activities'
 // Sport mapping (same set as scripts/sync-strava.mjs + /api/activities).
 const CYCLING = new Set(['Ride', 'VirtualRide', 'EBikeRide', 'MountainBikeRide', 'GravelRide', 'Velomobile', 'Handcycle']);
 const RUNNING = new Set(['Run', 'TrailRun', 'VirtualRun']);
-const SKI     = new Set(['AlpineSki', 'BackcountrySki', 'NordicSki', 'RollerSki']);
-// Indoor / strength session — collapsed into a single "workout"
-// bucket so the sport picker doesn't drown the rider in 6 near-
-// identical entries. The detail page still shows the original
-// Strava type (`original_type` column).
-const WORKOUT = new Set(['Workout', 'WeightTraining', 'Crossfit', 'Elliptical', 'StairStepper']);
-const YOGA    = new Set(['Yoga', 'Pilates']);
-// Any Strava activity type the rider actually logs. We keep the
-// list permissive — anything Strava ships with shows up under
-// the right bucket; novel types fall through to `other`.
+const SKI       = new Set(['AlpineSki', 'BackcountrySki', 'NordicSki', 'RollerSki']);
+const WORKOUT   = new Set(['Workout', 'WeightTraining', 'Crossfit', 'HighIntensityIntervalTraining']);
+const CARDIO    = new Set(['Elliptical', 'StairStepper', 'VirtualRow']);
+const YOGA      = new Set(['Yoga', 'Pilates']);
+const KAYAK     = new Set(['Kayaking', 'Canoeing']);
+const SURF      = new Set(['Surfing', 'Windsurf', 'Kitesurf']);
+const RACKET    = new Set(['Tennis', 'TableTennis', 'Badminton', 'Squash', 'Racquetball', 'Pickleball']);
+
+// Strava's full activity-type catalogue. Sync skips anything not
+// in this set — rare, since the catch-all (`other` bucket below)
+// handles future novel types as long as they're listed here.
 const SUPPORTED = new Set([
   // cycling
-  'Ride', 'VirtualRide', 'EBikeRide', 'MountainBikeRide', 'GravelRide', 'Velomobile', 'Handcycle',
+  'Ride', 'VirtualRide', 'EBikeRide', 'EMountainBikeRide', 'MountainBikeRide', 'GravelRide', 'Velomobile', 'Handcycle',
   // running
   'Run', 'TrailRun', 'VirtualRun',
   // skiing
   'AlpineSki', 'BackcountrySki', 'NordicSki', 'RollerSki',
-  // hike / walk / swim / snow
-  'Hike', 'Snowshoe', 'Walk', 'Swim',
-  // indoor / strength — sync them so the rider's "workout" /
-  // "yoga" tabs aren't fake-empty when they DO log these.
-  'Workout', 'WeightTraining', 'Crossfit', 'Elliptical', 'StairStepper',
+  // walking / hiking / swim / snow
+  'Hike', 'Walk', 'Swim', 'Snowshoe', 'Snowboard', 'IceSkate',
+  // indoor / strength / body
+  'Workout', 'WeightTraining', 'Crossfit', 'HighIntensityIntervalTraining', 'Elliptical', 'StairStepper', 'VirtualRow',
   'Yoga', 'Pilates',
-  // catch-all so anything else (Rowing, Kayaking, Surfing,
-  // Skateboarding, IceSkate, GolfingRiding, etc.) lands in the
-  // "other" bucket instead of being silently dropped.
-  'Rowing', 'Kayaking', 'Canoeing', 'StandUpPaddling', 'Surfing', 'Windsurf', 'Kitesurf',
-  'IceSkate', 'InlineSkate', 'RockClimbing', 'Skateboarding', 'Soccer', 'Tennis', 'Sail', 'GolfingRiding',
+  // water
+  'Rowing', 'Kayaking', 'Canoeing', 'StandUpPaddling', 'Surfing', 'Windsurf', 'Kitesurf', 'Sail',
+  // wheels (non-bike)
+  'InlineSkate', 'Skateboard',
+  // misc
+  'RockClimbing', 'Tennis', 'TableTennis', 'Badminton', 'Squash', 'Racquetball', 'Pickleball',
+  'Soccer', 'Golf', 'GolfingRiding', 'Wheelchair',
 ]);
 
 function sportFromType(t: string): string {
+  // Outdoor cardio.
   if (CYCLING.has(t)) return 'cycling';
   if (RUNNING.has(t)) return 'running';
-  if (SKI.has(t))     return 'ski';
   if (t === 'Hike')     return 'hiking';
-  if (t === 'Snowshoe') return 'snowshoe';
   if (t === 'Walk')     return 'walking';
   if (t === 'Swim')     return 'swim';
-  if (YOGA.has(t))      return 'yoga';
-  if (WORKOUT.has(t))   return 'workout';
-  // Anything in SUPPORTED but not matched above goes to "other"
-  // so the rider can still find / browse it in the feed. Unknown
-  // / future Strava types would also land here once added to
-  // SUPPORTED.
+  if (t === 'Snowshoe') return 'snowshoe';
+  // Snow / ice.
+  if (SKI.has(t))           return 'ski';
+  if (t === 'Snowboard')    return 'snowboard';
+  if (t === 'IceSkate')     return 'iceSkate';
+  // Indoor / strength / body.
+  if (YOGA.has(t))    return 'yoga';
+  if (WORKOUT.has(t)) return 'workout';
+  if (CARDIO.has(t))  return 'cardio';
+  // Water.
+  if (t === 'Rowing')          return 'rowing';
+  if (KAYAK.has(t))            return 'kayak';
+  if (t === 'StandUpPaddling') return 'paddle';
+  if (SURF.has(t))             return 'surf';
+  if (t === 'Sail')            return 'sail';
+  // Wheels.
+  if (t === 'InlineSkate') return 'inlineSkate';
+  if (t === 'Skateboard')  return 'skateboard';
+  // Misc.
+  if (t === 'RockClimbing')                          return 'climbing';
+  if (RACKET.has(t))                                 return 'racket';
+  if (t === 'Soccer')                                return 'soccer';
+  if (t === 'Golf' || t === 'GolfingRiding')         return 'golf';
+  if (t === 'Wheelchair')                            return 'wheelchair';
+  // Anything else lands in 'other' so the rider can still find it.
   return 'other';
 }
 

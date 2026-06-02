@@ -33,7 +33,14 @@ export const CARD_STYLE: CSSProperties = {
 
 export interface Activity {
   id: number;
-  type: 'cycling' | 'running' | 'hiking' | 'ski' | 'snowshoe' | 'walking' | 'swim' | 'yoga' | 'workout' | 'other';
+  type:
+    | 'cycling' | 'running' | 'hiking' | 'walking' | 'swim' | 'snowshoe'
+    | 'ski' | 'snowboard' | 'iceSkate'
+    | 'yoga' | 'workout' | 'cardio'
+    | 'rowing' | 'kayak' | 'paddle' | 'surf' | 'sail'
+    | 'inlineSkate' | 'skateboard'
+    | 'climbing' | 'racket' | 'soccer' | 'golf' | 'wheelchair'
+    | 'other';
   pace_s_per_km?: number | null;
   title: string;
   date: string;

@@ -9,17 +9,28 @@ import { useT } from '@/i18n';
 import type { Lang } from '@/i18n';
 
 export type PageId = 'feed' | 'planner' | 'photos' | 'ftp' | 'training-load' | 'equipment' | 'compare' | 'wrapped' | 'itinerary';
+/// Sport buckets shown in the sidebar picker. We map every Strava
+/// activity type into one of these — see sportFromType() in
+/// /api/strava/sync.ts. Variants of the same Strava family are
+/// grouped (Ride / EBikeRide / MountainBikeRide / GravelRide
+/// → cycling; AlpineSki / NordicSki → ski; …) so the picker stays
+/// scannable. The availableSports filter in ExplorerApp.tsx then
+/// renders only the ones the rider has at least one activity in,
+/// so a yoga-only user sees ONE bucket, never the full list.
 export type SportId =
-  | 'cycling' | 'running' | 'hiking' | 'ski' | 'snowshoe' | 'walking' | 'swim'
-  // Indoor / strength — bundled into one "workout" bucket (covers
-  // WeightTraining, Crossfit, Workout, Elliptical, StairStepper). Yoga
-  // gets its own slot because riders tend to track it differently and
-  // ask "show me my yoga" specifically.
-  | 'yoga' | 'workout'
-  // Anything we don't have a dedicated label for. Catches Strava types
-  // like Rowing, Kayaking, Surfing, Skateboarding, GolfingRiding, etc.
-  // — they still show up in the sport picker (filtered by presence
-  // like every other bucket) so the rider's "Autre" view isn't empty.
+  // Outdoor cardio
+  | 'cycling' | 'running' | 'hiking' | 'walking' | 'swim' | 'snowshoe'
+  // Snow / ice
+  | 'ski' | 'snowboard' | 'iceSkate'
+  // Indoor / strength / body
+  | 'yoga' | 'workout' | 'cardio'
+  // Water
+  | 'rowing' | 'kayak' | 'paddle' | 'surf' | 'sail'
+  // Wheels (non-bike)
+  | 'inlineSkate' | 'skateboard'
+  // Misc
+  | 'climbing' | 'racket' | 'soccer' | 'golf' | 'wheelchair'
+  // Residual catch-all for novel Strava types we haven't met yet.
   | 'other';
 export type UserId  = 'florian' | 'helena';
 
@@ -36,7 +47,15 @@ export type UserId  = 'florian' | 'helena';
 // 'ftp' now) but stays in PageId for backward-compat with bookmarked
 // ?page=training-load URLs — ExplorerApp routes both ids to the same
 // combined PerformancePage with the right tab pre-selected.
-const ALL_SPORTS: SportId[] = ['cycling', 'running', 'hiking', 'ski', 'snowshoe', 'walking', 'swim', 'yoga', 'workout', 'other'];
+const ALL_SPORTS: SportId[] = [
+  'cycling', 'running', 'hiking', 'walking', 'swim', 'snowshoe',
+  'ski', 'snowboard', 'iceSkate',
+  'yoga', 'workout', 'cardio',
+  'rowing', 'kayak', 'paddle', 'surf', 'sail',
+  'inlineSkate', 'skateboard',
+  'climbing', 'racket', 'soccer', 'golf', 'wheelchair',
+  'other',
+];
 const ALL_NAV_ITEMS: { id: PageId; icon: string; label: string; sports: SportId[] }[] = [
   { id: 'feed',      icon: '◎', label: 'Activités',     sports: ALL_SPORTS },
   // 'itinerary' is no longer a top-level destination — it lives as a
@@ -106,16 +125,31 @@ function UserToggle({ user, onChange, compact }: { user: UserId; onChange: (u: U
 // `availableSports`), so each profile sees exactly what it has and nothing
 // else.
 const SPORT_META: Record<SportId, { icon: string; labelKey: string }> = {
-  cycling:  { icon: '◎', labelKey: 'common.cycling'  },
-  running:  { icon: '⌒', labelKey: 'common.running'  },
-  hiking:   { icon: '▲', labelKey: 'common.hiking'   },
-  ski:      { icon: '⛷', labelKey: 'common.ski'      },
-  snowshoe: { icon: '❄', labelKey: 'common.snowshoe' },
-  walking:  { icon: '⋯', labelKey: 'common.walking'  },
-  swim:     { icon: '≈', labelKey: 'common.swim'     },
-  yoga:     { icon: '✿', labelKey: 'common.yoga'     },
-  workout:  { icon: '⚒', labelKey: 'common.workout'  },
-  other:    { icon: '✦', labelKey: 'common.other'    },
+  cycling:     { icon: '◎', labelKey: 'common.cycling'     },
+  running:     { icon: '⌒', labelKey: 'common.running'     },
+  hiking:      { icon: '▲', labelKey: 'common.hiking'      },
+  walking:     { icon: '⋯', labelKey: 'common.walking'     },
+  swim:        { icon: '≈', labelKey: 'common.swim'        },
+  snowshoe:    { icon: '❄', labelKey: 'common.snowshoe'    },
+  ski:         { icon: '⛷', labelKey: 'common.ski'         },
+  snowboard:   { icon: '⛇', labelKey: 'common.snowboard'   },
+  iceSkate:    { icon: '✧', labelKey: 'common.iceSkate'    },
+  yoga:        { icon: '✿', labelKey: 'common.yoga'        },
+  workout:     { icon: '⚒', labelKey: 'common.workout'     },
+  cardio:      { icon: '↯', labelKey: 'common.cardio'      },
+  rowing:      { icon: '↔', labelKey: 'common.rowing'      },
+  kayak:       { icon: '〰', labelKey: 'common.kayak'       },
+  paddle:      { icon: '▣', labelKey: 'common.paddle'      },
+  surf:        { icon: '〜', labelKey: 'common.surf'        },
+  sail:        { icon: '⛵', labelKey: 'common.sail'        },
+  inlineSkate: { icon: '◌', labelKey: 'common.inlineSkate' },
+  skateboard:  { icon: '◇', labelKey: 'common.skateboard'  },
+  climbing:    { icon: '△', labelKey: 'common.climbing'    },
+  racket:      { icon: '●', labelKey: 'common.racket'      },
+  soccer:      { icon: '○', labelKey: 'common.soccer'      },
+  golf:        { icon: '⊗', labelKey: 'common.golf'        },
+  wheelchair:  { icon: '◔', labelKey: 'common.wheelchair'  },
+  other:       { icon: '✦', labelKey: 'common.other'       },
 };
 
 function SportToggle({ sport, onChange, available, compact }: {

@@ -36,34 +36,55 @@ const STRAVA_TOKEN_URL = 'https://www.strava.com/api/v3/oauth/token';
 
 // Mirrors the sets in /api/strava/sync and scripts/sync-strava-supabase.mjs.
 // Kept in lockstep with /api/strava/sync — extend together. The
-// rationale for the wide net + the per-bucket grouping (yoga,
-// workout, other) lives there.
-const CYCLING = new Set(['Ride', 'VirtualRide', 'EBikeRide', 'MountainBikeRide', 'GravelRide', 'Velomobile', 'Handcycle']);
-const RUNNING = new Set(['Run', 'TrailRun', 'VirtualRun']);
-const SKI     = new Set(['AlpineSki', 'BackcountrySki', 'NordicSki', 'RollerSki']);
-const WORKOUT = new Set(['Workout', 'WeightTraining', 'Crossfit', 'Elliptical', 'StairStepper']);
-const YOGA    = new Set(['Yoga', 'Pilates']);
+// rationale for the bucket grouping (yoga, workout, racket, etc.)
+// lives there with the full comment header.
+const CYCLING   = new Set(['Ride', 'VirtualRide', 'EBikeRide', 'EMountainBikeRide', 'MountainBikeRide', 'GravelRide', 'Velomobile', 'Handcycle']);
+const RUNNING   = new Set(['Run', 'TrailRun', 'VirtualRun']);
+const SKI       = new Set(['AlpineSki', 'BackcountrySki', 'NordicSki', 'RollerSki']);
+const WORKOUT   = new Set(['Workout', 'WeightTraining', 'Crossfit', 'HighIntensityIntervalTraining']);
+const CARDIO    = new Set(['Elliptical', 'StairStepper', 'VirtualRow']);
+const YOGA      = new Set(['Yoga', 'Pilates']);
+const KAYAK     = new Set(['Kayaking', 'Canoeing']);
+const SURF      = new Set(['Surfing', 'Windsurf', 'Kitesurf']);
+const RACKET    = new Set(['Tennis', 'TableTennis', 'Badminton', 'Squash', 'Racquetball', 'Pickleball']);
 const SUPPORTED = new Set([
-  'Ride', 'VirtualRide', 'EBikeRide', 'MountainBikeRide', 'GravelRide', 'Velomobile', 'Handcycle',
+  'Ride', 'VirtualRide', 'EBikeRide', 'EMountainBikeRide', 'MountainBikeRide', 'GravelRide', 'Velomobile', 'Handcycle',
   'Run', 'TrailRun', 'VirtualRun',
   'AlpineSki', 'BackcountrySki', 'NordicSki', 'RollerSki',
-  'Hike', 'Snowshoe', 'Walk', 'Swim',
-  'Workout', 'WeightTraining', 'Crossfit', 'Elliptical', 'StairStepper',
+  'Hike', 'Walk', 'Swim', 'Snowshoe', 'Snowboard', 'IceSkate',
+  'Workout', 'WeightTraining', 'Crossfit', 'HighIntensityIntervalTraining', 'Elliptical', 'StairStepper', 'VirtualRow',
   'Yoga', 'Pilates',
-  'Rowing', 'Kayaking', 'Canoeing', 'StandUpPaddling', 'Surfing', 'Windsurf', 'Kitesurf',
-  'IceSkate', 'InlineSkate', 'RockClimbing', 'Skateboarding', 'Soccer', 'Tennis', 'Sail', 'GolfingRiding',
+  'Rowing', 'Kayaking', 'Canoeing', 'StandUpPaddling', 'Surfing', 'Windsurf', 'Kitesurf', 'Sail',
+  'InlineSkate', 'Skateboard',
+  'RockClimbing', 'Tennis', 'TableTennis', 'Badminton', 'Squash', 'Racquetball', 'Pickleball',
+  'Soccer', 'Golf', 'GolfingRiding', 'Wheelchair',
 ]);
 
 function sportFromType(t: string): string {
   if (CYCLING.has(t)) return 'cycling';
   if (RUNNING.has(t)) return 'running';
-  if (SKI.has(t))     return 'ski';
   if (t === 'Hike')     return 'hiking';
-  if (t === 'Snowshoe') return 'snowshoe';
   if (t === 'Walk')     return 'walking';
   if (t === 'Swim')     return 'swim';
-  if (YOGA.has(t))      return 'yoga';
-  if (WORKOUT.has(t))   return 'workout';
+  if (t === 'Snowshoe') return 'snowshoe';
+  if (SKI.has(t))        return 'ski';
+  if (t === 'Snowboard') return 'snowboard';
+  if (t === 'IceSkate')  return 'iceSkate';
+  if (YOGA.has(t))    return 'yoga';
+  if (WORKOUT.has(t)) return 'workout';
+  if (CARDIO.has(t))  return 'cardio';
+  if (t === 'Rowing')          return 'rowing';
+  if (KAYAK.has(t))            return 'kayak';
+  if (t === 'StandUpPaddling') return 'paddle';
+  if (SURF.has(t))             return 'surf';
+  if (t === 'Sail')            return 'sail';
+  if (t === 'InlineSkate') return 'inlineSkate';
+  if (t === 'Skateboard')  return 'skateboard';
+  if (t === 'RockClimbing')                  return 'climbing';
+  if (RACKET.has(t))                         return 'racket';
+  if (t === 'Soccer')                        return 'soccer';
+  if (t === 'Golf' || t === 'GolfingRiding') return 'golf';
+  if (t === 'Wheelchair')                    return 'wheelchair';
   return 'other';
 }
 

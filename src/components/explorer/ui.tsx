@@ -68,19 +68,42 @@ export function StatBar({ label, value, max, unit, color }: {
 
 import { useT } from '@/i18n';
 
-export function TypeBadge({ type }: { type: 'cycling' | 'running' | 'hiking' | 'ski' | 'snowshoe' | 'walking' | 'swim' | 'yoga' | 'workout' | 'other' }) {
+export function TypeBadge({ type }: { type:
+  | 'cycling' | 'running' | 'hiking' | 'walking' | 'swim' | 'snowshoe'
+  | 'ski' | 'snowboard' | 'iceSkate'
+  | 'yoga' | 'workout' | 'cardio'
+  | 'rowing' | 'kayak' | 'paddle' | 'surf' | 'sail'
+  | 'inlineSkate' | 'skateboard'
+  | 'climbing' | 'racket' | 'soccer' | 'golf' | 'wheelchair'
+  | 'other';
+}) {
   const { t } = useT();
   const config = {
-    cycling:  { bg: tokens.terraLight, fg: tokens.terra, key: 'type.cycling'  },
-    running:  { bg: tokens.greenLight, fg: tokens.green, key: 'type.running'  },
-    hiking:   { bg: tokens.greenLight, fg: tokens.green, key: 'type.hiking'   },
-    ski:      { bg: tokens.creamDark,  fg: tokens.blue,  key: 'type.ski'      },
-    snowshoe: { bg: tokens.creamDark,  fg: tokens.blue,  key: 'type.snowshoe' },
-    walking:  { bg: tokens.creamDark,  fg: tokens.inkMid,key: 'type.walking'  },
-    swim:     { bg: tokens.creamDark,  fg: tokens.blue,  key: 'type.swim'     },
-    yoga:     { bg: tokens.creamDark,  fg: tokens.terra, key: 'type.yoga'     },
-    workout:  { bg: tokens.creamDark,  fg: tokens.inkMid,key: 'type.workout'  },
-    other:    { bg: tokens.creamDark,  fg: tokens.inkLight, key: 'type.other' },
+    cycling:     { bg: tokens.terraLight, fg: tokens.terra,    key: 'type.cycling'     },
+    running:     { bg: tokens.greenLight, fg: tokens.green,    key: 'type.running'     },
+    hiking:      { bg: tokens.greenLight, fg: tokens.green,    key: 'type.hiking'      },
+    walking:     { bg: tokens.creamDark,  fg: tokens.inkMid,   key: 'type.walking'     },
+    swim:        { bg: tokens.creamDark,  fg: tokens.blue,     key: 'type.swim'        },
+    snowshoe:    { bg: tokens.creamDark,  fg: tokens.blue,     key: 'type.snowshoe'    },
+    ski:         { bg: tokens.creamDark,  fg: tokens.blue,     key: 'type.ski'         },
+    snowboard:   { bg: tokens.creamDark,  fg: tokens.blue,     key: 'type.snowboard'   },
+    iceSkate:    { bg: tokens.creamDark,  fg: tokens.blue,     key: 'type.iceSkate'    },
+    yoga:        { bg: tokens.creamDark,  fg: tokens.terra,    key: 'type.yoga'        },
+    workout:     { bg: tokens.creamDark,  fg: tokens.inkMid,   key: 'type.workout'     },
+    cardio:      { bg: tokens.creamDark,  fg: tokens.green,    key: 'type.cardio'      },
+    rowing:      { bg: tokens.creamDark,  fg: tokens.blue,     key: 'type.rowing'      },
+    kayak:       { bg: tokens.creamDark,  fg: tokens.blue,     key: 'type.kayak'       },
+    paddle:      { bg: tokens.creamDark,  fg: tokens.blue,     key: 'type.paddle'      },
+    surf:        { bg: tokens.creamDark,  fg: tokens.blue,     key: 'type.surf'        },
+    sail:        { bg: tokens.creamDark,  fg: tokens.blue,     key: 'type.sail'        },
+    inlineSkate: { bg: tokens.creamDark,  fg: tokens.inkMid,   key: 'type.inlineSkate' },
+    skateboard:  { bg: tokens.creamDark,  fg: tokens.inkMid,   key: 'type.skateboard'  },
+    climbing:    { bg: tokens.creamDark,  fg: tokens.terra,    key: 'type.climbing'    },
+    racket:      { bg: tokens.creamDark,  fg: tokens.green,    key: 'type.racket'      },
+    soccer:      { bg: tokens.creamDark,  fg: tokens.green,    key: 'type.soccer'      },
+    golf:        { bg: tokens.creamDark,  fg: tokens.green,    key: 'type.golf'        },
+    wheelchair:  { bg: tokens.creamDark,  fg: tokens.inkMid,   key: 'type.wheelchair'  },
+    other:       { bg: tokens.creamDark,  fg: tokens.inkLight, key: 'type.other'       },
   } as const;
   const c = config[type] ?? config.cycling;
   return (

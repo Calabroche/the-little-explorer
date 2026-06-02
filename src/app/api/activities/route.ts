@@ -255,7 +255,14 @@ const CYCLING_TYPES   = new Set(['Ride', 'VirtualRide', 'EBikeRide', 'MountainBi
 const RUNNING_TYPES   = new Set(['Run', 'TrailRun', 'VirtualRun']);
 const SKI_TYPES       = new Set(['AlpineSki', 'BackcountrySki', 'NordicSki', 'RollerSki']);
 
-export type Sport = 'cycling' | 'running' | 'hiking' | 'ski' | 'snowshoe' | 'walking' | 'swim' | 'yoga' | 'workout' | 'other';
+export type Sport =
+  | 'cycling' | 'running' | 'hiking' | 'walking' | 'swim' | 'snowshoe'
+  | 'ski' | 'snowboard' | 'iceSkate'
+  | 'yoga' | 'workout' | 'cardio'
+  | 'rowing' | 'kayak' | 'paddle' | 'surf' | 'sail'
+  | 'inlineSkate' | 'skateboard'
+  | 'climbing' | 'racket' | 'soccer' | 'golf' | 'wheelchair'
+  | 'other';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function sportFromRaw(raw: any): Sport {
