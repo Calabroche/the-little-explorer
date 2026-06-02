@@ -459,6 +459,19 @@ create index if not exists events_time_idx       on next_auth.events (occurred_a
 
 grant all on table next_auth.events to postgres;
 grant all on table next_auth.events to service_role;
+-- PostgreSQL treats the bigserial PK's sequence as a SEPARATE
+-- object from the table — granting the table doesn't grant
+-- nextval() on the sequence. Without this, every insert from
+-- supabaseAdmin() (service_role) failed with
+--   permission denied for sequence events_id_seq  (SQLSTATE 42501)
+-- and the metrics dashboard read 0 across the board even after
+-- weeks of signins / syncs. Belt-and-suspenders: grant on the
+-- explicit name AND on every existing/future sequence in the
+-- schema, so future migrations that add new bigserial PKs
+-- don't repeat the same trap.
+grant usage, select on sequence next_auth.events_id_seq to service_role;
+grant usage, select on all sequences in schema next_auth to service_role;
+alter default privileges in schema next_auth grant usage, select on sequences to service_role;
 
 -- ── Onboarding state ──────────────────────────────────────────────────────
 -- Stamped once when the user completes the 3-step onboarding flow at
