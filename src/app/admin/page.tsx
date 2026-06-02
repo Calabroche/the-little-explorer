@@ -261,7 +261,28 @@ export default function AdminPage() {
                               {(u.name ?? u.email ?? '?').slice(0, 1).toUpperCase()}
                             </div>
                           )}
-                          <span style={{ fontWeight: 600 }}>{u.name ?? '—'}</span>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                            <span style={{ fontWeight: 600 }}>{u.name ?? '—'}</span>
+                            {/* Click the UUID to copy — saves opening dev
+                                tools when admin needs the id for the
+                                debug endpoints (list-user-activities /
+                                strava-streams-probe). Title attr shows the
+                                full uuid on hover. */}
+                            <code
+                              onClick={() => {
+                                navigator.clipboard?.writeText(u.id);
+                              }}
+                              title={`Cliquer pour copier — ${u.id}`}
+                              style={{
+                                fontSize: 10, color: tokens.inkLight,
+                                fontFamily: 'monospace',
+                                cursor: 'pointer',
+                                userSelect: 'all',
+                              }}
+                            >
+                              {u.id.slice(0, 8)}…{u.id.slice(-4)}
+                            </code>
+                          </div>
                         </div>
                       </td>
                       <td style={{ ...TD, color: tokens.inkMid, fontSize: 12 }}>{u.email ?? '—'}</td>
