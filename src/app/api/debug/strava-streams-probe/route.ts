@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthedUser } from '@/lib/api-auth';
+import { isAdminEmail } from '@/lib/admin';
 import { supabaseAdmin } from '@/lib/db';
 
 const UA = 'TheLittleExplorer/0.1 (+https://the-little-explorer-app.vercel.app)';
@@ -20,7 +21,8 @@ export async function GET(req: NextRequest) {
   if (!authed?.id) {
     return NextResponse.json({ error: 'unauthenticated' }, { status: 401 });
   }
-  const userId = authed.id;
+  const callerId    = authed.id;
+  const isAdmin     = isAdminEmail(authed.email ?? null);
 
   const url = new URL(req.url);
   const activityIdRaw = url.searchParams.get('activity_id');
@@ -46,9 +48,19 @@ export async function GET(req: NextRequest) {
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const row = rowData as any;
-  if (row.user_id !== userId) {
+  // The activity belongs to `row.user_id`. Two access paths:
+  //   - Caller IS the owner → standard self-debug.
+  //   - Caller is in the admin allowlist → bypass the
+  //     ownership check so an admin can audit another rider's
+  //     stream state without logging in as them.
+  // We then fetch Strava with the activity-owner's refresh
+  // token in BOTH cases — never the admin's — because the
+  // streams endpoint is scoped to the athlete who recorded
+  // the activity.
+  if (row.user_id !== callerId && !isAdmin) {
     return NextResponse.json({ error: 'not_your_activity' }, { status: 403 });
   }
+  const userId = row.user_id;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const payload = (row.payload ?? {}) as Record<string, any>;
