@@ -543,6 +543,63 @@ function ProfileSection() {
   // matches what the auto-sync useEffect does after a first connection.
   const [resyncErrorMessage, setResyncErrorMessage] = useState<string | null>(null);
   const [resyncNeedsReconnect, setResyncNeedsReconnect] = useState(false);
+  const [backfillState, setBackfillState] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
+  const [backfillProgress, setBackfillProgress] = useState<{ done: number; total: number } | null>(null);
+  const [backfillErrorMessage, setBackfillErrorMessage] = useState<string | null>(null);
+
+  /**
+   * Loop POST /api/strava/backfill-streams until `done: true`. Each
+   * call processes ~10 activities; for users with 40+ rides this
+   * takes 4-5 round-trips. Progress is updated after each call so
+   * the rider sees a live counter.
+   */
+  const backfillStreams = useCallback(async () => {
+    if (backfillState === 'busy') return;
+    setBackfillState('busy');
+    setBackfillErrorMessage(null);
+    let totalProcessed = 0;
+    let initialRemaining: number | null = null;
+    for (let i = 0; i < 50; i++) {  // hard cap = ~500 activities
+      try {
+        const r = await fetch('/api/strava/backfill-streams', { method: 'POST' });
+        if (!r.ok) {
+          // Surface Strava upstream status if available, same as
+          // the resync error UX.
+          let detail = `HTTP ${r.status}`;
+          try {
+            const body = await r.json() as { error?: string; stravaStatus?: number };
+            if (body?.error) detail = `${body.error} (HTTP ${r.status})`;
+            if (body?.stravaStatus) detail += ` · Strava: ${body.stravaStatus}`;
+          } catch { /* not JSON */ }
+          throw new Error(detail);
+        }
+        const data = await r.json() as { processed: number; remaining: number; done: boolean };
+        totalProcessed += data.processed;
+        if (initialRemaining == null) {
+          initialRemaining = totalProcessed + data.remaining;
+        }
+        setBackfillProgress({ done: totalProcessed, total: initialRemaining });
+        if (data.done || (data.processed === 0 && data.remaining === 0)) {
+          setBackfillState('done');
+          // Hard reload so all the activity cards rerender with the
+          // freshly-loaded gps + chart streams. Same convention as
+          // the main resync.
+          window.location.reload();
+          return;
+        }
+      } catch (err) {
+        console.error('[backfill-streams] failed:', err);
+        setBackfillErrorMessage((err as Error).message || 'inconnue');
+        setBackfillState('error');
+        return;
+      }
+    }
+    // Reached the 50-iteration cap (~500 activities). Force a reload
+    // — anything still pending the user can click again.
+    setBackfillState('done');
+    window.location.reload();
+  }, [backfillState]);
+
   const resync = useCallback(async () => {
     if (resyncState === 'busy') return;
     setResyncState('busy');
@@ -766,6 +823,58 @@ function ProfileSection() {
         >
           ↻ RECONNECTER STRAVA
         </button>
+      )}
+
+      {stravaLinked && (
+        // Backfill button — pulls streams (gps, altitude, hr, speed)
+        // for every activity that doesn't have them yet. Idempotent:
+        // safe to click repeatedly. Shows live progress while running.
+        // Necessary because the bulk /api/strava/sync only fetches
+        // activity summaries (no maps / charts), while the webhook
+        // path (/api/strava/sync-one) ALSO grabs streams — so any
+        // ride pulled via bulk-import looks "empty" in the detail
+        // view until this runs.
+        <>
+          <button
+            onClick={backfillStreams}
+            disabled={backfillState === 'busy'}
+            title="Télécharge les tracés GPS et graphiques pour toutes les sorties qui n'en ont pas encore"
+            style={{
+              width: '100%',
+              padding: '8px 10px',
+              marginBottom: 8,
+              background: backfillState === 'error' ? '#FEE' : tokens.creamDark,
+              border:     `1px solid ${backfillState === 'error' ? '#FCC' : tokens.creamBorder}`,
+              borderRadius: 3,
+              color:        backfillState === 'error' ? '#A00' : tokens.inkMid,
+              fontFamily:   "'Space Grotesk'", fontSize: 11, fontWeight: 600,
+              letterSpacing: '0.04em',
+              cursor:       backfillState === 'busy' ? 'wait' : 'pointer',
+            }}
+          >
+            {backfillState === 'busy' && backfillProgress
+              ? `CHARGEMENT ${backfillProgress.done}/${backfillProgress.total}…`
+              : backfillState === 'busy'
+                ? 'CHARGEMENT…'
+                : backfillState === 'error'
+                  ? '✗ ÉCHEC — RÉESSAYER'
+                  : '↻ CHARGER CARTES + GRAPHES'}
+          </button>
+          {backfillState === 'error' && backfillErrorMessage && (
+            <div style={{
+              marginBottom: 8,
+              padding: '6px 8px',
+              background: '#FFF4F4',
+              border: '1px solid #FCC',
+              borderRadius: 3,
+              fontFamily: "'Space Grotesk'", fontSize: 10,
+              color: '#A00', lineHeight: 1.45,
+              wordBreak: 'break-word',
+            }}>
+              {backfillErrorMessage}
+            </div>
+          )}
+        </>
       )}
 
       <a
