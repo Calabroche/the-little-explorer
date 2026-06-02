@@ -554,6 +554,15 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
   const hasHR  = (activity.heartrate?.length ?? 0) > 10;
   const hasPow = data.some(d => d.power > 0);
   const hasGPS = (activity.gps?.length ?? 0) > 1;
+  // Indoor activities (WeightTraining, Yoga, Workout via apps like
+  // Ladder) legitimately have NO time-series — Strava records them
+  // as 2-point stubs (start + end). Charts would render as empty
+  // rectangles, which the rider then asks us to "fix" forever.
+  // Detect the data-less case once and hide the whole charts +
+  // map block downstream when nothing plotabble exists.
+  const hasSpeedSeries = (activity.speed_kmh?.length ?? 0) > 10;
+  const hasAltSeries   = (activity.altitude?.length ?? 0) > 10;
+  const hasAnyPlottableSeries = data.length > 0 || hasGPS || hasSpeedSeries || hasAltSeries;
 
   // Climb detection — same algorithm as the iOS app (lib/climbs.ts).
   // Memoized on the activity reference so we don't re-walk the altitude
@@ -611,7 +620,7 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
     </ChartCard>
   );
 
-  const speedChart = mounted && (
+  const speedChart = mounted && hasSpeedSeries && (
     <ChartCard title={t("charts.speed")}>
       <ResponsiveContainer width="100%" height={chartHeight}>
         <AreaChart syncId="ride" data={data} margin={{ top: 4, right: 2, left: -10, bottom: 0 }}>
@@ -654,7 +663,7 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
     </ChartCard>
   );
 
-  const altChart = mounted && (
+  const altChart = mounted && hasAltSeries && (
     <ChartCard title={t("charts.elevProfile")}>
       <ResponsiveContainer width="100%" height={chartHeight}>
         <AreaChart syncId="ride" data={data} margin={{ top: 4, right: 2, left: -10, bottom: 0 }}>
@@ -726,17 +735,39 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
         </div>
       )}
 
-      {/* Chart grid — Row 1: FC | Vitesse */}
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20, marginBottom: 20 }}>
-        {hrGradChart || <div />}
-        {speedChart}
-      </div>
+      {/* Chart grid — Row 1: FC | Vitesse. Skipped entirely when
+          neither chart has plotabble data (typical for indoor
+          WeightTraining / Yoga sessions). */}
+      {(hrGradChart || speedChart) && (
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20, marginBottom: 20 }}>
+          {hrGradChart || <div />}
+          {speedChart || <div />}
+        </div>
+      )}
 
-      {/* Chart grid — Row 2: Puissance | Altitude */}
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20, marginBottom: 20 }}>
-        {powerChart || <div />}
-        {altChart}
-      </div>
+      {/* Chart grid — Row 2: Puissance | Altitude. Same dead-row
+          suppression as Row 1. */}
+      {(powerChart || altChart) && (
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20, marginBottom: 20 }}>
+          {powerChart || <div />}
+          {altChart || <div />}
+        </div>
+      )}
+
+      {/* No-data explanatory card. Triggered when Strava recorded the
+          activity as a 2-point stub — typical of indoor strength
+          sessions (Ladder app, Workout, WeightTraining, Yoga) where
+          there's no GPS, no speed series, no altitude series. Without
+          this the rider just sees the summary metrics floating with
+          no context for WHY there are no charts. */}
+      {!hasAnyPlottableSeries && (
+        <div style={{ ...CARD_STYLE, marginBottom: 20, padding: 28, textAlign: 'center' }}>
+          <div style={{ fontFamily: "'Space Grotesk'", fontSize: 13, color: tokens.inkMid, lineHeight: 1.6 }}>
+            <strong style={{ color: tokens.ink }}>Pas de tracé détaillé pour cette séance.</strong><br />
+            Les activités indoor (muscu, yoga, app fitness) n&apos;enregistrent ni GPS, ni altitude, ni vitesse continue côté Strava — seul le récap (durée, FC moy, calories) est disponible.
+          </div>
+        </div>
+      )}
 
       {/* HR Zones — sits under the Puissance + Altitude row so all four
           time-series charts (FC, Vitesse, Puissance, Altitude) stay
