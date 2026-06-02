@@ -268,19 +268,27 @@ export default function AdminPage() {
                                 debug endpoints (list-user-activities /
                                 strava-streams-probe). Title attr shows the
                                 full uuid on hover. */}
+                            {/* Full uuid, no truncation — admin tends to
+                                triple-click + copy the rendered text rather
+                                than triggering the onClick, so the visible
+                                text needs to BE the value we want them to
+                                copy. userSelect:'all' makes one click select
+                                the whole line; clicking the chip ALSO writes
+                                to clipboard as a shortcut. */}
                             <code
                               onClick={() => {
                                 navigator.clipboard?.writeText(u.id);
                               }}
-                              title={`Cliquer pour copier — ${u.id}`}
+                              title="Triple-clic ou clic pour copier"
                               style={{
                                 fontSize: 10, color: tokens.inkLight,
                                 fontFamily: 'monospace',
                                 cursor: 'pointer',
                                 userSelect: 'all',
+                                wordBreak: 'break-all',
                               }}
                             >
-                              {u.id.slice(0, 8)}…{u.id.slice(-4)}
+                              {u.id}
                             </code>
                           </div>
                         </div>
