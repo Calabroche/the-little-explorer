@@ -702,8 +702,14 @@ export function FeedPage({ activities, stats, sport, onSelect }: Props) {
       </div>
       <PersonalRecords activities={filteredActivities} sport={sport} />
       {sport === 'running' && <RunPaceZones activities={filteredActivities} />}
-      {/* Swapped down — TrainingProgram now lives where Last5Stats was. */}
-      <TrainingProgram activities={filteredActivities} />
+      {/* Cycling-only — the whole TSS / NP / IF / FTP framework is
+          power-meter-on-a-bike specific. Running has its own
+          equivalents (Daniels / Banister) and our other sports
+          (Yoga, Workout, Climb…) don't have a useful "next ride"
+          model. Hide the card entirely outside cycling rather than
+          render placeholders that ask the rider for data they
+          can't have. */}
+      {sport === 'cycling' && <TrainingProgram activities={filteredActivities} />}
 
       {/* If the bike filter is on but matches no activities, surface
           a focused empty state with a one-click "Clear" — better than
