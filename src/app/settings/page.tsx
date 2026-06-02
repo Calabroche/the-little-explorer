@@ -305,18 +305,33 @@ export default function SettingsPage() {
         }}>
           Paramètres
         </h1>
-        <Link href="/" style={{
-          padding: '6px 14px',
-          background: tokens.surface,
-          border: `1px solid ${tokens.creamBorder}`,
-          borderRadius: 3,
-          color: tokens.inkMid,
-          fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 600,
-          letterSpacing: '0.04em',
-          textDecoration: 'none',
-        }}>
-          ← APP
-        </Link>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Link href="/guide" style={{
+            padding: '6px 14px',
+            background: tokens.terra,
+            border: `1px solid ${tokens.terra}`,
+            borderRadius: 3,
+            color: '#fff',
+            fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 700,
+            letterSpacing: '0.04em',
+            textDecoration: 'none',
+            whiteSpace: 'nowrap',
+          }}>
+            📖 GUIDE
+          </Link>
+          <Link href="/" style={{
+            padding: '6px 14px',
+            background: tokens.surface,
+            border: `1px solid ${tokens.creamBorder}`,
+            borderRadius: 3,
+            color: tokens.inkMid,
+            fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 600,
+            letterSpacing: '0.04em',
+            textDecoration: 'none',
+          }}>
+            ← APP
+          </Link>
+        </div>
       </div>
 
       <div style={CARD}>
