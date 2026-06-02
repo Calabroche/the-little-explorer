@@ -56,18 +56,23 @@ export async function POST(req: NextRequest) {
   }
 
   // A row needs streams if ANY of the data series we plot are
-  // missing — not just GPS. Earlier this only checked gps.length,
-  // which meant a run that had a map but empty speed/altitude
-  // arrays was silently skipped, leaving the detail page's charts
-  // forever blank even after the user clicked the backfill button.
+  // missing AND we haven't already attempted a fetch on it.
+  // The second condition is critical: some Strava activities
+  // legitimately have NO streams (indoor strength sessions,
+  // app-uploaded yoga, etc.). Without the "already attempted"
+  // gate, every backfill click would re-fetch them forever —
+  // user Alban hit this with the counter showing "430/134…"
+  // (134 candidates, processed 4× each before the 50-iter loop
+  // cap saved him).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const needsStreams = (pendingRows ?? []).filter((r: any) => {
     const p = r.payload ?? {};
+    if (p._streams_fetched_at) return false;  // we already asked Strava
     const has = (arr: unknown): boolean => Array.isArray(arr) && (arr as unknown[]).length >= 2;
-    // GPS still drives the map. Speed_kmh + altitude drive the
-    // two side charts. Distance_m is needed to derive missing
-    // speed (see merge step below). If ANY of those is empty,
-    // this row is a candidate for re-fetch.
+    // GPS drives the map. Speed_kmh + altitude drive the two
+    // side charts. Distance_m is needed to derive missing speed
+    // (see merge step below). If ANY is empty AND we haven't
+    // tried yet, this row is a candidate for re-fetch.
     return !has(p.gps) || !has(p.speed_kmh) || !has(p.altitude) || !has(p.distance_m);
   });
   if (needsStreams.length === 0) {
@@ -163,19 +168,21 @@ export async function POST(req: NextRequest) {
     if (!r.ok) {
       lastUpstreamStatus = r.status;
       lastUpstreamBody = (await r.text()).slice(0, 200);
-      // 404 = legitimately no streams (manually-created activity).
-      // We don't retry but we DO mark it as processed so we don't
-      // loop on it forever — write a sentinel `no_streams_404` so
-      // the filter above skips it next time.
+      // 404 = legitimately no streams (manually-created activity
+      // or indoor session). Mark with the sentinel so the filter
+      // skips it forever, then move on.
       if (r.status === 404) {
         await supabaseAdmin()
           .from('activities')
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .update({ payload: { ...(row.payload as any), _no_streams: '404' } })
+          .update({ payload: { ...(row.payload as any), _streams_fetched_at: new Date().toISOString(), _no_streams: '404' } })
           .eq('id', row.id);
         processed += 1;
         continue;
       }
+      // Transient (5xx, 429, etc.) — DO NOT stamp the sentinel, so
+      // the next backfill click can retry this activity. Just count
+      // it as a failure for this batch and move on.
       failures += 1;
       continue;
     }
@@ -212,6 +219,13 @@ export async function POST(req: NextRequest) {
     const newPayload = {
       ...existing,
       gps, altitude, time_s, distance_m, heartrate, speed_kmh,
+      // Stamp regardless of which series Strava actually returned —
+      // the sentinel signals "we asked", not "we got everything".
+      // Activities that came back with empty arrays (indoor sessions,
+      // legacy bulk uploads) get marked and skipped on subsequent
+      // backfills. Without this the loop would re-request the same
+      // 134 rows ad-infinitum until the 50-iter cap.
+      _streams_fetched_at: new Date().toISOString(),
     };
     const { error: updateErr } = await supabaseAdmin()
       .from('activities')

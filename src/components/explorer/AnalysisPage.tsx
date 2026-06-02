@@ -860,13 +860,17 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
       )}
 
 
-      {/* VO2 Max + Power summary — moved under the route map so the
-          synthesis cards (your physiological "score" for this ride)
-          come after the visual summary, not before it. */}
-      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 20, marginBottom: 20 }}>
-        {activity.max_hr && <VO2MaxCard activity={activity} />}
-        {hasPow && <PowerCard activity={activity} data={data} />}
-      </div>
+      {/* VO2 Max card removed from per-activity view — the estimate
+          is a function of FC max / FC repos, both ATHLETE-level
+          values, so it doesn't change ride-to-ride. Repeating it
+          on every detail page just adds noise. Aggregate VO2 lives
+          on /bilan (the Wrapped page) where it actually belongs.
+          Power summary kept here — it IS per-activity. */}
+      {hasPow && (
+        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 20, marginBottom: 20 }}>
+          <PowerCard activity={activity} data={data} />
+        </div>
+      )}
 
       {/* Advanced metrics — moved to the bottom of the page so the
           heatmap-style route is the first thing the eye lands on, and
