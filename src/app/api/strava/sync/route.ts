@@ -41,6 +41,13 @@ export const maxDuration = 60;
 
 const STRAVA_TOKEN_URL      = 'https://www.strava.com/api/v3/oauth/token';
 const STRAVA_ACTIVITIES_URL = 'https://www.strava.com/api/v3/athlete/activities';
+const STRAVA_STREAM_KEYS    = 'time,distance,latlng,altitude,velocity_smooth,heartrate';
+const UA = 'TheLittleExplorer/0.1 (+https://the-little-explorer-app.vercel.app)';
+// Newest-N activities whose streams (maps/charts) we fetch INLINE during a
+// sync, so a freshly-created account lands on complete data without a
+// manual "RE-SYNCER STRAVA" click. Bounded so we stay under maxDuration
+// (60s) and Strava's 200-req/15-min cap; the 15-min cron fills any overflow.
+const INLINE_STREAM_BUDGET = 100;
 
 // Sport mapping (same set as scripts/sync-strava.mjs + /api/activities).
 const CYCLING = new Set(['Ride', 'VirtualRide', 'EBikeRide', 'MountainBikeRide', 'GravelRide', 'Velomobile', 'Handcycle']);
@@ -110,6 +117,52 @@ function sportFromType(t: string): string {
   if (t === 'Wheelchair')                            return 'wheelchair';
   // Anything else lands in 'other' so the rider can still find it.
   return 'other';
+}
+
+/**
+ * Fetch one activity's streams from Strava and merge them onto its summary
+ * payload (same shape /api/strava/backfill-streams writes). Returns:
+ *   - the merged payload on success,
+ *   - 'rate_limited' on a 429 (caller should stop; the cron continues),
+ *   - the base payload stamped with the _streams_fetched_at sentinel on a
+ *     404 (indoor / manual activity with no GPS — so the cron skips it),
+ *   - null on a transient error (caller skips it; the cron retries).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function fetchStreamPayload(accessToken: string, activityId: number, basePayload: any): Promise<any | 'rate_limited' | null> {
+  const r = await fetch(
+    `https://www.strava.com/api/v3/activities/${activityId}/streams?keys=${STRAVA_STREAM_KEYS}&key_by_type=true`,
+    { headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json', 'User-Agent': UA } },
+  );
+  if (!r.ok) {
+    if (r.status === 429) return 'rate_limited';
+    if (r.status === 404) return { ...basePayload, _streams_fetched_at: new Date().toISOString() };
+    return null;
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = await r.json() as any;
+  const gps:        [number, number][] = s?.latlng?.data    ?? [];
+  const altitude:   number[]           = s?.altitude?.data  ?? [];
+  const time_s:     number[]           = s?.time?.data      ?? [];
+  const distance_m: number[]           = s?.distance?.data  ?? [];
+  const heartrate:  number[]           = s?.heartrate?.data ?? [];
+  const velocity:   number[]           = s?.velocity_smooth?.data ?? [];
+  // Strava omits velocity_smooth for some short / urban efforts — derive
+  // speed from Δdistance / Δtime so the speed chart isn't an empty box.
+  let speed_kmh: number[];
+  if (velocity.length >= 2) {
+    speed_kmh = velocity.map(v => v * 3.6);
+  } else if (distance_m.length >= 2 && time_s.length === distance_m.length) {
+    speed_kmh = distance_m.map((d, i) => {
+      if (i === 0) return 0;
+      const dd = d - distance_m[i - 1];
+      const dt = time_s[i] - time_s[i - 1];
+      return dt > 0 ? (dd / dt) * 3.6 : 0;
+    });
+  } else {
+    speed_kmh = [];
+  }
+  return { ...basePayload, gps, altitude, time_s, distance_m, heartrate, speed_kmh, _streams_fetched_at: new Date().toISOString() };
 }
 
 export async function POST(req: NextRequest) {
@@ -319,9 +372,9 @@ export async function POST(req: NextRequest) {
 
       // Mirror the JSON shape used by the existing /api/activities
       // transform pipeline. Streams (gps, heartrate, altitude,
-      // speed_kmh, distance_m, time_s) are absent at this stage —
-      // they'll be back-filled by the GitHub Actions sync once we
-      // extend it to read users from Supabase.
+      // speed_kmh, distance_m, time_s) start empty here; step 8 below
+      // fills them inline for the newest INLINE_STREAM_BUDGET rows in
+      // this same request, and the 15-min cron backfills any overflow.
       const payload = {
         id:            a.id,
         name:          a.name,
@@ -471,9 +524,43 @@ export async function POST(req: NextRequest) {
     return 0;
   });
 
+  // ── 8. Inline streams for the newest new activities ────────────────────
+  //
+  // The user-visible win: a freshly-created account lands on a feed WITH
+  // maps & charts — no manual "RE-SYNCER STRAVA" click. We already hold a
+  // fresh accessToken, so fetching streams here runs in the SAME request:
+  // no extra refresh_token rotation, hence none of the concurrent-rotation
+  // race that kept us from auto-syncing in the OAuth callback.
+  //
+  // Bounded by INLINE_STREAM_BUDGET and a wall-clock deadline so we stay
+  // under maxDuration=60s (token + activities + insert + bikes already
+  // burned some of it). Stops on a Strava 429. Any overflow (older rides,
+  // or accounts with more than the budget) is filled by the 15-min cron
+  // automatically — still no user action required.
+  let streamed = 0;
+  if (newRows.length > 0) {
+    const deadline = Date.now() + 40_000;   // leave margin under maxDuration=60s
+    // newRows preserve Strava's newest-first order — fetch recent rides'
+    // maps first, since that's what tops the feed the user sees.
+    for (const row of newRows.slice(0, INLINE_STREAM_BUDGET)) {
+      if (Date.now() > deadline) break;
+      const merged = await fetchStreamPayload(accessToken, row.id, row.payload);
+      if (merged === 'rate_limited') break;   // Strava 200/15min — let the cron continue
+      if (!merged) continue;                  // transient — leave it for the cron
+      const { error: upErr } = await supabaseAdmin()
+        .from('activities')
+        .update({ payload: merged })
+        .eq('id', row.id)
+        .eq('user_id', userId);
+      if (upErr) console.warn('[strava-sync] inline stream update failed for', row.id, ':', upErr.message);
+      else streamed += 1;
+    }
+  }
+
   return NextResponse.json({
     ok:           true,
     count:        newRows.length,
+    streamed,
     backfilled,
     bikes:        bikesUpserted,
   });
