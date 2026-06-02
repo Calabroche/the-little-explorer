@@ -8,7 +8,11 @@
  *
  * Used by .github/workflows/strava-sync.yml on a 15-min cron. Designed
  * to be re-runnable: upserts on activity id, only fetches streams for
- * rows that don't have them yet.
+ * rows that don't have them yet — and skips rows already known to be
+ * streamless via the _streams_fetched_at sentinel, so indoor / manual
+ * activities don't re-burn the stream budget on every run (which would
+ * otherwise starve genuinely new GPS rides and leave new users' maps
+ * empty until a manual RE-SYNCER click).
  *
  * Env required:
  *   SUPABASE_URL
@@ -264,15 +268,21 @@ async function main() {
     // 4. List the activity ids we already have for this user (so we
     //    only fetch streams for the NEW ones).
     const existingRows = await pgrest('GET',
-      `/activities?user_id=eq.${userId}&select=id,payload->gps`);
-    // eslint-disable-next-line no-unused-vars
+      `/activities?user_id=eq.${userId}&select=id,payload->gps,payload->_streams_fetched_at`);
     const existing = new Map();
     for (const r of existingRows) {
-      // A row "has streams" if the gps array isn't empty.
+      // A row is "complete" (skip stream fetch) if it already HAS a gps
+      // track, OR if we've already asked Strava and it came back
+      // streamless (the _streams_fetched_at sentinel — indoor / manual
+      // activities). Without the sentinel check, every run re-fetches the
+      // same streamless rows forever, exhausting STREAM_BUDGET so a fresh
+      // user's GPS rides never get backfilled.
       const hasStreams = Array.isArray(r['gps']) && r['gps'].length > 0;
-      existing.set(Number(r.id), hasStreams);
+      const asked      = r['_streams_fetched_at'] != null;
+      existing.set(Number(r.id), hasStreams || asked);
     }
-    console.log(`  ${existing.size} existing rows (${[...existing.values()].filter(Boolean).length} with streams)`);
+    const withStreams = existingRows.filter(r => Array.isArray(r['gps']) && r['gps'].length > 0).length;
+    console.log(`  ${existing.size} existing rows (${withStreams} with streams)`);
 
     // 5. Fetch all activities from Strava (paginated, max 10 pages)
     let activities;
@@ -291,23 +301,25 @@ async function main() {
     //      - if in DB with streams → skip
     const toUpsert = [];
     for (const a of supported) {
-      const wasInDb   = existing.has(a.id);
-      const hasStreams = existing.get(a.id) === true;
+      const wasInDb    = existing.has(a.id);
+      const isComplete = existing.get(a.id) === true;
 
-      // Skip if already complete
-      if (wasInDb && hasStreams) continue;
+      // Skip rows that already have a track or are known streamless.
+      if (wasInDb && isComplete) continue;
 
       // Try to fetch streams if we have budget. If not, insert summary only
       // (next run can back-fill streams).
-      let streams = null;
+      let streams   = null;
+      let attempted = false;   // did we actually spend a Strava /streams call?
       if (streamsRemaining > 0) {
         try {
           const s = await fetchActivityStreams(accessToken, a.id);
           if (s === 'rate_limited') {
             console.warn('  hit Strava rate limit — stopping stream fetches for this user');
-            streamsRemaining = 0;
+            streamsRemaining = 0;   // leave attempted=false → retried next run
           } else {
-            streams = s;
+            attempted = true;       // 404 (null) or real data — either way we asked
+            streams   = s;
             streamsRemaining--;
           }
         } catch (e) {
@@ -316,6 +328,14 @@ async function main() {
       }
 
       const payload = activityToPayload(a, streams);
+      // If we asked Strava and STILL got no GPS track (indoor session,
+      // manually-created activity, legacy upload), stamp the sentinel so
+      // future runs skip this row instead of re-fetching it forever. Only
+      // stamp when we genuinely attempted — a summary-only insert due to an
+      // exhausted budget must stay pending for a later run.
+      if (attempted && (!payload.gps || payload.gps.length === 0)) {
+        payload._streams_fetched_at = new Date().toISOString();
+      }
       toUpsert.push(activityRow(a, payload, userId));
     }
 
