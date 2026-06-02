@@ -543,68 +543,72 @@ function ProfileSection() {
   // matches what the auto-sync useEffect does after a first connection.
   const [resyncErrorMessage, setResyncErrorMessage] = useState<string | null>(null);
   const [resyncNeedsReconnect, setResyncNeedsReconnect] = useState(false);
+  /// "phase" surfaces what RE-SYNCER is doing right now to the user:
+  /// "syncing" = pulling activity summaries from Strava (the /sync
+  /// call), "streaming" = backfilling GPS + chart streams via
+  /// /backfill-streams. The single button covers both so new users
+  /// don't have to chain clicks to get a complete dashboard.
+  const [resyncPhase, setResyncPhase] = useState<'syncing' | 'streaming' | null>(null);
+  const [resyncStreamProgress, setResyncStreamProgress] = useState<{ done: number; total: number } | null>(null);
   const [backfillState, setBackfillState] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
   const [backfillProgress, setBackfillProgress] = useState<{ done: number; total: number } | null>(null);
   const [backfillErrorMessage, setBackfillErrorMessage] = useState<string | null>(null);
 
-  /**
-   * Loop POST /api/strava/backfill-streams until `done: true`. Each
-   * call processes ~10 activities; for users with 40+ rides this
-   * takes 4-5 round-trips. Progress is updated after each call so
-   * the rider sees a live counter.
-   */
+  /// Loop /api/strava/backfill-streams until done. Shared between the
+  /// post-sync auto-chain (called from the main resync flow) and the
+  /// dedicated "↻ CHARGER CARTES + GRAPHES" button (manual rerun).
+  /// Returns true on success, false on any failure.
+  const runStreamBackfill = useCallback(async (
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<{ ok: true } | { ok: false; detail: string }> => {
+    let totalProcessed = 0;
+    let initialRemaining: number | null = null;
+    for (let i = 0; i < 50; i++) {  // hard cap ≈ 500 activities
+      const r = await fetch('/api/strava/backfill-streams', { method: 'POST' });
+      if (!r.ok) {
+        let detail = `HTTP ${r.status}`;
+        try {
+          const body = await r.json() as { error?: string; stravaStatus?: number };
+          if (body?.error) detail = `${body.error} (HTTP ${r.status})`;
+          if (body?.stravaStatus) detail += ` · Strava: ${body.stravaStatus}`;
+        } catch { /* response wasn't JSON */ }
+        return { ok: false, detail };
+      }
+      const data = await r.json() as { processed: number; remaining: number; done: boolean };
+      totalProcessed += data.processed;
+      if (initialRemaining == null) initialRemaining = totalProcessed + data.remaining;
+      onProgress?.(totalProcessed, initialRemaining);
+      if (data.done || (data.processed === 0 && data.remaining === 0)) return { ok: true };
+    }
+    return { ok: true };  // hit the 50-iter cap, treat as done
+  }, []);
+
+  /// Dedicated "↻ CHARGER CARTES + GRAPHES" button. Kept as a manual
+  /// rerun option for cases where the auto-chain inside resync()
+  /// failed partway or the user wants to retry a specific batch.
   const backfillStreams = useCallback(async () => {
     if (backfillState === 'busy') return;
     setBackfillState('busy');
     setBackfillErrorMessage(null);
-    let totalProcessed = 0;
-    let initialRemaining: number | null = null;
-    for (let i = 0; i < 50; i++) {  // hard cap = ~500 activities
-      try {
-        const r = await fetch('/api/strava/backfill-streams', { method: 'POST' });
-        if (!r.ok) {
-          // Surface Strava upstream status if available, same as
-          // the resync error UX.
-          let detail = `HTTP ${r.status}`;
-          try {
-            const body = await r.json() as { error?: string; stravaStatus?: number };
-            if (body?.error) detail = `${body.error} (HTTP ${r.status})`;
-            if (body?.stravaStatus) detail += ` · Strava: ${body.stravaStatus}`;
-          } catch { /* not JSON */ }
-          throw new Error(detail);
-        }
-        const data = await r.json() as { processed: number; remaining: number; done: boolean };
-        totalProcessed += data.processed;
-        if (initialRemaining == null) {
-          initialRemaining = totalProcessed + data.remaining;
-        }
-        setBackfillProgress({ done: totalProcessed, total: initialRemaining });
-        if (data.done || (data.processed === 0 && data.remaining === 0)) {
-          setBackfillState('done');
-          // Hard reload so all the activity cards rerender with the
-          // freshly-loaded gps + chart streams. Same convention as
-          // the main resync.
-          window.location.reload();
-          return;
-        }
-      } catch (err) {
-        console.error('[backfill-streams] failed:', err);
-        setBackfillErrorMessage((err as Error).message || 'inconnue');
-        setBackfillState('error');
-        return;
-      }
+    const result = await runStreamBackfill((done, total) => {
+      setBackfillProgress({ done, total });
+    });
+    if (!result.ok) {
+      setBackfillErrorMessage(result.detail);
+      setBackfillState('error');
+      return;
     }
-    // Reached the 50-iteration cap (~500 activities). Force a reload
-    // — anything still pending the user can click again.
     setBackfillState('done');
     window.location.reload();
-  }, [backfillState]);
+  }, [backfillState, runStreamBackfill]);
 
   const resync = useCallback(async () => {
     if (resyncState === 'busy') return;
     setResyncState('busy');
+    setResyncPhase('syncing');
     setResyncErrorMessage(null);
     setResyncNeedsReconnect(false);
+    setResyncStreamProgress(null);
     try {
       const r = await fetch('/api/strava/sync', { method: 'POST' });
       if (!r.ok) {
@@ -640,6 +644,27 @@ function ProfileSection() {
         } catch { /* response wasn't JSON */ }
         throw new Error(detail);
       }
+      // Chain the streams backfill right after the summary sync —
+      // a new user shouldn't have to click two buttons to get a
+      // dashboard with maps + charts. The backfill is idempotent
+      // and self-paces so this is safe even if there's nothing
+      // to do (returns done=true immediately, no Strava calls).
+      setResyncPhase('streaming');
+      const streamResult = await runStreamBackfill((done, total) => {
+        setResyncStreamProgress({ done, total });
+      });
+      if (!streamResult.ok) {
+        // Don't treat this as a hard failure — the activity
+        // summaries DID sync; only the streams failed. Reload
+        // anyway so the rider at least sees the cards, and surface
+        // the stream failure so they know to retry the dedicated
+        // CHARGER button.
+        setResyncErrorMessage(`Sortis synchronisées, mais streams en échec : ${streamResult.detail}`);
+        setResyncState('error');
+        // small delay so the toast is readable before the reload
+        setTimeout(() => window.location.reload(), 1200);
+        return;
+      }
       setResyncState('done');
       // Reload so all the cached activities + stats pick up the new data.
       window.location.reload();
@@ -647,8 +672,10 @@ function ProfileSection() {
       console.error('[resync] failed:', err);
       setResyncErrorMessage((err as Error).message || 'inconnue');
       setResyncState('error');
+    } finally {
+      setResyncPhase(null);
     }
-  }, [resyncState]);
+  }, [resyncState, runStreamBackfill]);
 
   if (status !== 'authenticated' || !session?.user) return null;
 
@@ -777,11 +804,15 @@ function ProfileSection() {
             cursor: resyncState === 'busy' ? 'wait' : 'pointer',
           }}
         >
-          {resyncState === 'busy'
-            ? 'SYNCHRO…'
-            : resyncState === 'error'
-              ? '✗ ÉCHEC — RÉESSAYER'
-              : '↻ RE-SYNCER STRAVA'}
+          {resyncState === 'busy' && resyncPhase === 'syncing'
+            ? 'SYNCHRO ACTIVITÉS…'
+            : resyncState === 'busy' && resyncPhase === 'streaming' && resyncStreamProgress
+              ? `CHARGEMENT TRACÉS ${resyncStreamProgress.done}/${resyncStreamProgress.total}…`
+              : resyncState === 'busy'
+                ? 'SYNCHRO…'
+                : resyncState === 'error'
+                  ? '✗ ÉCHEC — RÉESSAYER'
+                  : '↻ RE-SYNCER STRAVA'}
         </button>
       )}
       {resyncState === 'error' && resyncErrorMessage && (

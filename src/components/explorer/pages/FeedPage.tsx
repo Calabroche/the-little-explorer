@@ -38,7 +38,31 @@ function useConnectStravaBanner(): { tone: 'ok' | 'err'; text: string } | null {
     const ok  = params.get('strava');
     const err = params.get('error');
     if (ok === 'connected') {
-      setBanner({ tone: 'ok', text: 'Strava connecté — tes sorties commencent à apparaître ci-dessous.' });
+      setBanner({ tone: 'ok', text: 'Strava connecté — récupération de tes sorties en cours…' });
+      // Auto-kick the full sync pipeline (activity summaries +
+      // streams backfill) for a freshly-linked athlete so they
+      // never have to find + click two manual buttons. Fires the
+      // /sync once + then loops /backfill-streams until done.
+      // Reloads on success so the home page comes back with a
+      // populated feed.
+      void (async () => {
+        try {
+          const r = await fetch('/api/strava/sync', { method: 'POST' });
+          if (!r.ok) return;  // ResyncErrorBanner via the sidebar will surface this on next click
+          // Loop backfill until done, ignoring failures silently
+          // (the rider has cards by now; streams missing surfaces
+          // via the dedicated button if needed).
+          for (let i = 0; i < 50; i++) {
+            const rr = await fetch('/api/strava/backfill-streams', { method: 'POST' });
+            if (!rr.ok) break;
+            const d = await rr.json() as { done?: boolean; processed?: number; remaining?: number };
+            if (d.done || (d.processed === 0 && d.remaining === 0)) break;
+          }
+          // Reload to surface the now-populated activity list +
+          // chart-ready data.
+          window.location.reload();
+        } catch { /* silent — manual buttons still work */ }
+      })();
     } else if (err?.startsWith('strava_')) {
       const reasons: Record<string, string> = {
         strava_no_session:        "Ta session a expiré pendant la connexion. Recharge la page et réessaie.",
