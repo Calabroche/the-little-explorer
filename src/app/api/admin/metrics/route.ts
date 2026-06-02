@@ -19,7 +19,7 @@
  *     funnel: { signup, welcome_done, sport_done, profile_done, strava_connected, strava_skipped, complete }
  *     events: [ { type, count } ]                         // 7d breakdown
  *     sync:   { received_7d, synced_7d, success_rate }
- *     recent: [ { type, user_id, created_at, props } ]    // last 25
+ *     recent: [ { type, user_id, userName, occurred_at, properties } ]  // last 200, grouped by user client-side
  *   }
  */
 
@@ -59,6 +59,7 @@ interface MetricsResponse {
   recent: {
     type:        string;
     user_id:     string | null;
+    userName:    string | null;   // resolved display name (name || email)
     occurred_at: string;
     properties:  Record<string, unknown>;
   }[];
@@ -169,18 +170,45 @@ export async function GET(req: NextRequest) {
   ]);
   const successRate = (syncReceived7d ?? 0) === 0 ? 1 : (syncSynced7d ?? 0) / (syncReceived7d ?? 1);
 
-  // Most recent 25 events for the live tail.
+  // Recent events for the per-user activity tail. Pull a wider window
+  // (200) than the old flat "25 derniers" so grouping by user is
+  // meaningful — the client collapses these into one expandable row per
+  // person instead of a 10k-line firehose.
   const { data: recentRows } = await db.schema('next_auth')
     .from('events')
     .select('event_type, user_id, occurred_at, properties')
     .order('occurred_at', { ascending: false })
-    .limit(25);
-  const recent = (recentRows ?? []).map(r => ({
-    type:        r.event_type as string,
-    user_id:     r.user_id as string | null,
-    occurred_at: r.occurred_at as string,
-    properties:  (r.properties ?? {}) as Record<string, unknown>,
-  }));
+    .limit(200);
+
+  // Resolve user_id → display name so the tail shows people, not UUIDs.
+  const recentUserIds = Array.from(new Set(
+    (recentRows ?? [])
+      .map(r => r.user_id as string | null)
+      .filter((v): v is string => !!v),
+  ));
+  const nameById = new Map<string, string>();
+  if (recentUserIds.length > 0) {
+    const { data: nameRows } = await db.schema('next_auth')
+      .from('users')
+      .select('id, name, email')
+      .in('id', recentUserIds);
+    for (const u of (nameRows ?? [])) {
+      const id      = u.id as string;
+      const display = (u.name as string | null)?.trim() || (u.email as string | null) || null;
+      if (display) nameById.set(id, display);
+    }
+  }
+
+  const recent = (recentRows ?? []).map(r => {
+    const uid = r.user_id as string | null;
+    return {
+      type:        r.event_type as string,
+      user_id:     uid,
+      userName:    uid ? (nameById.get(uid) ?? null) : null,
+      occurred_at: r.occurred_at as string,
+      properties:  (r.properties ?? {}) as Record<string, unknown>,
+    };
+  });
 
   const payload: MetricsResponse = {
     totals: {

@@ -7,14 +7,15 @@
  *   1. KPI tiles    (users / DAU today / signups 7d / exports total)
  *   2. DAU 30d      bar chart from /admin/metrics → dau[]
  *   3. Onboarding   funnel cards with absolute counts + conversion %
- *   4. Recent       table — last 25 events
+ *   4. Activité     per-user table — recent events grouped by user name,
+ *                   each row expandable to show what that user did
  *
  * Everything fetches one endpoint (`GET /api/admin/metrics`) on mount
  * and on the "Rafraîchir" button. Server-side aggregation keeps the
  * client thin and the dashboard fast.
  */
 
-import { useEffect, useState } from 'react';  // useState needed by DauChart's window selector
+import { useEffect, useState, useMemo, type CSSProperties } from 'react';  // useState needed by DauChart's window selector; useMemo groups the activity tail by user
 
 import Link from 'next/link';
 import { tokens } from '@/components/explorer/tokens';
@@ -34,7 +35,7 @@ interface Metrics {
   };
   events: { type: string; count: number }[];
   sync: { received_7d: number; synced_7d: number; success_rate: number };
-  recent: { type: string; user_id: string | null; occurred_at: string; properties: Record<string, unknown> }[];
+  recent: { type: string; user_id: string | null; userName: string | null; occurred_at: string; properties: Record<string, unknown> }[];
 }
 
 export default function MetricsPage() {
@@ -335,8 +336,50 @@ function EventBreakdown({ events }: { events: Metrics['events'] }) {
   );
 }
 
-// ── Recent events table ───────────────────────────────────────────────
+// ── Per-user activity tail ────────────────────────────────────────────
+type RecentRow = Metrics['recent'][number];
+
+function fmtDateTime(s: string): string {
+  return new Date(s).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+const TH_STYLE: CSSProperties = {
+  fontSize: 9, fontWeight: 700, letterSpacing: '0.1em',
+  color: tokens.inkLight, textTransform: 'uppercase',
+};
+
+/**
+ * Activity tail grouped by user. One row per person (name, last activity,
+ * event count); click a row to expand the full list of what they did.
+ * Avoids the flat 10k-line firehose the raw event stream would produce.
+ */
 function RecentTable({ rows }: { rows: Metrics['recent'] }) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  // Group newest-first rows by user, tracking each user's latest event.
+  const groups = useMemo(() => {
+    const map = new Map<string, { key: string; name: string; events: RecentRow[]; last: string }>();
+    for (const r of rows) {
+      const key  = r.user_id ?? '__anon__';
+      const name = r.userName ?? (r.user_id ? r.user_id.slice(0, 8) : 'Anonyme');
+      let g = map.get(key);
+      if (!g) { g = { key, name, events: [], last: r.occurred_at }; map.set(key, g); }
+      g.events.push(r);
+      if (r.occurred_at > g.last) g.last = r.occurred_at;
+    }
+    return Array.from(map.values()).sort((a, b) => (a.last < b.last ? 1 : -1));
+  }, [rows]);
+
+  const toggle = (key: string) =>
+    setExpanded(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+
+  const USER_COLS   = '1fr 150px 110px 28px';
+  const DETAIL_COLS = 'minmax(160px, 1fr) 130px 2fr';
+
   return (
     <section style={{
       padding: 18, marginBottom: 24,
@@ -347,33 +390,71 @@ function RecentTable({ rows }: { rows: Metrics['recent'] }) {
       <div style={{
         fontSize: 10, fontWeight: 700, letterSpacing: '0.12em',
         color: tokens.terra, marginBottom: 12, textTransform: 'uppercase',
-      }}>Live tail — 25 derniers events</div>
-      {rows.length === 0 ? (
+      }}>Activité par utilisateur</div>
+
+      {groups.length === 0 ? (
         <p style={{ fontSize: 12, color: tokens.inkLight }}>Aucun event encore.</p>
       ) : (
-        <div style={{ display: 'grid', gap: 4 }}>
-          {rows.map((r, i) => (
-            <div key={i} style={{
-              display: 'grid',
-              gridTemplateColumns: '120px 200px 80px 1fr',
-              gap: 12,
-              padding: '6px 8px',
-              fontSize: 11,
-              borderBottom: `1px solid ${tokens.creamBorder}`,
-              alignItems: 'center',
-            }}>
-              <code style={{ color: tokens.terra, fontWeight: 600 }}>{r.type}</code>
-              <span style={{ color: tokens.inkLight }}>
-                {new Date(r.occurred_at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}
-              </span>
-              <code style={{ color: tokens.inkLight, fontSize: 10 }}>
-                {r.user_id ? r.user_id.slice(0, 8) : '—'}
-              </code>
-              <code style={{ color: tokens.inkMid, fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {Object.keys(r.properties).length === 0 ? '' : JSON.stringify(r.properties)}
-              </code>
-            </div>
-          ))}
+        <div>
+          {/* Column headers */}
+          <div style={{
+            display: 'grid', gridTemplateColumns: USER_COLS, gap: 12,
+            padding: '6px 8px', borderBottom: `2px solid ${tokens.creamBorder}`,
+          }}>
+            <span style={TH_STYLE}>Utilisateur</span>
+            <span style={TH_STYLE}>Dernière activité</span>
+            <span style={{ ...TH_STYLE, textAlign: 'right' }}>Événements</span>
+            <span />
+          </div>
+
+          {groups.map(g => {
+            const isOpen = expanded.has(g.key);
+            return (
+              <div key={g.key} style={{ borderBottom: `1px solid ${tokens.creamBorder}` }}>
+                <button
+                  onClick={() => toggle(g.key)}
+                  style={{
+                    display: 'grid', gridTemplateColumns: USER_COLS, gap: 12, width: '100%',
+                    padding: '8px', alignItems: 'center', textAlign: 'left',
+                    background: isOpen ? tokens.cream : 'transparent',
+                    border: 'none', cursor: 'pointer', fontSize: 12,
+                  }}
+                >
+                  <span style={{ fontWeight: 600, color: tokens.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.name}</span>
+                  <span style={{ color: tokens.inkLight, fontSize: 11 }}>{fmtDateTime(g.last)}</span>
+                  <span style={{ color: tokens.inkMid, textAlign: 'right' }}>{g.events.length}</span>
+                  <span style={{ color: tokens.terra, textAlign: 'center' }}>{isOpen ? '▾' : '▸'}</span>
+                </button>
+
+                {isOpen && (
+                  <div style={{ padding: '4px 8px 12px 16px', background: tokens.cream }}>
+                    {/* Detail column headers */}
+                    <div style={{
+                      display: 'grid', gridTemplateColumns: DETAIL_COLS, gap: 12,
+                      padding: '4px 0', borderBottom: `1px solid ${tokens.creamBorder}`,
+                    }}>
+                      <span style={TH_STYLE}>Événement</span>
+                      <span style={TH_STYLE}>Date</span>
+                      <span style={TH_STYLE}>Détails</span>
+                    </div>
+                    {g.events.map((e, i) => (
+                      <div key={i} style={{
+                        display: 'grid', gridTemplateColumns: DETAIL_COLS, gap: 12,
+                        padding: '4px 0', fontSize: 11, alignItems: 'center',
+                        borderBottom: `1px solid ${tokens.creamBorder}`,
+                      }}>
+                        <code style={{ color: tokens.terra, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.type}</code>
+                        <span style={{ color: tokens.inkLight }}>{fmtDateTime(e.occurred_at)}</span>
+                        <code style={{ color: tokens.inkMid, fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {Object.keys(e.properties).length === 0 ? '—' : JSON.stringify(e.properties)}
+                        </code>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </section>
