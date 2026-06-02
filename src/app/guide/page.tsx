@@ -266,12 +266,20 @@ export default function GuidePage() {
   useEffect(() => { setMounted(true); }, []);
 
   return (
+    // globals.css sets `body { overflow: hidden }`, which clamps any
+    // child that doesn't carry its OWN scroll context. The previous
+    // minHeight: 100dvh let <main> grow to fit content but kept the
+    // scroll on the (locked) body — so the page rendered but couldn't
+    // be scrolled. Fixed height + overflowY: auto gives us a viewport-
+    // sized scroll region right here, same trick /admin and /settings
+    // use.
     <main style={{
-      minHeight:   '100dvh',
+      height:      '100dvh',
       overflowY:   'auto',
       padding:     '40px 20px 80px',
       background:  tokens.cream,
       fontFamily:  "'Space Grotesk', sans-serif",
+      WebkitOverflowScrolling: 'touch',  // momentum scroll on iOS Safari
     }}>
       <style>{`
         .tle-guide-wrap { max-width: 820px; margin: 0 auto; }
