@@ -295,7 +295,24 @@ function activityToPayload(a: any, streams: any) {
   const distance_m:  number[]          = streams?.distance?.data  ?? [];
   const heartrate:   number[]          = streams?.heartrate?.data ?? [];
   const velocity:    number[]          = streams?.velocity_smooth?.data ?? [];
-  const speed_kmh                       = velocity.map(v => v * 3.6);
+  // Fallback when Strava omits velocity_smooth (frequent on short
+  // urban runs and walks). See backfill-streams for the full
+  // rationale — we derive speed from Δdistance/Δtime so the
+  // detail page's speed chart isn't a blank box.
+  let speed_kmh: number[];
+  if (velocity.length >= 2) {
+    speed_kmh = velocity.map(v => v * 3.6);
+  } else if (distance_m.length >= 2 && time_s.length === distance_m.length) {
+    speed_kmh = distance_m.map((d, i) => {
+      if (i === 0) return 0;
+      const dd = d - distance_m[i - 1];
+      const dt = time_s[i] - time_s[i - 1];
+      if (dt <= 0) return 0;
+      return (dd / dt) * 3.6;
+    });
+  } else {
+    speed_kmh = [];
+  }
 
   return {
     id:            a.id,

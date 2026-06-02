@@ -55,10 +55,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'db_error' }, { status: 500 });
   }
 
+  // A row needs streams if ANY of the data series we plot are
+  // missing — not just GPS. Earlier this only checked gps.length,
+  // which meant a run that had a map but empty speed/altitude
+  // arrays was silently skipped, leaving the detail page's charts
+  // forever blank even after the user clicked the backfill button.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const needsStreams = (pendingRows ?? []).filter((r: any) => {
-    const gps = r.payload?.gps;
-    return !Array.isArray(gps) || gps.length < 2;
+    const p = r.payload ?? {};
+    const has = (arr: unknown): boolean => Array.isArray(arr) && (arr as unknown[]).length >= 2;
+    // GPS still drives the map. Speed_kmh + altitude drive the
+    // two side charts. Distance_m is needed to derive missing
+    // speed (see merge step below). If ANY of those is empty,
+    // this row is a candidate for re-fetch.
+    return !has(p.gps) || !has(p.speed_kmh) || !has(p.altitude) || !has(p.distance_m);
   });
   if (needsStreams.length === 0) {
     return NextResponse.json({ processed: 0, remaining: 0, done: true });
@@ -179,7 +189,26 @@ export async function POST(req: NextRequest) {
     const distance_m:  number[]          = streams?.distance?.data  ?? [];
     const heartrate:   number[]          = streams?.heartrate?.data ?? [];
     const velocity:    number[]          = streams?.velocity_smooth?.data ?? [];
-    const speed_kmh                       = velocity.map(v => v * 3.6);
+    // Strava sometimes omits velocity_smooth for short / urban runs
+    // and short walks even though distance + time are present. When
+    // that happens, derive speed from Δdistance / Δtime so the
+    // speed chart doesn't render as an empty box. Only do this when
+    // Strava's own series is empty — their smoothed version is
+    // better than our naive diff when it's available.
+    let speed_kmh: number[];
+    if (velocity.length >= 2) {
+      speed_kmh = velocity.map(v => v * 3.6);
+    } else if (distance_m.length >= 2 && time_s.length === distance_m.length) {
+      speed_kmh = distance_m.map((d, i) => {
+        if (i === 0) return 0;
+        const dd = d - distance_m[i - 1];
+        const dt = time_s[i] - time_s[i - 1];
+        if (dt <= 0) return 0;
+        return (dd / dt) * 3.6;  // m/s → km/h
+      });
+    } else {
+      speed_kmh = [];
+    }
     const newPayload = {
       ...existing,
       gps, altitude, time_s, distance_m, heartrate, speed_kmh,
