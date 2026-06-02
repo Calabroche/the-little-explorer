@@ -280,13 +280,15 @@ function Step0({ userName, onNext }: {
       </div>
       <a
         href="/guide"
+        target="_blank"
+        rel="noopener noreferrer"
         style={{
           display: 'block', textAlign: 'center', marginTop: 18,
           fontSize: 12, fontWeight: 600, color: tokens.terra,
           textDecoration: 'none', letterSpacing: '0.02em',
         }}
       >
-        📖 Voir le guide complet
+        📖 Voir le guide complet ↗
       </a>
       <PrimaryButton onClick={onNext} disabled={false} label="COMMENCER" />
     </>

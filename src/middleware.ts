@@ -35,7 +35,11 @@ const { withAuth } = require('next-auth/middleware');
 //                handoff. Without this the iOS sign-in flow would
 //                redirect into /onboarding in the ASWebAuthenticationSession
 //                webview instead of bouncing back to the native app.
-const ONBOARDING_BYPASS = new Set<string>(['/onboarding']);
+// /guide is whitelisted so the "Voir le guide complet" link on the
+// onboarding welcome screen (Step 0) actually opens — without it the
+// onboarding gate bounces a not-yet-onboarded user straight back to
+// /onboarding and the link appears to do nothing.
+const ONBOARDING_BYPASS = new Set<string>(['/onboarding', '/guide']);
 const ONBOARDING_BYPASS_PREFIX = ['/admin', '/api', '/auth'];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
