@@ -38,28 +38,6 @@ const CARD: React.CSSProperties = {
   margin:     '0 auto',
 };
 
-const TH: React.CSSProperties = {
-  textAlign:    'left',
-  padding:      '10px 12px',
-  fontFamily:   "'Space Grotesk'",
-  fontSize:     11,
-  fontWeight:   700,
-  letterSpacing: '0.06em',
-  color:        tokens.inkLight,
-  textTransform: 'uppercase',
-  borderBottom: `1px solid ${tokens.creamBorder}`,
-  whiteSpace:   'nowrap',
-};
-
-const TD: React.CSSProperties = {
-  padding:    '10px 12px',
-  fontFamily: "'Space Grotesk'",
-  fontSize:   13,
-  color:      tokens.ink,
-  borderBottom: `1px solid ${tokens.creamBorder}`,
-  verticalAlign: 'middle',
-};
-
 function formatDate(iso: string | null): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('fr-FR', {
@@ -151,64 +129,68 @@ export default function AdminPage() {
   return (
     // `body { overflow: hidden }` in globals.css clamps the page —
     // give <main> its own scroll context or it can't reach the
-    // table rows below the fold.
+    // cards below the fold. Reduced horizontal padding on phones
+    // so the cards aren't squashed into 60% of the screen.
     <main style={{
       height:     '100vh',
       overflowY:  'auto',
-      padding:    '40px 24px',
+      padding:    '24px 16px',
       background: tokens.cream,
     }}>
-      <div style={{ maxWidth: 1080, margin: '0 auto 16px', display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-        <h1 style={{
+      {/* Scoped media-query block — keeps the responsive logic
+          inline with the component instead of polluting globals.css
+          for an admin-only page. */}
+      <style>{`
+        .tle-admin-title { font-size: 22px; }
+        .tle-admin-header { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+        .tle-admin-header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .tle-admin-userrow { display: grid; grid-template-columns: 1fr; gap: 12px; }
+        @media (min-width: 768px) {
+          .tle-admin-title { font-size: 28px; }
+          .tle-admin-header { flex-direction: row; align-items: baseline; justify-content: space-between; }
+          .tle-admin-userrow {
+            grid-template-columns:
+              minmax(0, 1.8fr)      /* identity (avatar + name + uuid) */
+              minmax(0, 1.6fr)      /* email */
+              auto                   /* providers */
+              auto                   /* strava id */
+              auto                   /* activity count */
+              auto                   /* date */
+              auto;                  /* delete button */
+            align-items: center;
+            gap: 16px;
+          }
+          .tle-admin-meta-label { display: none !important; }
+        }
+      `}</style>
+
+      <div className="tle-admin-header" style={{ maxWidth: 1080, margin: '0 auto 16px' }}>
+        <h1 className="tle-admin-title" style={{
           fontFamily: "'Playfair Display'",
-          fontSize:   28,
           fontWeight: 800,
           color:      tokens.ink,
           margin:     0,
+          lineHeight: 1.1,
         }}>
           Admin · Users
         </h1>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <Link href="/admin/metrics" style={{
-            padding: '6px 14px',
-            background: tokens.terra,
-            border: `1px solid ${tokens.terra}`,
-            borderRadius: 3,
-            color: '#fff',
-            fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 700,
-            letterSpacing: '0.04em',
-            textDecoration: 'none',
-          }}>
+        <div className="tle-admin-header-actions">
+          <Link href="/admin/metrics" style={headerBtn(tokens.terra, '#fff', tokens.terra)}>
             MÉTRIQUES →
           </Link>
           <button onClick={refresh} disabled={loading} style={{
-            padding: '6px 14px',
-            background: tokens.creamDark,
-            border: `1px solid ${tokens.creamBorder}`,
-            borderRadius: 3,
-            color: tokens.inkMid,
-            fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 600,
-            letterSpacing: '0.04em',
+            ...headerBtn(tokens.creamDark, tokens.inkMid, tokens.creamBorder),
             cursor: loading ? 'wait' : 'pointer',
           }}>
             {loading ? '…' : 'RAFRAÎCHIR'}
           </button>
-          <Link href="/" style={{
-            padding: '6px 14px',
-            background: tokens.surface,
-            border: `1px solid ${tokens.creamBorder}`,
-            borderRadius: 3,
-            color: tokens.inkMid,
-            fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 600,
-            letterSpacing: '0.04em',
-            textDecoration: 'none',
-          }}>
+          <Link href="/" style={headerBtn(tokens.surface, tokens.inkMid, tokens.creamBorder)}>
             ← APP
           </Link>
         </div>
       </div>
 
-      <div style={CARD}>
+      <div style={{ ...CARD, maxWidth: 1080, margin: '0 auto' }}>
         {error && (
           <div style={{
             padding: '12px 14px',
@@ -230,114 +212,154 @@ export default function AdminPage() {
               {loading ? 'Chargement…' : `${users.length} utilisateur${users.length > 1 ? 's' : ''}`}
             </div>
 
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
-                <thead>
-                  <tr>
-                    <th style={TH}>User</th>
-                    <th style={TH}>Email</th>
-                    <th style={TH}>Providers</th>
-                    <th style={TH}>Strava ID</th>
-                    <th style={{ ...TH, textAlign: 'right' }}>Activités</th>
-                    <th style={TH}>Inscrit</th>
-                    <th style={{ ...TH, textAlign: 'right' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map(u => (
-                    <tr key={u.id}>
-                      <td style={TD}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          {u.image ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={u.image} alt="" width={28} height={28} style={{ borderRadius: '50%', flexShrink: 0 }} />
-                          ) : (
-                            <div style={{
-                              width: 28, height: 28, borderRadius: '50%',
-                              background: tokens.terra, color: '#fff', flexShrink: 0,
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              fontSize: 11, fontWeight: 700,
-                            }}>
-                              {(u.name ?? u.email ?? '?').slice(0, 1).toUpperCase()}
-                            </div>
-                          )}
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-                            <span style={{ fontWeight: 600 }}>{u.name ?? '—'}</span>
-                            {/* Click the UUID to copy — saves opening dev
-                                tools when admin needs the id for the
-                                debug endpoints (list-user-activities /
-                                strava-streams-probe). Title attr shows the
-                                full uuid on hover. */}
-                            {/* Full uuid, no truncation — admin tends to
-                                triple-click + copy the rendered text rather
-                                than triggering the onClick, so the visible
-                                text needs to BE the value we want them to
-                                copy. userSelect:'all' makes one click select
-                                the whole line; clicking the chip ALSO writes
-                                to clipboard as a shortcut. */}
-                            <code
-                              onClick={() => {
-                                navigator.clipboard?.writeText(u.id);
-                              }}
-                              title="Triple-clic ou clic pour copier"
-                              style={{
-                                fontSize: 10, color: tokens.inkLight,
-                                fontFamily: 'monospace',
-                                cursor: 'pointer',
-                                userSelect: 'all',
-                                wordBreak: 'break-all',
-                              }}
-                            >
-                              {u.id}
-                            </code>
-                          </div>
-                        </div>
-                      </td>
-                      <td style={{ ...TD, color: tokens.inkMid, fontSize: 12 }}>{u.email ?? '—'}</td>
-                      <td style={TD}>
-                        {u.providers.includes('google') && <Badge label="Google" color="#4285F4" />}
-                        {u.providers.includes('strava') && <Badge label="Strava" color="#FC4C02" />}
-                        {u.providers.length === 0 && <span style={{ color: tokens.inkLight, fontSize: 11 }}>—</span>}
-                      </td>
-                      <td style={{ ...TD, fontFamily: 'monospace', fontSize: 11, color: tokens.inkMid }}>
-                        {u.athleteId ?? <span style={{ color: tokens.inkLight }}>—</span>}
-                      </td>
-                      <td style={{ ...TD, textAlign: 'right', fontFamily: 'monospace', fontWeight: 700 }}>
-                        {u.activities}
-                      </td>
-                      <td style={{ ...TD, color: tokens.inkMid, fontSize: 11, whiteSpace: 'nowrap' }}>
-                        {formatDate(u.createdAt)}
-                      </td>
-                      <td style={{ ...TD, textAlign: 'right' }}>
-                        <button
-                          onClick={() => deleteUser(u)}
-                          disabled={deletingId === u.id}
-                          title="Supprimer définitivement ce compte (cascade sur toutes ses données)"
-                          style={{
-                            padding: '4px 10px',
-                            background:   deletingId === u.id ? '#FCC' : 'transparent',
-                            border:       `1px solid ${deletingId === u.id ? '#A00' : '#E5B4B4'}`,
-                            borderRadius: 3,
-                            color:        '#A00',
-                            fontFamily:   "'Space Grotesk'",
-                            fontSize:     11,
-                            fontWeight:   600,
-                            cursor:       deletingId === u.id ? 'wait' : 'pointer',
-                            opacity:      deletingId === u.id ? 0.6 : 1,
-                            whiteSpace:   'nowrap',
-                          }}
-                        >
-                          {deletingId === u.id ? '…' : '✗ Supprimer'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            {/* Card stack on mobile, single-line grid row on
+                desktop — same JSX, the CSS up top swaps the
+                grid-template-columns based on viewport. */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {users.map(u => (
+                <div
+                  key={u.id}
+                  className="tle-admin-userrow"
+                  style={{
+                    padding: '14px 16px',
+                    background: tokens.surface,
+                    border: `1px solid ${tokens.creamBorder}`,
+                    borderRadius: 6,
+                  }}
+                >
+                  {/* Identity column */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                    {u.image ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={u.image} alt="" width={36} height={36} style={{ borderRadius: '50%', flexShrink: 0 }} />
+                    ) : (
+                      <div style={{
+                        width: 36, height: 36, borderRadius: '50%',
+                        background: tokens.terra, color: '#fff', flexShrink: 0,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 13, fontWeight: 700,
+                      }}>
+                        {(u.name ?? u.email ?? '?').slice(0, 1).toUpperCase()}
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, flex: 1 }}>
+                      <span style={{ fontFamily: "'Space Grotesk'", fontSize: 14, fontWeight: 700, color: tokens.ink, lineHeight: 1.2 }}>
+                        {u.name ?? '—'}
+                      </span>
+                      {/* UUID: shown small + monospace, click-to-copy.
+                          Truncated visually with maxWidth + ellipsis so
+                          the card layout stays compact, BUT the full
+                          value is what gets selected / copied. */}
+                      <code
+                        onClick={() => navigator.clipboard?.writeText(u.id)}
+                        title={`Cliquer pour copier — ${u.id}`}
+                        style={{
+                          fontSize: 10, color: tokens.inkLight,
+                          fontFamily: 'monospace',
+                          cursor: 'pointer',
+                          userSelect: 'all',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          maxWidth: '100%',
+                        }}
+                      >
+                        {u.id}
+                      </code>
+                    </div>
+                  </div>
+
+                  {/* Email */}
+                  <div style={{ fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.inkMid, wordBreak: 'break-all' }}>
+                    <span className="tle-admin-meta-label" style={metaLabel}>Email </span>
+                    {u.email ?? '—'}
+                  </div>
+
+                  {/* Providers */}
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <span className="tle-admin-meta-label" style={metaLabel}>Providers </span>
+                    {u.providers.includes('google') && <Badge label="Google" color="#4285F4" />}
+                    {u.providers.includes('strava') && <Badge label="Strava" color="#FC4C02" />}
+                    {u.providers.length === 0 && <span style={{ color: tokens.inkLight, fontSize: 11 }}>—</span>}
+                  </div>
+
+                  {/* Strava ID */}
+                  <div style={{ fontFamily: 'monospace', fontSize: 11, color: tokens.inkMid }}>
+                    <span className="tle-admin-meta-label" style={metaLabel}>Strava ID </span>
+                    {u.athleteId ?? <span style={{ color: tokens.inkLight }}>—</span>}
+                  </div>
+
+                  {/* Activities count */}
+                  <div style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: tokens.ink }}>
+                    <span className="tle-admin-meta-label" style={metaLabel}>Activités </span>
+                    {u.activities}
+                  </div>
+
+                  {/* Inscription date */}
+                  <div style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkMid, whiteSpace: 'nowrap' }}>
+                    <span className="tle-admin-meta-label" style={metaLabel}>Inscrit </span>
+                    {formatDate(u.createdAt)}
+                  </div>
+
+                  {/* Delete action */}
+                  <div>
+                    <button
+                      onClick={() => deleteUser(u)}
+                      disabled={deletingId === u.id}
+                      title="Supprimer définitivement ce compte (cascade sur toutes ses données)"
+                      style={{
+                        width: '100%',
+                        padding: '8px 14px',
+                        background:   deletingId === u.id ? '#FCC' : 'transparent',
+                        border:       `1px solid ${deletingId === u.id ? '#A00' : '#E5B4B4'}`,
+                        borderRadius: 3,
+                        color:        '#A00',
+                        fontFamily:   "'Space Grotesk'",
+                        fontSize:     12,
+                        fontWeight:   600,
+                        cursor:       deletingId === u.id ? 'wait' : 'pointer',
+                        opacity:      deletingId === u.id ? 0.6 : 1,
+                        whiteSpace:   'nowrap',
+                      }}
+                    >
+                      {deletingId === u.id ? '…' : '✗ Supprimer'}
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           </>
         )}
       </div>
     </main>
   );
+}
+
+/// Inline label shown on mobile only (hidden on desktop via the
+/// .tle-admin-meta-label rule in the <style> block). Lets each
+/// card cell carry its own field name so the user doesn't have
+/// to remember which value is which.
+const metaLabel: React.CSSProperties = {
+  fontFamily: "'Space Grotesk'",
+  fontSize: 9,
+  fontWeight: 700,
+  letterSpacing: '0.12em',
+  textTransform: 'uppercase',
+  color: tokens.inkLight,
+  marginRight: 8,
+};
+
+function headerBtn(bg: string, fg: string, border: string): React.CSSProperties {
+  return {
+    padding: '8px 14px',
+    background: bg,
+    border: `1px solid ${border}`,
+    borderRadius: 3,
+    color: fg,
+    fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 700,
+    letterSpacing: '0.04em',
+    textDecoration: 'none',
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+  };
 }
