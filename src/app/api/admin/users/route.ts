@@ -127,3 +127,61 @@ export async function GET(req: NextRequest) {
     },
   });
 }
+
+/**
+ * DELETE /api/admin/users
+ *
+ * Body: { id: string }
+ *
+ * Hard-deletes a user from next_auth.users. Every other table that
+ * references the user — sessions, accounts, api_tokens, activities,
+ * bike_equipment, bike_gears, bike_service_events, itineraries — has
+ * ON DELETE CASCADE on its user_id FK, so the row vanishes from the
+ * whole app in one statement.
+ *
+ * Two guards:
+ *   1. Admin-only (same email allowlist as GET).
+ *   2. Cannot delete yourself — prevents the "admin nukes their own
+ *      account, locks themselves out of /admin" foot-cannon.
+ *
+ * Strava-side: this does NOT revoke the user's Strava authorization
+ * on Strava's end (we'd need to call /oauth/deauthorize for that, and
+ * we don't have a fresh access_token here without doing a refresh
+ * dance). The user can revoke from strava.com/settings/apps any time.
+ */
+export async function DELETE(req: NextRequest) {
+  const authed = await getAuthedUser(req);
+  if (!authed?.email) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+  if (!isAdminEmail(authed.email)) {
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  }
+
+  let body: { id?: string } = {};
+  try {
+    body = await req.json() as { id?: string };
+  } catch {
+    return NextResponse.json({ error: 'invalid_body' }, { status: 400 });
+  }
+  const targetId = body.id;
+  if (!targetId || typeof targetId !== 'string') {
+    return NextResponse.json({ error: 'missing_id' }, { status: 400 });
+  }
+  if (targetId === authed.id) {
+    return NextResponse.json({ error: 'cannot_delete_self' }, { status: 400 });
+  }
+
+  // Single DELETE — cascades take care of the rest.
+  const { error } = await supabaseAdmin()
+    .schema('next_auth')
+    .from('users')
+    .delete()
+    .eq('id', targetId);
+  if (error) {
+    console.error('[admin/users.DELETE] failed for', targetId, ':', error.message);
+    return NextResponse.json({ error: 'db_error', detail: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true, deletedId: targetId });
+}

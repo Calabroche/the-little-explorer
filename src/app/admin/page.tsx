@@ -89,6 +89,10 @@ export default function AdminPage() {
   const [users, setUsers]     = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
+  /// Which user is currently being deleted — keyed by id so the button
+  /// on that specific row can show a spinner state while we wait for
+  /// the request. Cleared on success / failure.
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const refresh = () => {
     setLoading(true);
@@ -106,6 +110,43 @@ export default function AdminPage() {
   };
 
   useEffect(() => { refresh(); }, []);
+
+  /// Confirmation + DELETE call. Two warnings before the actual
+  /// destructive op so we don't fat-finger Hélena out of existence.
+  /// On success, drop the row from the local state immediately
+  /// (no full refresh round-trip).
+  const deleteUser = async (u: AdminUser) => {
+    const summary = `${u.name ?? u.email ?? u.id} · ${u.activities} activités`;
+    if (!confirm(
+      `⚠️ Supprimer définitivement ${summary} ?\n\n` +
+      `Tout sera effacé : compte, sessions, providers (Google/Strava), activités, ` +
+      `bikes, carnet d'entretien, itinéraires. Cette action est irréversible. ` +
+      `Côté Strava, l'autorisation reste active (la personne peut la révoquer ` +
+      `manuellement sur strava.com/settings/apps).`,
+    )) return;
+    setDeletingId(u.id);
+    try {
+      const r = await fetch('/api/admin/users', {
+        method:  'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ id: u.id }),
+      });
+      if (!r.ok) {
+        let detail = `HTTP ${r.status}`;
+        try {
+          const body = await r.json() as { error?: string; detail?: string };
+          if (body?.error) detail = body.detail ? `${body.error}: ${body.detail}` : body.error;
+        } catch { /* ignore */ }
+        throw new Error(detail);
+      }
+      // Optimistic local update — strip the row.
+      setUsers(prev => prev.filter(x => x.id !== u.id));
+    } catch (err) {
+      alert(`Échec de la suppression : ${(err as Error).message}`);
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   return (
     // `body { overflow: hidden }` in globals.css clamps the page —
@@ -199,6 +240,7 @@ export default function AdminPage() {
                     <th style={TH}>Strava ID</th>
                     <th style={{ ...TH, textAlign: 'right' }}>Activités</th>
                     <th style={TH}>Inscrit</th>
+                    <th style={{ ...TH, textAlign: 'right' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -236,6 +278,28 @@ export default function AdminPage() {
                       </td>
                       <td style={{ ...TD, color: tokens.inkMid, fontSize: 11, whiteSpace: 'nowrap' }}>
                         {formatDate(u.createdAt)}
+                      </td>
+                      <td style={{ ...TD, textAlign: 'right' }}>
+                        <button
+                          onClick={() => deleteUser(u)}
+                          disabled={deletingId === u.id}
+                          title="Supprimer définitivement ce compte (cascade sur toutes ses données)"
+                          style={{
+                            padding: '4px 10px',
+                            background:   deletingId === u.id ? '#FCC' : 'transparent',
+                            border:       `1px solid ${deletingId === u.id ? '#A00' : '#E5B4B4'}`,
+                            borderRadius: 3,
+                            color:        '#A00',
+                            fontFamily:   "'Space Grotesk'",
+                            fontSize:     11,
+                            fontWeight:   600,
+                            cursor:       deletingId === u.id ? 'wait' : 'pointer',
+                            opacity:      deletingId === u.id ? 0.6 : 1,
+                            whiteSpace:   'nowrap',
+                          }}
+                        >
+                          {deletingId === u.id ? '…' : '✗ Supprimer'}
+                        </button>
                       </td>
                     </tr>
                   ))}
