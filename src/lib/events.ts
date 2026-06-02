@@ -44,6 +44,7 @@ export type EventType =
   // Onboarding funnel — each step fires its own event so the dashboard
   // can show drop-off rates.
   | 'onboarding_started'                  // first visit to /onboarding
+  | 'onboarding_step_welcome_done'        // dismissed the welcome screen → started the flow
   | 'onboarding_step_sport_done'          // chose a sport
   | 'onboarding_step_profile_done'        // saved weight + FTP
   | 'onboarding_step_strava_connected'    // chose to connect Strava

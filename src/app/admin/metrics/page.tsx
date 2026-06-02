@@ -29,7 +29,7 @@ interface Metrics {
   };
   dau: { day: string; count: number }[];
   funnel: {
-    signup: number; sport_done: number; profile_done: number;
+    signup: number; welcome_done: number; sport_done: number; profile_done: number;
     strava_connected: number; strava_skipped: number; complete: number;
   };
   events: { type: string; count: number }[];
@@ -247,6 +247,7 @@ function DauChart({ series }: { series: Metrics['dau'] }) {
 function FunnelSection({ funnel }: { funnel: Metrics['funnel'] }) {
   const steps = [
     { label: 'Signup',          count: funnel.signup,           color: tokens.terra },
+    { label: 'Bienvenue vue',   count: funnel.welcome_done,     color: tokens.terra },
     { label: 'Sport choisi',    count: funnel.sport_done,       color: tokens.terra },
     { label: 'Profil rempli',   count: funnel.profile_done,     color: tokens.terra },
     { label: 'Strava connecté', count: funnel.strava_connected, color: tokens.green },

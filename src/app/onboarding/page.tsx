@@ -1,7 +1,14 @@
 'use client';
 
 /**
- * /onboarding — 3-step new-user flow.
+ * /onboarding — welcome + 3-step new-user flow.
+ *
+ *   Step 0: Welcome
+ *     Greets the user by name, sketches what the app does in a few
+ *     bullets, and links to the full /guide. Shown to every first-time
+ *     user before any data is collected (the request was "show the guide
+ *     first to welcome them and tell them what they can do"). "Commencer"
+ *     fires `onboarding_step_welcome_done` and advances to Step 1.
  *
  *   Step 1: Sport
  *     "Quel sport tu pratiques le plus ?" → vélo / course / les deux
@@ -51,7 +58,9 @@ export default function OnboardingPage() {
   // refresh / re-attempt several times before the redirect takes;
   // 52c8bead-…-c7e4 reported filling out the flow 3 times.
   const { update: refreshSession } = useSession();
-  const [step,        setStep]        = useState<1 | 2 | 3>(1);
+  // Step 0 is the welcome screen (greeting + "what you can do" + link to
+  // the full guide). Steps 1-3 are the original data-collection flow.
+  const [step,        setStep]        = useState<0 | 1 | 2 | 3>(0);
   const [me,          setMe]          = useState<MeResponse | null>(null);
   const [sport,       setSport]       = useState<Sport | null>(null);
   const [riderKg,     setRiderKg]     = useState<string>('');
@@ -86,6 +95,11 @@ export default function OnboardingPage() {
         body:    JSON.stringify({ op: 'event', event, props }),
       });
     } catch { /* best-effort */ }
+  };
+
+  const goStep1 = async () => {
+    await fireEvent('onboarding_step_welcome_done');
+    setStep(1);
   };
 
   const goStep2 = async () => {
@@ -189,7 +203,7 @@ export default function OnboardingPage() {
         borderRadius: 4,
         padding:      '40px 36px',
       }}>
-        <StepIndicator current={step} />
+        {step >= 1 && <StepIndicator current={step as 1 | 2 | 3} />}
 
         {error && (
           <div style={{
@@ -199,6 +213,12 @@ export default function OnboardingPage() {
           }}>{error}</div>
         )}
 
+        {step === 0 && (
+          <Step0
+            userName={me?.name ?? null}
+            onNext={goStep1}
+          />
+        )}
         {step === 1 && (
           <Step1
             sport={sport}
@@ -228,6 +248,51 @@ export default function OnboardingPage() {
   );
 }
 
+// ── Step 0: welcome ──────────────────────────────────────────────────────
+// First thing a brand-new user sees. Greets them, sketches what the app
+// does in a few bullets, and points to the full /guide — without burying
+// them in it. "Commencer" drops them into the 3-step data flow.
+function Step0({ userName, onNext }: {
+  userName: string | null;
+  onNext: () => void;
+}) {
+  const HIGHLIGHTS: { icon: string; text: string }[] = [
+    { icon: '◎', text: 'Toutes tes sorties Strava synchronisées : récap, graphes annuels et cartes.' },
+    { icon: '✦', text: 'Un planificateur d\'itinéraires + plans d\'entraînement calibrés sur ta FTP.' },
+    { icon: '⚡', text: 'Suivi de ta FTP, de ta charge (TSS) et de ta forme dans le temps.' },
+    { icon: '⚙', text: 'Carnet d\'entretien de ton matériel et suivi des pièces d\'usure.' },
+    { icon: '◎', text: 'Apple Watch : enregistre tes rides en GPS standalone, guidage vocal inclus.' },
+  ];
+  return (
+    <>
+      <Title small="§ BIENVENUE" big="Bienvenue" italic={userName ? userName.split(' ')[0] : 'à bord'} />
+      <p style={blurb}>
+        The Little Explorer rassemble tout ton suivi sportif au même endroit.
+        Voici un aperçu de ce que tu peux faire :
+      </p>
+      <div style={{ display: 'grid', gap: 12, marginTop: 18 }}>
+        {HIGHLIGHTS.map((h, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+            <span style={{ color: tokens.terra, fontSize: 16, lineHeight: '20px', flexShrink: 0 }}>{h.icon}</span>
+            <span style={{ fontSize: 13, color: tokens.inkMid, lineHeight: 1.5 }}>{h.text}</span>
+          </div>
+        ))}
+      </div>
+      <a
+        href="/guide"
+        style={{
+          display: 'block', textAlign: 'center', marginTop: 18,
+          fontSize: 12, fontWeight: 600, color: tokens.terra,
+          textDecoration: 'none', letterSpacing: '0.02em',
+        }}
+      >
+        📖 Voir le guide complet
+      </a>
+      <PrimaryButton onClick={onNext} disabled={false} label="COMMENCER" />
+    </>
+  );
+}
+
 // ── Step 1: sport ────────────────────────────────────────────────────────
 function Step1({ sport, onChange, onNext, userName }: {
   sport: Sport | null;
@@ -235,9 +300,12 @@ function Step1({ sport, onChange, onNext, userName }: {
   onNext: () => void;
   userName: string | null;
 }) {
+  // userName retained for symmetry with the other steps; the greeting
+  // now lives on the welcome screen (Step 0).
+  void userName;
   return (
     <>
-      <Title small="§ ONBOARDING — 1/3" big="Bienvenue" italic={userName ? userName.split(' ')[0] : '!'} />
+      <Title small="§ ONBOARDING — 1/3" big="Ton sport" italic="le principal" />
       <p style={blurb}>Pour t&apos;afficher les bonnes métriques, dis-moi ce que tu pratiques le plus.</p>
       <div style={{ display: 'grid', gap: 10, marginTop: 18 }}>
         {([

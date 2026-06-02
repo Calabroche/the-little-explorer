@@ -16,7 +16,7 @@
  *   {
  *     totals: { users, activities, events_7d, signups_7d, exports_total, … }
  *     dau:    [ { day: 'YYYY-MM-DD', count: number } ]   // 30 days
- *     funnel: { signup, sport_done, profile_done, strava_connected, strava_skipped, complete }
+ *     funnel: { signup, welcome_done, sport_done, profile_done, strava_connected, strava_skipped, complete }
  *     events: [ { type, count } ]                         // 7d breakdown
  *     sync:   { received_7d, synced_7d, success_rate }
  *     recent: [ { type, user_id, created_at, props } ]    // last 25
@@ -43,6 +43,7 @@ interface MetricsResponse {
   dau: { day: string; count: number }[];
   funnel: {
     signup:            number;
+    welcome_done:      number;
     sport_done:        number;
     profile_done:      number;
     strava_connected:  number;
@@ -128,6 +129,7 @@ export async function GET(req: NextRequest) {
   }
   const [
     funnel_signup,
+    funnel_welcome,
     funnel_sport,
     funnel_profile,
     funnel_strava_yes,
@@ -135,6 +137,7 @@ export async function GET(req: NextRequest) {
     funnel_complete,
   ] = await Promise.all([
     eventCount('signup'),
+    eventCount('onboarding_step_welcome_done'),
     eventCount('onboarding_step_sport_done'),
     eventCount('onboarding_step_profile_done'),
     eventCount('onboarding_step_strava_connected'),
@@ -191,6 +194,7 @@ export async function GET(req: NextRequest) {
     dau,
     funnel: {
       signup:           funnel_signup,
+      welcome_done:     funnel_welcome,
       sport_done:       funnel_sport,
       profile_done:     funnel_profile,
       strava_connected: funnel_strava_yes,
