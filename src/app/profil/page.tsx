@@ -35,6 +35,13 @@ export default function ProfilPage() {
     setResyncState('busy');
     setPhase('syncing');
     setStreamProgress(null);
+    // Engagement beacon — server debounces to 1/hour per user. Same
+    // event type as the sidebar's button so the funnel groups them.
+    void fetch('/api/me/track', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ event: 'manual_resync', props: { surface: 'profil' } }),
+    }).catch(() => { /* best-effort */ });
     try {
       const r = await fetch('/api/strava/sync', { method: 'POST' });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);

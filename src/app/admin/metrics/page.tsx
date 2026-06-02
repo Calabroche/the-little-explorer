@@ -14,7 +14,8 @@
  * client thin and the dashboard fast.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';  // useState needed by DauChart's window selector
+
 import Link from 'next/link';
 import { tokens } from '@/components/explorer/tokens';
 import {
@@ -172,7 +173,12 @@ function KpiGrid({ totals, sync }: { totals: Metrics['totals']; sync: Metrics['s
 
 // ── DAU chart ─────────────────────────────────────────────────────────
 function DauChart({ series }: { series: Metrics['dau'] }) {
-  const empty = series.every(s => s.count === 0);
+  // Window selector — the source series is always 30 days, we just
+  // slice the tail to render a smaller window. No round-trip needed
+  // since the data's already on the client.
+  const [windowDays, setWindowDays] = useState<1 | 3 | 7 | 10 | 30>(30);
+  const sliced = series.slice(-windowDays);
+  const empty = sliced.every(s => s.count === 0);
   return (
     <section style={{
       padding: 18, marginBottom: 24,
@@ -181,9 +187,35 @@ function DauChart({ series }: { series: Metrics['dau'] }) {
       borderRadius: 4,
     }}>
       <div style={{
-        fontSize: 10, fontWeight: 700, letterSpacing: '0.12em',
-        color: tokens.terra, marginBottom: 12, textTransform: 'uppercase',
-      }}>DAU — 30 derniers jours</div>
+        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+        marginBottom: 12, gap: 12, flexWrap: 'wrap',
+      }}>
+        <div style={{
+          fontSize: 10, fontWeight: 700, letterSpacing: '0.12em',
+          color: tokens.terra, textTransform: 'uppercase',
+        }}>DAU — {windowDays === 1 ? 'aujourd’hui' : `${windowDays} derniers jours`}</div>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {([1, 3, 7, 10, 30] as const).map(d => (
+            <button
+              key={d}
+              onClick={() => setWindowDays(d)}
+              style={{
+                padding: '4px 10px',
+                background: windowDays === d ? tokens.terra : tokens.creamDark,
+                border: `1px solid ${windowDays === d ? tokens.terra : tokens.creamBorder}`,
+                borderRadius: 3,
+                color: windowDays === d ? '#fff' : tokens.inkMid,
+                fontFamily: "'Space Grotesk', sans-serif",
+                fontSize: 10, fontWeight: 700,
+                letterSpacing: '0.04em',
+                cursor: 'pointer',
+              }}
+            >
+              {d}j
+            </button>
+          ))}
+        </div>
+      </div>
       {empty ? (
         <p style={{ fontSize: 12, color: tokens.inkLight, padding: '24px 0', textAlign: 'center' }}>
           Pas encore d&apos;événements enregistrés. L&apos;instrumentation est active —
@@ -191,7 +223,7 @@ function DauChart({ series }: { series: Metrics['dau'] }) {
         </p>
       ) : (
         <ResponsiveContainer width="100%" height={200}>
-          <BarChart data={series}>
+          <BarChart data={sliced}>
             <CartesianGrid strokeDasharray="3 3" stroke={tokens.creamBorder} />
             <XAxis
               dataKey="day"

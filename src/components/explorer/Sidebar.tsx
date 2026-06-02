@@ -657,6 +657,12 @@ function ProfileSection() {
     setResyncErrorMessage(null);
     setResyncNeedsReconnect(false);
     setResyncStreamProgress(null);
+    // Engagement beacon — server debounces to 1/hour per user.
+    void fetch('/api/me/track', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ event: 'manual_resync', props: { surface: 'sidebar' } }),
+    }).catch(() => { /* best-effort */ });
     try {
       const r = await fetch('/api/strava/sync', { method: 'POST' });
       if (!r.ok) {

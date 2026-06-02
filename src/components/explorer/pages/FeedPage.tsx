@@ -607,6 +607,21 @@ export function FeedPage({ activities, stats, sport, onSelect }: Props) {
   const { t } = useT();
   const { data: session } = useSession();
 
+  // Fire-and-forget engagement beacon — server debounces to 1/hour
+  // per user so refreshing the home page 30× doesn't spam the
+  // events table. Without this the live tail on /admin/metrics
+  // stays empty unless someone hits a lifecycle event (signin /
+  // sync / export), which over-rotates on auth and makes the
+  // tail useless for "is anyone actually using the app?".
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    void fetch('/api/me/track', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ event: 'home_view' }),
+    }).catch(() => { /* best-effort */ });
+  }, []);
+
   // Auto-complete the sync pipeline on first landing. Some flows
   // (signing in via Strava on /login → no ?strava=connected param)
   // leave the user with a Strava-linked account but ZERO synced

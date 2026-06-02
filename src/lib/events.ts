@@ -34,6 +34,13 @@ export type EventType =
   | 'rate_limited'            // any route triggered a 429 from the rate-limit middleware
   | 'plan_generated'          // user clicked "Génère le plan" (client-side beacon, future)
   | 'ride_recorded'           // iOS Track recorder saved a ride (client-side beacon, future)
+  // Session / engagement — broader than the lifecycle stuff above so
+  // the live tail isn't permanently empty on a slow day. Each is
+  // debounced server-side to once-per-user-per-hour (see /api/me/track)
+  // so we don't drown the events table in noise.
+  | 'home_view'               // user landed on / (web) or opened the iOS app
+  | 'manual_resync'           // user clicked RE-SYNCER STRAVA in sidebar / /profil
+  | 'activity_view'           // user opened an activity detail page
   // Onboarding funnel — each step fires its own event so the dashboard
   // can show drop-off rates.
   | 'onboarding_started'                  // first visit to /onboarding
