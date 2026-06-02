@@ -68,7 +68,7 @@ export function StatBar({ label, value, max, unit, color }: {
 
 import { useT } from '@/i18n';
 
-export function TypeBadge({ type }: { type: 'cycling' | 'running' | 'hiking' | 'ski' | 'snowshoe' | 'walking' | 'swim' }) {
+export function TypeBadge({ type }: { type: 'cycling' | 'running' | 'hiking' | 'ski' | 'snowshoe' | 'walking' | 'swim' | 'yoga' | 'workout' | 'other' }) {
   const { t } = useT();
   const config = {
     cycling:  { bg: tokens.terraLight, fg: tokens.terra, key: 'type.cycling'  },
@@ -78,6 +78,9 @@ export function TypeBadge({ type }: { type: 'cycling' | 'running' | 'hiking' | '
     snowshoe: { bg: tokens.creamDark,  fg: tokens.blue,  key: 'type.snowshoe' },
     walking:  { bg: tokens.creamDark,  fg: tokens.inkMid,key: 'type.walking'  },
     swim:     { bg: tokens.creamDark,  fg: tokens.blue,  key: 'type.swim'     },
+    yoga:     { bg: tokens.creamDark,  fg: tokens.terra, key: 'type.yoga'     },
+    workout:  { bg: tokens.creamDark,  fg: tokens.inkMid,key: 'type.workout'  },
+    other:    { bg: tokens.creamDark,  fg: tokens.inkLight, key: 'type.other' },
   } as const;
   const c = config[type] ?? config.cycling;
   return (

@@ -9,7 +9,18 @@ import { useT } from '@/i18n';
 import type { Lang } from '@/i18n';
 
 export type PageId = 'feed' | 'planner' | 'photos' | 'ftp' | 'training-load' | 'equipment' | 'compare' | 'wrapped' | 'itinerary';
-export type SportId = 'cycling' | 'running' | 'hiking' | 'ski' | 'snowshoe' | 'walking' | 'swim';
+export type SportId =
+  | 'cycling' | 'running' | 'hiking' | 'ski' | 'snowshoe' | 'walking' | 'swim'
+  // Indoor / strength — bundled into one "workout" bucket (covers
+  // WeightTraining, Crossfit, Workout, Elliptical, StairStepper). Yoga
+  // gets its own slot because riders tend to track it differently and
+  // ask "show me my yoga" specifically.
+  | 'yoga' | 'workout'
+  // Anything we don't have a dedicated label for. Catches Strava types
+  // like Rowing, Kayaking, Surfing, Skateboarding, GolfingRiding, etc.
+  // — they still show up in the sport picker (filtered by presence
+  // like every other bucket) so the rider's "Autre" view isn't empty.
+  | 'other';
 export type UserId  = 'florian' | 'helena';
 
 // Pages available for each sport. Only Planner / FTP are cycling-specific
@@ -25,7 +36,7 @@ export type UserId  = 'florian' | 'helena';
 // 'ftp' now) but stays in PageId for backward-compat with bookmarked
 // ?page=training-load URLs — ExplorerApp routes both ids to the same
 // combined PerformancePage with the right tab pre-selected.
-const ALL_SPORTS: SportId[] = ['cycling', 'running', 'hiking', 'ski', 'snowshoe', 'walking', 'swim'];
+const ALL_SPORTS: SportId[] = ['cycling', 'running', 'hiking', 'ski', 'snowshoe', 'walking', 'swim', 'yoga', 'workout', 'other'];
 const ALL_NAV_ITEMS: { id: PageId; icon: string; label: string; sports: SportId[] }[] = [
   { id: 'feed',      icon: '◎', label: 'Activités',     sports: ALL_SPORTS },
   // 'itinerary' is no longer a top-level destination — it lives as a
@@ -102,6 +113,9 @@ const SPORT_META: Record<SportId, { icon: string; labelKey: string }> = {
   snowshoe: { icon: '❄', labelKey: 'common.snowshoe' },
   walking:  { icon: '⋯', labelKey: 'common.walking'  },
   swim:     { icon: '≈', labelKey: 'common.swim'     },
+  yoga:     { icon: '✿', labelKey: 'common.yoga'     },
+  workout:  { icon: '⚒', labelKey: 'common.workout'  },
+  other:    { icon: '✦', labelKey: 'common.other'    },
 };
 
 function SportToggle({ sport, onChange, available, compact }: {

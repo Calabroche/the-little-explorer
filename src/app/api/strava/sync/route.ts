@@ -46,8 +46,15 @@ const STRAVA_ACTIVITIES_URL = 'https://www.strava.com/api/v3/athlete/activities'
 const CYCLING = new Set(['Ride', 'VirtualRide', 'EBikeRide', 'MountainBikeRide', 'GravelRide', 'Velomobile', 'Handcycle']);
 const RUNNING = new Set(['Run', 'TrailRun', 'VirtualRun']);
 const SKI     = new Set(['AlpineSki', 'BackcountrySki', 'NordicSki', 'RollerSki']);
-// Avoid `new Set([...Set, ...Set])` which needs --downlevelIteration on
-// our es5 target. Just list the supported types explicitly.
+// Indoor / strength session — collapsed into a single "workout"
+// bucket so the sport picker doesn't drown the rider in 6 near-
+// identical entries. The detail page still shows the original
+// Strava type (`original_type` column).
+const WORKOUT = new Set(['Workout', 'WeightTraining', 'Crossfit', 'Elliptical', 'StairStepper']);
+const YOGA    = new Set(['Yoga', 'Pilates']);
+// Any Strava activity type the rider actually logs. We keep the
+// list permissive — anything Strava ships with shows up under
+// the right bucket; novel types fall through to `other`.
 const SUPPORTED = new Set([
   // cycling
   'Ride', 'VirtualRide', 'EBikeRide', 'MountainBikeRide', 'GravelRide', 'Velomobile', 'Handcycle',
@@ -55,8 +62,17 @@ const SUPPORTED = new Set([
   'Run', 'TrailRun', 'VirtualRun',
   // skiing
   'AlpineSki', 'BackcountrySki', 'NordicSki', 'RollerSki',
-  // other
+  // hike / walk / swim / snow
   'Hike', 'Snowshoe', 'Walk', 'Swim',
+  // indoor / strength — sync them so the rider's "workout" /
+  // "yoga" tabs aren't fake-empty when they DO log these.
+  'Workout', 'WeightTraining', 'Crossfit', 'Elliptical', 'StairStepper',
+  'Yoga', 'Pilates',
+  // catch-all so anything else (Rowing, Kayaking, Surfing,
+  // Skateboarding, IceSkate, GolfingRiding, etc.) lands in the
+  // "other" bucket instead of being silently dropped.
+  'Rowing', 'Kayaking', 'Canoeing', 'StandUpPaddling', 'Surfing', 'Windsurf', 'Kitesurf',
+  'IceSkate', 'InlineSkate', 'RockClimbing', 'Skateboarding', 'Soccer', 'Tennis', 'Sail', 'GolfingRiding',
 ]);
 
 function sportFromType(t: string): string {
@@ -67,7 +83,13 @@ function sportFromType(t: string): string {
   if (t === 'Snowshoe') return 'snowshoe';
   if (t === 'Walk')     return 'walking';
   if (t === 'Swim')     return 'swim';
-  return 'cycling';
+  if (YOGA.has(t))      return 'yoga';
+  if (WORKOUT.has(t))   return 'workout';
+  // Anything in SUPPORTED but not matched above goes to "other"
+  // so the rider can still find / browse it in the feed. Unknown
+  // / future Strava types would also land here once added to
+  // SUPPORTED.
+  return 'other';
 }
 
 export async function POST(req: NextRequest) {

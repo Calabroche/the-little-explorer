@@ -35,14 +35,23 @@ import { logEvent } from '@/lib/events';
 const STRAVA_TOKEN_URL = 'https://www.strava.com/api/v3/oauth/token';
 
 // Mirrors the sets in /api/strava/sync and scripts/sync-strava-supabase.mjs.
+// Kept in lockstep with /api/strava/sync — extend together. The
+// rationale for the wide net + the per-bucket grouping (yoga,
+// workout, other) lives there.
 const CYCLING = new Set(['Ride', 'VirtualRide', 'EBikeRide', 'MountainBikeRide', 'GravelRide', 'Velomobile', 'Handcycle']);
 const RUNNING = new Set(['Run', 'TrailRun', 'VirtualRun']);
 const SKI     = new Set(['AlpineSki', 'BackcountrySki', 'NordicSki', 'RollerSki']);
+const WORKOUT = new Set(['Workout', 'WeightTraining', 'Crossfit', 'Elliptical', 'StairStepper']);
+const YOGA    = new Set(['Yoga', 'Pilates']);
 const SUPPORTED = new Set([
   'Ride', 'VirtualRide', 'EBikeRide', 'MountainBikeRide', 'GravelRide', 'Velomobile', 'Handcycle',
   'Run', 'TrailRun', 'VirtualRun',
   'AlpineSki', 'BackcountrySki', 'NordicSki', 'RollerSki',
   'Hike', 'Snowshoe', 'Walk', 'Swim',
+  'Workout', 'WeightTraining', 'Crossfit', 'Elliptical', 'StairStepper',
+  'Yoga', 'Pilates',
+  'Rowing', 'Kayaking', 'Canoeing', 'StandUpPaddling', 'Surfing', 'Windsurf', 'Kitesurf',
+  'IceSkate', 'InlineSkate', 'RockClimbing', 'Skateboarding', 'Soccer', 'Tennis', 'Sail', 'GolfingRiding',
 ]);
 
 function sportFromType(t: string): string {
@@ -53,7 +62,9 @@ function sportFromType(t: string): string {
   if (t === 'Snowshoe') return 'snowshoe';
   if (t === 'Walk')     return 'walking';
   if (t === 'Swim')     return 'swim';
-  return 'cycling';
+  if (YOGA.has(t))      return 'yoga';
+  if (WORKOUT.has(t))   return 'workout';
+  return 'other';
 }
 
 interface Body {

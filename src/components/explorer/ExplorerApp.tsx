@@ -298,7 +298,13 @@ export function ExplorerApp() {
   const filteredStats = useMemo(() => deriveStats(filteredActivities), [filteredActivities]);
 
   const availableSports = useMemo<SportId[]>(() => {
-    const SPORT_ORDER: SportId[] = ['cycling', 'running', 'hiking', 'ski', 'snowshoe', 'walking', 'swim'];
+    // Order = priority shown in the picker. Outdoor cardio first
+    // (most users), strength / indoor in the middle (more niche),
+    // catch-all "other" last.
+    const SPORT_ORDER: SportId[] = [
+      'cycling', 'running', 'hiking', 'ski', 'snowshoe', 'walking', 'swim',
+      'yoga', 'workout', 'other',
+    ];
     const presentSports = new Set(activities.map(a => a.type as SportId));
     return SPORT_ORDER.filter(s => presentSports.has(s));
   }, [activities]);

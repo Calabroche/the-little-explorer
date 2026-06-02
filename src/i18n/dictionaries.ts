@@ -30,6 +30,9 @@ export const dict = {
       snowshoe:       'Raquette',
       walking:        'Marche',
       swim:           'Nage',
+      yoga:           'Yoga',
+      workout:        'Renfo',
+      other:          'Autre',
       language:       'LANGUE',
       kmUnit:         'km',
       mUnit:          'm',
@@ -65,6 +68,9 @@ export const dict = {
       snowshoe: '❄ RAQUETTE',
       walking:  '⋯ MARCHE',
       swim:     '≈ NAGE',
+      yoga:     '✿ YOGA',
+      workout:  '⚒ RENFO',
+      other:    '✦ AUTRE',
     },
 
     // ── Feed page ────────────────────────────────────────────────────────────
@@ -598,6 +604,9 @@ export const dict = {
       snowshoe:       'Snowshoe',
       walking:        'Walking',
       swim:           'Swim',
+      yoga:           'Yoga',
+      workout:        'Workout',
+      other:          'Other',
       language:       'LANGUAGE',
       kmUnit:         'km',
       mUnit:          'm',
@@ -630,6 +639,9 @@ export const dict = {
       snowshoe: '❄ SNOWSHOE',
       walking:  '⋯ WALK',
       swim:     '≈ SWIM',
+      yoga:     '✿ YOGA',
+      workout:  '⚒ WORKOUT',
+      other:    '✦ OTHER',
     },
 
     // ── Feed page ────────────────────────────────────────────────────────────
