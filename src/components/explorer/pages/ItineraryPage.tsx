@@ -670,9 +670,11 @@ export function ItineraryPage({ user, embedded }: Props) {
   // basemap selection again.
   const [basemap, setBasemap] = useBasemap();
 
-  // Map grew by +200px vs the previous V1 to leave room for the
-  // elevation chart underneath without scrolling pressure.
-  const mapHeight = isMobile ? 560 : 720;
+  // Size the map to the viewport so the elevation profile sits on-screen
+  // without scrolling: it shrinks on shorter screens (clamped to a usable
+  // min) and never grows past a sane max. The reserve (~440px) accounts for
+  // the planner tabs, padding and the profile card below.
+  const mapHeight: number | string = isMobile ? 460 : 'clamp(340px, calc(100dvh - 440px), 700px)';
 
   // ── Layout ───────────────────────────────────────────────────────────────
   const CARD: CSSProperties = {
@@ -1011,7 +1013,7 @@ export function ItineraryPage({ user, embedded }: Props) {
 
           {/* Way-type + surface breakdown (OSM-enriched). */}
           {wayAnalysis && (wayAnalysis.wayTypes.length > 0 || wayAnalysis.surfaces.length > 0) && (
-            <div style={{ ...CARD, marginTop: 12 }}>
+            <div style={{ ...CARD, marginTop: 12, display: 'flex', gap: 28, flexDirection: isMobile ? 'column' : 'row' }}>
               {([
                 { title: 'Types de chemins', buckets: wayAnalysis.wayTypes },
                 { title: 'Surfaces',          buckets: wayAnalysis.surfaces },
@@ -1019,21 +1021,21 @@ export function ItineraryPage({ user, embedded }: Props) {
                 if (buckets.length === 0) return null;
                 const total = Math.max(1, buckets.reduce((s, b) => s + b.meters, 0));
                 return (
-                  <div key={title} style={{ marginBottom: 18 }}>
+                  <div key={title} style={{ flex: 1, minWidth: 0 }}>
                     <Label style={{ display: 'block', marginBottom: 8 }}>{title}</Label>
-                    <div style={{ display: 'flex', height: 12, borderRadius: 6, overflow: 'hidden', gap: 1, marginBottom: 10 }}>
+                    <div style={{ display: 'flex', height: 11, borderRadius: 6, overflow: 'hidden', gap: 1, marginBottom: 8 }}>
                       {buckets.map(b => (
                         <div key={b.key} style={{ width: `${(b.meters / total) * 100}%`, background: WAY_COLORS[b.key] ?? '#999' }} />
                       ))}
                     </div>
                     {buckets.map((b, i) => (
                       <div key={b.key} style={{
-                        display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0',
+                        display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0',
                         borderBottom: i < buckets.length - 1 ? `1px solid ${tokens.creamBorder}` : 'none',
                       }}>
-                        <span style={{ width: 16, height: 16, borderRadius: 4, background: WAY_COLORS[b.key] ?? '#999', flexShrink: 0 }} />
-                        <span style={{ fontFamily: "'Space Grotesk'", fontSize: 14, color: tokens.ink }}>{b.label}</span>
-                        <span style={{ marginLeft: 'auto', fontFamily: 'monospace', fontSize: 13, color: tokens.inkMid }}>{fmtMeters(b.meters)}</span>
+                        <span style={{ width: 14, height: 14, borderRadius: 4, background: WAY_COLORS[b.key] ?? '#999', flexShrink: 0 }} />
+                        <span style={{ fontFamily: "'Space Grotesk'", fontSize: 13, color: tokens.ink }}>{b.label}</span>
+                        <span style={{ marginLeft: 'auto', fontFamily: 'monospace', fontSize: 12, color: tokens.inkMid }}>{fmtMeters(b.meters)}</span>
                       </div>
                     ))}
                   </div>
