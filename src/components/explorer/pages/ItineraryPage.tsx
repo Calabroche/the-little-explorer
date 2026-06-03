@@ -1132,10 +1132,12 @@ export function ItineraryPage({ user, embedded }: Props) {
                 <CircleMarker
                   key={`${w.code}-${i}`}
                   center={[w.lat, w.lng]}
-                  radius={9}
-                  pathOptions={{ fillColor: tokens.terra, color: '#fff', weight: 2, fillOpacity: 1 }}
+                  radius={5}
+                  pathOptions={{ fillColor: tokens.terra, color: '#fff', weight: 1.5, fillOpacity: 1 }}
                 >
-                  <Tooltip permanent direction="top" offset={[0, -10]}>
+                  {/* Name only on hover — keeps the map minimalist (just dots)
+                      instead of plastering every stop's label across it. */}
+                  <Tooltip direction="top" offset={[0, -6]}>
                     <span style={{ fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 600 }}>
                       {i + 1}. {w.name}
                     </span>
