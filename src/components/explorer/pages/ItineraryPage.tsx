@@ -17,6 +17,8 @@ const MapContainer = dynamic(() => import('react-leaflet').then(m => m.MapContai
 const Polyline     = dynamic(() => import('react-leaflet').then(m => m.Polyline),     { ssr: false });
 const CircleMarker = dynamic(() => import('react-leaflet').then(m => m.CircleMarker), { ssr: false });
 const Tooltip      = dynamic(() => import('react-leaflet').then(m => m.Tooltip),      { ssr: false });
+const Popup        = dynamic(() => import('react-leaflet').then(m => m.Popup),        { ssr: false });
+const MapClickHandler = dynamic(() => import('../itinerary/MapClickHandler').then(m => m.MapClickHandler), { ssr: false });
 const FitBounds    = dynamic(() => import('../itinerary/FitBounds').then(m => m.FitBounds), { ssr: false });
 const BasemapTiles = dynamic(() => import('../MapBasemap').then(m => m.BasemapTiles), { ssr: false });
 import { useBasemap, BasemapToggle } from '../MapBasemap';
@@ -328,6 +330,15 @@ export function ItineraryPage({ user, embedded }: Props) {
 
   const [library, setLibrary]         = useState<Itinerary[]>([]);
 
+  // ── Click-to-add (drop a precise point on the map) ───────────────────────
+  // When the user clicks the map a confirmation popup opens at that exact
+  // spot. `clickPoint` holds the raw clicked coordinates; `clickInfo` is the
+  // reverse-geocoded label (street / commune) shown in the popup once it
+  // resolves. Confirming appends the point to the route; the ✕ dismisses it.
+  const [clickPoint, setClickPoint]   = useState<{ lat: number; lng: number } | null>(null);
+  const [clickInfo, setClickInfo]     = useState<{ name: string; city?: string; postal?: string; code?: string } | null>(null);
+  const [clickLoading, setClickLoading] = useState(false);
+
   // Way-type + surface breakdown (OSM-enriched, via /api/route-ways).
   const [wayAnalysis, setWayAnalysis] = useState<{ wayTypes: WayBucket[]; surfaces: WayBucket[] } | null>(null);
   const [wayLoading, setWayLoading]   = useState(false);
@@ -345,6 +356,47 @@ export function ItineraryPage({ user, embedded }: Props) {
     prev.some(p => p.code === w.code) ? prev : [...prev, w]
   );
   const removeWaypoint = (idx: number) => setWaypoints(prev => prev.filter((_, i) => i !== idx));
+
+  // ── Click-to-add a precise map point ─────────────────────────────────────
+  // Clicking the map opens the confirmation popup at the exact spot and kicks
+  // off a reverse-geocode so the popup can name the street / commune. We keep
+  // the raw clicked coordinates (not the snapped BAN result) so the route
+  // passes through precisely where the user clicked.
+  const handleMapClick = useCallback((lat: number, lng: number) => {
+    setClickPoint({ lat, lng });
+    setClickInfo(null);
+    setClickLoading(true);
+    fetch(`/api/commune-search?lat=${lat.toFixed(6)}&lng=${lng.toFixed(6)}`)
+      .then(r => (r.ok ? r.json() : []))
+      .then((arr: Waypoint[]) => {
+        const hit = Array.isArray(arr) ? arr[0] : null;
+        if (hit) setClickInfo({ name: hit.name, city: hit.city, postal: hit.postal, code: hit.code });
+        else setClickInfo({ name: `${lat.toFixed(4)}, ${lng.toFixed(4)}` });
+      })
+      .catch(() => setClickInfo({ name: `${lat.toFixed(4)}, ${lng.toFixed(4)}` }))
+      .finally(() => setClickLoading(false));
+  }, []);
+
+  // Append the pending clicked point to the end of the route. We mint a unique
+  // synthetic `code` (`pt:lat,lng`) so two precise points in the same commune
+  // don't collide with the INSEE-code dedup used for searched villages.
+  const confirmClickPoint = () => {
+    if (!clickPoint) return;
+    const { lat, lng } = clickPoint;
+    const w: Waypoint = {
+      name:  clickInfo?.name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+      code:  `pt:${lat.toFixed(5)},${lng.toFixed(5)}`,
+      lat, lng,
+      city:  clickInfo?.city,
+      postal: clickInfo?.postal,
+      label: clickInfo?.city && clickInfo.name !== clickInfo.city
+               ? `${clickInfo.name}, ${clickInfo.city}` : clickInfo?.name,
+      kind:  'locality',
+    };
+    setWaypoints(prev => [...prev, w]);
+    setClickPoint(null);
+    setClickInfo(null);
+  };
   const moveWaypoint   = (idx: number, dir: -1 | 1) => setWaypoints(prev => {
     const next = [...prev];
     const j = idx + dir;
@@ -356,6 +408,7 @@ export function ItineraryPage({ user, embedded }: Props) {
     setWaypoints([]); setGeometry(null); setDistanceM(null); setDurationS(null); setSteps(null);
     setName(''); setActiveId(null); setRouteError(null);
     setElevSeries([]); setElevations(null); setElevIndices(null); setAscent(0); setDescent(0);
+    setClickPoint(null); setClickInfo(null);
   };
 
   // ── Routing ──────────────────────────────────────────────────────────────
@@ -1064,6 +1117,7 @@ export function ItineraryPage({ user, embedded }: Props) {
               minZoom={4}
             >
               <BasemapTiles basemap={basemap} darkMode={dark} />
+              <MapClickHandler onClick={handleMapClick} />
               {polylinePositions && polylinePositions.length > 1 && (
                 <Polyline positions={polylinePositions} pathOptions={{ color: tokens.terra, weight: 4, opacity: 0.85 }} />
               )}
@@ -1098,9 +1152,78 @@ export function ItineraryPage({ user, embedded }: Props) {
                   />
                 </>
               )}
+              {/* Click-to-add: a pending marker + confirmation popup sit at the
+                  exact spot the user clicked. Confirming appends it to the
+                  route, the ✕ dismisses it. */}
+              {clickPoint && (
+                <>
+                  <CircleMarker
+                    center={[clickPoint.lat, clickPoint.lng]}
+                    radius={8}
+                    pathOptions={{ fillColor: tokens.green, color: '#fff', weight: 2, fillOpacity: 1, dashArray: '0' }}
+                  />
+                  <Popup
+                    position={[clickPoint.lat, clickPoint.lng]}
+                    closeButton={false}
+                    autoClose={false}
+                    closeOnClick={false}
+                    eventHandlers={{ remove: () => { setClickPoint(null); setClickInfo(null); } }}
+                  >
+                    <div style={{ minWidth: 190, fontFamily: "'Space Grotesk'" }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 10 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: tokens.inkLight, marginBottom: 3 }}>
+                            Ajouter ce point&nbsp;?
+                          </div>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: tokens.ink, lineHeight: 1.3, whiteSpace: 'normal' }}>
+                            {clickLoading ? 'Localisation…' : (clickInfo?.name ?? 'Point sélectionné')}
+                          </div>
+                          {!clickLoading && clickInfo?.city && clickInfo.city !== clickInfo.name && (
+                            <div style={{ fontSize: 10, color: tokens.inkLight, letterSpacing: '0.03em', marginTop: 1 }}>
+                              {clickInfo.city}{clickInfo.postal ? ` · ${clickInfo.postal}` : ''}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          aria-label="Fermer"
+                          onClick={() => { setClickPoint(null); setClickInfo(null); }}
+                          style={{
+                            flexShrink: 0, width: 22, height: 22, lineHeight: '20px', textAlign: 'center',
+                            background: 'transparent', border: `1px solid ${tokens.creamBorder}`, borderRadius: 4,
+                            color: tokens.inkMid, cursor: 'pointer', fontSize: 13, padding: 0,
+                          }}
+                        >✕</button>
+                      </div>
+                      <button
+                        onClick={confirmClickPoint}
+                        style={{
+                          width: '100%', padding: '8px 10px',
+                          fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
+                          background: tokens.green, color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer',
+                        }}
+                      >
+                        + Ajouter au parcours
+                      </button>
+                    </div>
+                  </Popup>
+                </>
+              )}
               <FitBounds positions={polylinePositions ?? waypoints.map(w => [w.lat, w.lng] as [number, number])} />
             </MapContainer>
             <BasemapToggle basemap={basemap} onChange={setBasemap} />
+            {/* Discoverability hint for click-to-add — hidden while a popup
+                is open so it doesn't compete with the confirmation. */}
+            {!clickPoint && (
+              <div style={{
+                position: 'absolute', left: 12, bottom: 12, zIndex: 1000, pointerEvents: 'none',
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '6px 10px', borderRadius: 6,
+                background: 'rgba(0,0,0,0.55)', color: '#fff', backdropFilter: 'blur(4px)',
+                fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 500, letterSpacing: '0.02em',
+              }}>
+                <span aria-hidden>＋</span> {t('itinerary.mapHint')}
+              </div>
+            )}
           </div>
 
           {/* Elevation chart sits directly under the map so you can read both
