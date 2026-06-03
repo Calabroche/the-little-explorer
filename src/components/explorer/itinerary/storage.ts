@@ -102,6 +102,32 @@ export async function syncFromServer(user: string): Promise<Itinerary[]> {
   }
 }
 
+/**
+ * Tolerate payloads written by the iOS app's older encoder so a route
+ * saved on the phone renders here:
+ *   - geometry as `[{lat,lng}]` objects → `[[lat,lng]]` pairs;
+ *   - createdAt as a Swift number (seconds since 2001) → ISO string.
+ * Newer iOS builds already emit the canonical shape; this is a no-op then.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function normalizeItinerary(raw: any): Itinerary {
+  if (!raw || typeof raw !== 'object') return raw as Itinerary;
+  const it = { ...raw };
+  if (Array.isArray(it.geometry)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    it.geometry = it.geometry
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .map((p: any) => Array.isArray(p) ? p : (p && typeof p.lat === 'number' && typeof p.lng === 'number' ? [p.lat, p.lng] : null))
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .filter((p: any) => Array.isArray(p) && p.length >= 2);
+  }
+  if (typeof it.createdAt === 'number') {
+    const REF = Date.UTC(2001, 0, 1); // Swift reference date
+    it.createdAt = new Date(REF + it.createdAt * 1000).toISOString();
+  }
+  return it as Itinerary;
+}
+
 /** Fetch one itinerary's full payload (waypoints + geometry + elevations). */
 export async function loadOne(user: string, id: string): Promise<Itinerary | null> {
   try {
@@ -110,16 +136,17 @@ export async function loadOne(user: string, id: string): Promise<Itinerary | nul
       if (r.status === 404) return null;
       throw new Error(`HTTP ${r.status}`);
     }
-    const data = await r.json() as { payload: Itinerary };
+    const raw = await r.json() as { payload: Itinerary };
+    const payload = normalizeItinerary(raw.payload);
     // Backfill the cache entry with the full payload so subsequent
     // list renders show full data instead of a summary stub.
     const list = loadAll(user);
     const idx  = list.findIndex(x => x.id === id);
     if (idx >= 0) {
-      list[idx] = data.payload;
+      list[idx] = payload;
       setCache(user, list);
     }
-    return data.payload;
+    return payload;
   } catch (err) {
     console.warn('[itineraries.loadOne] failed, trying cache:', err);
     const local = loadAll(user).find(x => x.id === id);
