@@ -19,6 +19,7 @@ const CircleMarker = dynamic(() => import('react-leaflet').then(m => m.CircleMar
 const Tooltip      = dynamic(() => import('react-leaflet').then(m => m.Tooltip),      { ssr: false });
 const Popup        = dynamic(() => import('react-leaflet').then(m => m.Popup),        { ssr: false });
 const MapClickHandler = dynamic(() => import('../itinerary/MapClickHandler').then(m => m.MapClickHandler), { ssr: false });
+const MapAutoResize = dynamic(() => import('../itinerary/MapClickHandler').then(m => m.MapAutoResize), { ssr: false });
 const FitBounds    = dynamic(() => import('../itinerary/FitBounds').then(m => m.FitBounds), { ssr: false });
 const BasemapTiles = dynamic(() => import('../MapBasemap').then(m => m.BasemapTiles), { ssr: false });
 import { useBasemap, BasemapToggle } from '../MapBasemap';
@@ -723,17 +724,21 @@ export function ItineraryPage({ user, embedded }: Props) {
   // basemap selection again.
   const [basemap, setBasemap] = useBasemap();
 
-  // Size the map to the viewport so the elevation profile sits on-screen
-  // without scrolling: it shrinks on shorter screens (clamped to a usable
-  // min) and never grows past a sane max. The reserve (~440px) accounts for
-  // the planner tabs, padding and the profile card below.
-  const mapHeight: number | string = isMobile ? 460 : 'clamp(340px, calc(100dvh - 440px), 700px)';
-
   // ── Layout ───────────────────────────────────────────────────────────────
   const CARD: CSSProperties = {
     background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
     borderRadius: 4, padding: 20,
   };
+
+  // On desktop the map column is a flex column that stretches to match the
+  // (often taller) builder column — so the map card flexes to fill all the
+  // leftover height instead of leaving a gap below the elevation profile.
+  // `minHeight` keeps it usable when the builder column is short. On mobile
+  // the columns stack, so the map keeps a fixed, comfortable height.
+  const mapCardStyle: CSSProperties = isMobile
+    ? { ...CARD, padding: 0, overflow: 'hidden', height: 460, position: 'relative' }
+    : { ...CARD, padding: 0, overflow: 'hidden', flex: 1, minHeight: 'clamp(340px, calc(100dvh - 440px), 720px)', position: 'relative' };
+  const mapInnerHeight: number | string = isMobile ? 460 : '100%';
 
   const canExtend = distanceKm != null && targetKm - distanceKm >= 3 && !extending && !routing;
   // A route is "open" once it's been saved/loaded (activeId set). The
@@ -1107,17 +1112,18 @@ export function ItineraryPage({ user, embedded }: Props) {
 
         {/* ─── RIGHT COLUMN: map + elevation profile ───────────────────── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0 }}>
-          <div style={{ ...CARD, padding: 0, overflow: 'hidden', minHeight: mapHeight, position: 'relative' }}>
+          <div style={mapCardStyle}>
             <MapContainer
               center={mapCenter}
               zoom={waypoints.length > 0 ? 12 : 11}
               scrollWheelZoom={true}
-              style={{ height: mapHeight, width: '100%' }}
+              style={{ height: mapInnerHeight, width: '100%' }}
               maxZoom={20}
               minZoom={4}
             >
               <BasemapTiles basemap={basemap} darkMode={dark} />
               <MapClickHandler onClick={handleMapClick} />
+              <MapAutoResize />
               {polylinePositions && polylinePositions.length > 1 && (
                 <Polyline positions={polylinePositions} pathOptions={{ color: tokens.terra, weight: 4, opacity: 0.85 }} />
               )}
