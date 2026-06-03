@@ -56,3 +56,15 @@ body {
   to   { opacity: 1; transform: translateY(0); }
 }
 
+
+/* Hide the native number-input spinner arrows — they crowd narrow inline
+   inputs (e.g. the itinerary cruising-speed field). Apply via .no-spinner. */
+.no-spinner::-webkit-outer-spin-button,
+.no-spinner::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.no-spinner {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}

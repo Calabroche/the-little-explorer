@@ -1370,6 +1370,7 @@ export function ItineraryPage({ user, embedded }: Props) {
                     </span>
                     <input
                       type="number" min={5} max={50} step={1}
+                      className="no-spinner"
                       value={Math.round(effSpeed)}
                       onChange={e => {
                         const v = Number(e.target.value);
@@ -1377,7 +1378,7 @@ export function ItineraryPage({ user, embedded }: Props) {
                       }}
                       aria-label={t('itinerary.statSpeed')}
                       style={{
-                        width: 38, padding: '2px 4px', textAlign: 'right',
+                        width: 36, padding: '2px 6px', textAlign: 'center',
                         fontFamily: "'Space Grotesk'", fontSize: 13, fontWeight: 700, color: tokens.ink,
                         background: tokens.surface, border: `1px solid ${tokens.creamBorder}`, borderRadius: 6, outline: 'none',
                       }}
