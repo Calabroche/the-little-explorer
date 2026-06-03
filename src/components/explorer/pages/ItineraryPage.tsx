@@ -168,6 +168,23 @@ function formatDuration(s: number): string {
   return h > 0 ? `${h}h${m.toString().padStart(2, '0')}` : `${m} min`;
 }
 
+// ── Way-type / surface breakdown (mirrors the iOS detail view) ──────────────
+interface WayBucket { key: string; label: string; meters: number }
+const WAY_COLORS: Record<string, string> = {
+  route:           '#99aabd',
+  rue:             '#c4ccd6',
+  piste_cyclable:  '#4fa493',
+  route_nationale: '#e3b33d',
+  chemin:          '#d6dbe2',
+  asphalte:        '#99aabd',
+  revetu:          '#e8e8e8',
+  non_pave:        '#cfc4a8',
+  inconnu:         '#333333',
+};
+function fmtMeters(m: number): string {
+  return m >= 1000 ? `${(m / 1000).toFixed(1).replace('.', ',')} km` : `${m} m`;
+}
+
 // Waypoints actually sent to OSRM. When `loop` is on we append the
 // start village as the final stop so the route ends where it begins.
 function effectiveWaypoints(wp: Waypoint[], loop: boolean): Waypoint[] {
@@ -282,6 +299,10 @@ export function ItineraryPage({ user, embedded }: Props) {
 
   const [library, setLibrary]         = useState<Itinerary[]>([]);
 
+  // Way-type + surface breakdown (OSM-enriched, via /api/route-ways).
+  const [wayAnalysis, setWayAnalysis] = useState<{ wayTypes: WayBucket[]; surfaces: WayBucket[] } | null>(null);
+  const [wayLoading, setWayLoading]   = useState(false);
+
   // Render the cache instantly, then reconcile with the server (so a
   // freshly-logged-in user pulls their itineraries down without
   // needing a manual refresh).
@@ -309,6 +330,12 @@ export function ItineraryPage({ user, embedded }: Props) {
   };
 
   // ── Routing ──────────────────────────────────────────────────────────────
+  // When we LOAD a saved route we already have its geometry (and, for a GPX
+  // import, only 1-2 stored waypoints that can't reproduce the real track).
+  // These flags skip the next auto-recompute / elevation re-fetch so loading
+  // a route doesn't erase its geometry or its cached profile.
+  const skipRecomputeRef = useRef(false);
+  const skipElevRef = useRef(false);
   const computeRoute = useCallback(async () => {
     const eff = effectiveWaypoints(waypoints, loop);
     if (eff.length < 2) {
@@ -344,12 +371,20 @@ export function ItineraryPage({ user, embedded }: Props) {
   }, [waypoints, loop]);
 
   useEffect(() => {
+    if (skipRecomputeRef.current) {
+      skipRecomputeRef.current = false;
+      return; // just loaded a saved route — keep its geometry
+    }
     const id = setTimeout(computeRoute, 300);
     return () => clearTimeout(id);
   }, [computeRoute]);
 
   // ── Elevation: fetch a downsampled profile each time the geometry changes
   useEffect(() => {
+    if (skipElevRef.current) {
+      skipElevRef.current = false;
+      return; // just loaded a saved route — keep its cached profile
+    }
     let cancelled = false;
     if (!geometry || geometry.length < 2) {
       setElevSeries([]); setElevations(null); setElevIndices(null);
@@ -382,6 +417,33 @@ export function ItineraryPage({ user, embedded }: Props) {
         setAscent(0); setDescent(0);
       })
       .finally(() => { if (!cancelled) setEleLoading(false); });
+    return () => { cancelled = true; };
+  }, [geometry]);
+
+  // ── Way types + surfaces: OSM breakdown of the route ──────────────────────
+  useEffect(() => {
+    let cancelled = false;
+    if (!geometry || geometry.length < 2) { setWayAnalysis(null); return; }
+    // Sample ≤24 points along the route (OSRM waypoint cap) so the analysis
+    // follows the actual path — same approach as the iOS app.
+    const n = Math.min(24, geometry.length);
+    const stepIdx = (geometry.length - 1) / (n - 1);
+    const pts: [number, number][] = [];
+    for (let i = 0; i < n; i++) {
+      pts.push(geometry[Math.min(geometry.length - 1, Math.round(i * stepIdx))]);
+    }
+    setWayLoading(true);
+    fetch('/api/route-ways', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ waypoints: pts }),
+    })
+      .then(r => r.ok ? r.json() : Promise.reject(r))
+      .then((data: { wayTypes?: WayBucket[]; surfaces?: WayBucket[] }) => {
+        if (!cancelled) setWayAnalysis({ wayTypes: data.wayTypes ?? [], surfaces: data.surfaces ?? [] });
+      })
+      .catch(() => { if (!cancelled) setWayAnalysis(null); })
+      .finally(() => { if (!cancelled) setWayLoading(false); });
     return () => { cancelled = true; };
   }, [geometry]);
 
@@ -441,6 +503,11 @@ export function ItineraryPage({ user, embedded }: Props) {
       const fetched = await loadOne(user, it.id);
       if (fetched) full = fetched;
     }
+    // Preserve the loaded geometry/profile — block the change-driven
+    // re-route and elevation re-fetch that would otherwise overwrite them.
+    const hasGeom = !!(full.geometry && full.geometry.length >= 2);
+    skipRecomputeRef.current = hasGeom;
+    skipElevRef.current = hasGeom && !!(full.elevSampleIndices && full.elevations);
     setActiveId(full.id);
     setName(full.name);
     setWaypoints(full.waypoints);
@@ -906,6 +973,44 @@ export function ItineraryPage({ user, embedded }: Props) {
               loading={eleLoading && elevSeries.length === 0}
               onHover={setHoverEleIdx}
             />
+          )}
+
+          {/* Way-type + surface breakdown (OSM-enriched). */}
+          {wayAnalysis && (wayAnalysis.wayTypes.length > 0 || wayAnalysis.surfaces.length > 0) && (
+            <div style={{ ...CARD, marginTop: 12 }}>
+              {([
+                { title: 'Types de chemins', buckets: wayAnalysis.wayTypes },
+                { title: 'Surfaces',          buckets: wayAnalysis.surfaces },
+              ] as const).map(({ title, buckets }) => {
+                if (buckets.length === 0) return null;
+                const total = Math.max(1, buckets.reduce((s, b) => s + b.meters, 0));
+                return (
+                  <div key={title} style={{ marginBottom: 18 }}>
+                    <Label style={{ display: 'block', marginBottom: 8 }}>{title}</Label>
+                    <div style={{ display: 'flex', height: 12, borderRadius: 6, overflow: 'hidden', gap: 1, marginBottom: 10 }}>
+                      {buckets.map(b => (
+                        <div key={b.key} style={{ width: `${(b.meters / total) * 100}%`, background: WAY_COLORS[b.key] ?? '#999' }} />
+                      ))}
+                    </div>
+                    {buckets.map((b, i) => (
+                      <div key={b.key} style={{
+                        display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0',
+                        borderBottom: i < buckets.length - 1 ? `1px solid ${tokens.creamBorder}` : 'none',
+                      }}>
+                        <span style={{ width: 16, height: 16, borderRadius: 4, background: WAY_COLORS[b.key] ?? '#999', flexShrink: 0 }} />
+                        <span style={{ fontFamily: "'Space Grotesk'", fontSize: 14, color: tokens.ink }}>{b.label}</span>
+                        <span style={{ marginLeft: 'auto', fontFamily: 'monospace', fontSize: 13, color: tokens.inkMid }}>{fmtMeters(b.meters)}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {wayLoading && !wayAnalysis && (
+            <div style={{ ...CARD, marginTop: 12, fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.inkLight }}>
+              Analyse des chemins et surfaces…
+            </div>
           )}
         </div>
       </div>
