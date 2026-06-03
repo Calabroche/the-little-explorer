@@ -326,6 +326,10 @@ export function ItineraryPage({ user, embedded }: Props) {
   // Lets the user collapse the (potentially long) stops list to free up
   // vertical space while keeping the search + everything below in reach.
   const [stopsCollapsed, setStopsCollapsed] = useState(false);
+  // User-chosen cruising speed (km/h). When set it overrides the routing
+  // engine's average and drives the estimated time (time = distance / speed).
+  // null → fall back to the OSRM-derived duration.
+  const [speedOverride, setSpeedOverride] = useState<number | null>(null);
   const dark = useDarkMode();
 
   const [waypoints, setWaypoints]     = useState<Waypoint[]>([]);
@@ -438,7 +442,7 @@ export function ItineraryPage({ user, embedded }: Props) {
     setWaypoints([]); setGeometry(null); setDistanceM(null); setDurationS(null); setSteps(null);
     setName(''); setActiveId(null); setRouteError(null);
     setElevSeries([]); setElevations(null); setElevIndices(null); setAscent(0); setDescent(0);
-    setClickPoint(null); setClickInfo(null);
+    setClickPoint(null); setClickInfo(null); setSpeedOverride(null);
   };
 
   // ── Routing ──────────────────────────────────────────────────────────────
@@ -1310,7 +1314,15 @@ export function ItineraryPage({ user, embedded }: Props) {
               speed. Mirrors the iOS detail view's stats bar. Sits between the
               map and the elevation profile. */}
           {distanceKm != null && (() => {
-            const avgSpeed = durationS && durationS > 0 ? distanceKm / (durationS / 3600) : null;
+            const osrmSpeed = durationS && durationS > 0 ? distanceKm / (durationS / 3600) : null;
+            // Effective cruising speed: the user's override if set, otherwise
+            // the routing engine's average (or a sane 18 km/h fallback).
+            const effSpeed = speedOverride ?? (osrmSpeed ?? 18);
+            // Estimated time follows the effective speed once overridden; with
+            // no override we keep OSRM's own duration (most faithful to the road).
+            const estSeconds = speedOverride != null
+              ? (distanceKm / Math.max(1, speedOverride)) * 3600
+              : durationS;
             const diff = routeDifficulty(distanceKm, ascent);
             return (
               <div style={{
@@ -1319,7 +1331,7 @@ export function ItineraryPage({ user, embedded }: Props) {
               }}>
                 {[
                   { label: t('itinerary.statDistance'), value: `${fmtNum(distanceKm, 1, lang)}`, unit: 'km',  color: tokens.ink },
-                  { label: t('itinerary.statTime'),     value: durationS != null ? formatDuration(durationS) : '—', unit: '', color: tokens.ink },
+                  { label: t('itinerary.statTime'),     value: estSeconds != null ? formatDuration(estSeconds) : '—', unit: '', color: tokens.ink },
                   { label: t('itinerary.statAscent'),   value: `${ascent.toLocaleString()}`,  unit: 'm', color: tokens.terra },
                   { label: t('itinerary.statDescent'),  value: `${descent.toLocaleString()}`, unit: 'm', color: tokens.blue },
                 ].map(s => (
@@ -1345,21 +1357,42 @@ export function ItineraryPage({ user, embedded }: Props) {
                     {t('itinerary.statDifficulty')}
                   </div>
                 </div>
-                {/* Speed pill */}
-                {avgSpeed != null && (
-                  <div style={{ minWidth: 0 }}>
+                {/* Speed — editable. Changing it recomputes the time above. */}
+                <div style={{ minWidth: 0 }}>
+                  <div style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px 4px 12px', borderRadius: 14,
+                    background: tokens.creamDark,
+                  }}>
                     <span style={{
-                      display: 'inline-block', padding: '5px 12px', borderRadius: 14,
-                      background: tokens.creamDark, color: tokens.inkMid,
-                      fontFamily: "'Space Grotesk'", fontSize: 12, fontWeight: 600, letterSpacing: '0.02em',
+                      fontFamily: "'Space Grotesk'", fontSize: 12, fontWeight: 600, color: tokens.inkMid, letterSpacing: '0.02em',
                     }}>
-                      {t(`itinerary.${speedBand(avgSpeed)}`)} · {fmtNum(avgSpeed, 1, lang)} km/h
+                      {t(`itinerary.${speedBand(effSpeed)}`)} ·
                     </span>
-                    <div style={{ fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight, letterSpacing: '0.05em', marginTop: 4 }}>
-                      {t('itinerary.statSpeed')}
-                    </div>
+                    <input
+                      type="number" min={5} max={50} step={1}
+                      value={Math.round(effSpeed)}
+                      onChange={e => {
+                        const v = Number(e.target.value);
+                        setSpeedOverride(Number.isFinite(v) && v > 0 ? Math.max(5, Math.min(50, v)) : null);
+                      }}
+                      aria-label={t('itinerary.statSpeed')}
+                      style={{
+                        width: 38, padding: '2px 4px', textAlign: 'right',
+                        fontFamily: "'Space Grotesk'", fontSize: 13, fontWeight: 700, color: tokens.ink,
+                        background: tokens.surface, border: `1px solid ${tokens.creamBorder}`, borderRadius: 6, outline: 'none',
+                      }}
+                    />
+                    <span style={{ fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 600, color: tokens.inkLight }}>km/h</span>
                   </div>
-                )}
+                  <div style={{ fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight, letterSpacing: '0.05em', marginTop: 4 }}>
+                    {t('itinerary.statSpeed')}{speedOverride != null ? ' ·' : ''}{speedOverride != null ? (
+                      <button onClick={() => setSpeedOverride(null)} style={{
+                        marginLeft: 4, background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                        fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.terra, letterSpacing: '0.05em',
+                      }}>auto</button>
+                    ) : null}
+                  </div>
+                </div>
               </div>
             );
           })()}
