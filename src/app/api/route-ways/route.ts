@@ -157,16 +157,35 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ wayTypes: [], surfaces: [], total_m: route.distance, unavailable: true });
   }
 
-  // ── 3. Build an undirected node-pair → tags map from the ways ─────────
+  // ── 3. Map nodes → way tags, with tiered lookup ──────────────────────
+  type Tags = { highway?: string; surface?: string };
   const pairKey = (a: number, b: number) => (a < b ? `${a}_${b}` : `${b}_${a}`);
-  const pairTags = new Map<string, { highway?: string; surface?: string }>();
+  const pairTags = new Map<string, Tags>();   // adjacent node pair → way (precise)
+  const nodeWays = new Map<number, Tags[]>();  // node → tags of ways it belongs to
   for (const w of overpass.elements ?? []) {
     if (w.type !== 'way' || !w.nodes || w.nodes.length < 2) continue;
-    const tags = { highway: w.tags?.highway, surface: w.tags?.surface };
+    const tags: Tags = { highway: w.tags?.highway, surface: w.tags?.surface };
     for (let k = 0; k < w.nodes.length - 1; k++) {
       pairTags.set(pairKey(w.nodes[k], w.nodes[k + 1]), tags);
     }
+    for (const n of w.nodes) {
+      const arr = nodeWays.get(n);
+      if (arr) arr.push(tags); else nodeWays.set(n, [tags]);
+    }
   }
+  // Best tags for a route segment: exact adjacent pair → a way shared by
+  // both endpoints → any way of either endpoint. OSRM sometimes lists OSM
+  // nodes that aren't adjacent in a single way, so the looser fallbacks
+  // keep way-type coverage near 100% (surface still legitimately "Inconnu"
+  // where OSM has no surface tag).
+  const tagsForSegment = (a: number, b: number): Tags | undefined => {
+    const exact = pairTags.get(pairKey(a, b));
+    if (exact) return exact;
+    const wa = nodeWays.get(a);
+    const wb = nodeWays.get(b);
+    if (wa && wb) { for (const t of wa) if (wb.includes(t)) return t; }
+    return wa?.[0] ?? wb?.[0];
+  };
 
   // ── 4. Walk the route segments, bucket metres by way-type + surface ──
   const wayBuckets = new Map<string, Bucket>();
@@ -181,7 +200,7 @@ export async function POST(req: NextRequest) {
     const nodes = leg.annotation!.nodes!;
     const dist = leg.annotation!.distance!;
     for (let k = 0; k < nodes.length - 1 && k < dist.length; k++) {
-      const tags = pairTags.get(pairKey(nodes[k], nodes[k + 1]));
+      const tags = tagsForSegment(nodes[k], nodes[k + 1]);
       add(wayBuckets, wayTypeOf(tags?.highway), dist[k]);
       add(surfBuckets, surfaceOf(tags?.surface, tags?.highway), dist[k]);
     }
