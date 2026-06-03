@@ -134,16 +134,18 @@ export async function POST(req: NextRequest) {
   const nodeIds = Array.from(nodeSet);
 
   // ── 2. Overpass: ways containing those nodes, with tags + node lists ──
-  // `way(bn:…)` selects ways having any of the listed nodes as members;
-  // `out;` returns each way's tags AND its ordered node ids (which we need
-  // to map route segments to ways).
-  const overpassQuery = `[out:json][timeout:25];way(bn:${nodeIds.join(',')})[highway];out;`;
+  // Build a node set, then `way(bn)` selects the ways having any of those
+  // nodes as members; `out;` returns each way's tags AND its ordered node
+  // ids (which we need to map route segments back to ways). NB: `bn` works
+  // on an input set — the `way(bn:id,id,…)` inline form is NOT valid.
+  const overpassQuery = `[out:json][timeout:25];node(id:${nodeIds.join(',')});way(bn)[highway];out;`;
 
   let overpass: OverpassResponse;
   try {
     const res = await fetch(OVERPASS_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': UA },
+      // Accept header is required — overpass-api.de 406s requests without it.
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json', 'User-Agent': UA },
       body: 'data=' + encodeURIComponent(overpassQuery),
     });
     if (!res.ok) {
