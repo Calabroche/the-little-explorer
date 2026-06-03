@@ -10,15 +10,35 @@ import { useMap, useMapEvents } from 'react-leaflet';
 export function MapClickHandler({ onClick }: { onClick: (lat: number, lng: number) => void }) {
   useMapEvents({
     click(e) {
-      // Clicks on our confirmation popup (the "Ajouter" / ✕ buttons) bubble
-      // up to the map and would otherwise be read as a fresh map click —
-      // re-opening a phantom popup elsewhere. Ignore anything originating
-      // inside a Leaflet popup; only true map-background clicks add a point.
-      const target = e.originalEvent?.target as HTMLElement | null;
-      if (target?.closest?.('.leaflet-popup')) return;
       onClick(e.latlng.lat, e.latlng.lng);
     },
   });
+  return null;
+}
+
+// Projects a geographic point to a pixel position inside the map container
+// and keeps it updated as the user pans / zooms. The planner renders the
+// "add this point?" confirmation as a plain React overlay *outside* the
+// Leaflet layers (so clicking its buttons never registers as a map click
+// and re-opens a phantom popup) — this feeds that overlay its position.
+export function ClickPopupTracker({
+  point,
+  onMove,
+}: {
+  point: { lat: number; lng: number } | null;
+  onMove: (px: { x: number; y: number } | null) => void;
+}) {
+  const map = useMap();
+  useEffect(() => {
+    if (!point) { onMove(null); return; }
+    const update = () => {
+      const p = map.latLngToContainerPoint([point.lat, point.lng]);
+      onMove({ x: p.x, y: p.y });
+    };
+    update();
+    map.on('move zoom zoomanim viewreset resize', update);
+    return () => { map.off('move zoom zoomanim viewreset resize', update); };
+  }, [point, map, onMove]);
   return null;
 }
 

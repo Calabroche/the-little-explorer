@@ -17,8 +17,8 @@ const MapContainer = dynamic(() => import('react-leaflet').then(m => m.MapContai
 const Polyline     = dynamic(() => import('react-leaflet').then(m => m.Polyline),     { ssr: false });
 const CircleMarker = dynamic(() => import('react-leaflet').then(m => m.CircleMarker), { ssr: false });
 const Tooltip      = dynamic(() => import('react-leaflet').then(m => m.Tooltip),      { ssr: false });
-const Popup        = dynamic(() => import('react-leaflet').then(m => m.Popup),        { ssr: false });
 const MapClickHandler = dynamic(() => import('../itinerary/MapClickHandler').then(m => m.MapClickHandler), { ssr: false });
+const ClickPopupTracker = dynamic(() => import('../itinerary/MapClickHandler').then(m => m.ClickPopupTracker), { ssr: false });
 const MapAutoResize = dynamic(() => import('../itinerary/MapClickHandler').then(m => m.MapAutoResize), { ssr: false });
 const FitBounds    = dynamic(() => import('../itinerary/FitBounds').then(m => m.FitBounds), { ssr: false });
 const BasemapTiles = dynamic(() => import('../MapBasemap').then(m => m.BasemapTiles), { ssr: false });
@@ -337,6 +337,7 @@ export function ItineraryPage({ user, embedded }: Props) {
   // reverse-geocoded label (street / commune) shown in the popup once it
   // resolves. Confirming appends the point to the route; the ✕ dismisses it.
   const [clickPoint, setClickPoint]   = useState<{ lat: number; lng: number } | null>(null);
+  const [clickPixel, setClickPixel]   = useState<{ x: number; y: number } | null>(null);
   const [clickInfo, setClickInfo]     = useState<{ name: string; city?: string; postal?: string; code?: string } | null>(null);
   const [clickLoading, setClickLoading] = useState(false);
 
@@ -1158,65 +1159,83 @@ export function ItineraryPage({ user, embedded }: Props) {
                   />
                 </>
               )}
-              {/* Click-to-add: a pending marker + confirmation popup sit at the
-                  exact spot the user clicked. Confirming appends it to the
-                  route, the ✕ dismisses it. */}
+              {/* Click-to-add: a pending marker sits at the exact clicked spot.
+                  The confirmation card is rendered as a React overlay OUTSIDE
+                  the Leaflet layers (below) so clicking its buttons can never
+                  be read as a map click — the tracker just keeps it anchored. */}
               {clickPoint && (
-                <>
-                  <CircleMarker
-                    center={[clickPoint.lat, clickPoint.lng]}
-                    radius={8}
-                    pathOptions={{ fillColor: tokens.green, color: '#fff', weight: 2, fillOpacity: 1, dashArray: '0' }}
-                  />
-                  <Popup
-                    position={[clickPoint.lat, clickPoint.lng]}
-                    closeButton={false}
-                    autoClose={false}
-                    closeOnClick={false}
-                    eventHandlers={{ remove: () => { setClickPoint(null); setClickInfo(null); } }}
-                  >
-                    <div style={{ minWidth: 190, fontFamily: "'Space Grotesk'" }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 10 }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: tokens.inkLight, marginBottom: 3 }}>
-                            Ajouter ce point&nbsp;?
-                          </div>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: tokens.ink, lineHeight: 1.3, whiteSpace: 'normal' }}>
-                            {clickLoading ? 'Localisation…' : (clickInfo?.name ?? 'Point sélectionné')}
-                          </div>
-                          {!clickLoading && clickInfo?.city && clickInfo.city !== clickInfo.name && (
-                            <div style={{ fontSize: 10, color: tokens.inkLight, letterSpacing: '0.03em', marginTop: 1 }}>
-                              {clickInfo.city}{clickInfo.postal ? ` · ${clickInfo.postal}` : ''}
-                            </div>
-                          )}
-                        </div>
-                        <button
-                          aria-label="Fermer"
-                          onClick={() => { setClickPoint(null); setClickInfo(null); }}
-                          style={{
-                            flexShrink: 0, width: 22, height: 22, lineHeight: '20px', textAlign: 'center',
-                            background: 'transparent', border: `1px solid ${tokens.creamBorder}`, borderRadius: 4,
-                            color: tokens.inkMid, cursor: 'pointer', fontSize: 13, padding: 0,
-                          }}
-                        >✕</button>
-                      </div>
-                      <button
-                        onClick={confirmClickPoint}
-                        style={{
-                          width: '100%', padding: '8px 10px',
-                          fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
-                          background: tokens.green, color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer',
-                        }}
-                      >
-                        + Ajouter au parcours
-                      </button>
-                    </div>
-                  </Popup>
-                </>
+                <CircleMarker
+                  center={[clickPoint.lat, clickPoint.lng]}
+                  radius={8}
+                  pathOptions={{ fillColor: tokens.green, color: '#fff', weight: 2, fillOpacity: 1, dashArray: '0' }}
+                />
               )}
+              <ClickPopupTracker point={clickPoint} onMove={setClickPixel} />
               <FitBounds positions={polylinePositions ?? waypoints.map(w => [w.lat, w.lng] as [number, number])} />
             </MapContainer>
             <BasemapToggle basemap={basemap} onChange={setBasemap} />
+            {/* Confirmation card — a plain DOM overlay positioned over the
+                clicked point. Sits outside <MapContainer>, so its button
+                clicks never reach Leaflet and can't spawn a phantom popup. */}
+            {clickPoint && clickPixel && (() => {
+              // Flip below the point when there isn't room above (near the top
+              // edge), so the card never gets clipped by the map's overflow.
+              const below = clickPixel.y < 150;
+              return (
+              <div style={{
+                position: 'absolute',
+                left: clickPixel.x, top: clickPixel.y,
+                transform: below ? 'translate(-50%, 16px)' : 'translate(-50%, calc(-100% - 16px))',
+                zIndex: 1200, width: 210,
+                background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
+                borderRadius: 8, padding: 12, boxShadow: '0 8px 28px rgba(0,0,0,0.18)',
+                fontFamily: "'Space Grotesk'",
+              }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 10 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: tokens.inkLight, marginBottom: 3 }}>
+                      Ajouter ce point&nbsp;?
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: tokens.ink, lineHeight: 1.3 }}>
+                      {clickLoading ? 'Localisation…' : (clickInfo?.name ?? 'Point sélectionné')}
+                    </div>
+                    {!clickLoading && clickInfo?.city && clickInfo.city !== clickInfo.name && (
+                      <div style={{ fontSize: 10, color: tokens.inkLight, letterSpacing: '0.03em', marginTop: 1 }}>
+                        {clickInfo.city}{clickInfo.postal ? ` · ${clickInfo.postal}` : ''}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    aria-label="Fermer"
+                    onClick={() => { setClickPoint(null); setClickInfo(null); }}
+                    style={{
+                      flexShrink: 0, width: 22, height: 22, lineHeight: '20px', textAlign: 'center',
+                      background: 'transparent', border: `1px solid ${tokens.creamBorder}`, borderRadius: 4,
+                      color: tokens.inkMid, cursor: 'pointer', fontSize: 13, padding: 0,
+                    }}
+                  >✕</button>
+                </div>
+                <button
+                  onClick={confirmClickPoint}
+                  style={{
+                    width: '100%', padding: '9px 10px',
+                    fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
+                    background: tokens.green, color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer',
+                  }}
+                >
+                  + Ajouter au parcours
+                </button>
+                {/* Little pointer tail toward the clicked point. */}
+                <div style={{
+                  position: 'absolute', left: '50%',
+                  ...(below
+                    ? { top: -7, transform: 'translateX(-50%) rotate(45deg)', borderLeft: `1px solid ${tokens.creamBorder}`, borderTop: `1px solid ${tokens.creamBorder}` }
+                    : { bottom: -7, transform: 'translateX(-50%) rotate(45deg)', borderRight: `1px solid ${tokens.creamBorder}`, borderBottom: `1px solid ${tokens.creamBorder}` }),
+                  width: 12, height: 12, background: tokens.surface,
+                }} />
+              </div>
+              );
+            })()}
             {/* Discoverability hint for click-to-add — hidden while a popup
                 is open so it doesn't compete with the confirmation. */}
             {!clickPoint && (
