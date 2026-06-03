@@ -171,6 +171,31 @@ function formatDuration(s: number): string {
   return h > 0 ? `${h}h${m.toString().padStart(2, '0')}` : `${m} min`;
 }
 
+// Format a number with the locale's decimal separator (74.8 → "74,8" in FR).
+function fmtNum(n: number, digits: number, lang: string): string {
+  return n.toLocaleString(lang === 'en' ? 'en-US' : 'fr-FR', {
+    minimumFractionDigits: digits, maximumFractionDigits: digits,
+  });
+}
+
+// Komoot-style difficulty from distance + climbing (mirrors the iOS detail
+// view): effort = km + D+/8 → Facile (<50) / Modéré (<150) / Difficile.
+function routeDifficulty(distanceKm: number, ascent: number): { key: 'diffEasy' | 'diffModerate' | 'diffHard'; bg: string; fg: string } {
+  const effort = distanceKm + ascent / 8;
+  if (effort < 50)  return { key: 'diffEasy',     bg: '#E4EFDD', fg: '#4F7A43' };
+  if (effort < 150) return { key: 'diffModerate', bg: '#F3E0CC', fg: '#9C4E1E' };
+  return { key: 'diffHard', bg: '#3A2A22', fg: '#FFFFFF' };
+}
+
+// Classify an average cycling speed into a pace band (label only — the value
+// is shown alongside). Tuned so ~19 km/h reads as "Modéré".
+function speedBand(kmh: number): 'speedCalm' | 'speedModerate' | 'speedBrisk' | 'speedFast' {
+  if (kmh < 16) return 'speedCalm';
+  if (kmh < 21) return 'speedModerate';
+  if (kmh < 26) return 'speedBrisk';
+  return 'speedFast';
+}
+
 // ── Way-type / surface breakdown (mirrors the iOS detail view) ──────────────
 interface WayBucket { key: string; label: string; meters: number }
 const WAY_COLORS: Record<string, string> = {
@@ -296,8 +321,11 @@ async function findDetour(
 // ── Main component ──────────────────────────────────────────────────────────
 
 export function ItineraryPage({ user, embedded }: Props) {
-  const { t } = useT();
+  const { t, lang } = useT();
   const isMobile = useIsMobile();
+  // Lets the user collapse the (potentially long) stops list to free up
+  // vertical space while keeping the search + everything below in reach.
+  const [stopsCollapsed, setStopsCollapsed] = useState(false);
   const dark = useDarkMode();
 
   const [waypoints, setWaypoints]     = useState<Waypoint[]>([]);
@@ -776,14 +804,39 @@ export function ItineraryPage({ user, embedded }: Props) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Step 1: villages */}
           <div style={CARD}>
-            <Label style={{ display: 'block', marginBottom: 10 }}>{t('itinerary.step1')}</Label>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
+              <Label>{t('itinerary.step1')}</Label>
+              {waypoints.length > 0 && (
+                <button
+                  onClick={() => setStopsCollapsed(v => !v)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 5,
+                    background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                    fontFamily: "'Space Grotesk'", fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase',
+                    color: tokens.inkMid,
+                  }}
+                >
+                  <span style={{ color: tokens.terra }}>{waypoints.length}</span>
+                  {stopsCollapsed ? `▸ ${t('itinerary.expandList')}` : `▾ ${t('itinerary.collapseList')}`}
+                </button>
+              )}
+            </div>
             <VillageSearch onPick={addWaypoint} placeholder={t('itinerary.searchPlaceholder')} />
             {waypoints.length === 0 && (
               <p style={{ marginTop: 12, fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight, lineHeight: 1.5 }}>
                 {t('itinerary.searchHint')}
               </p>
             )}
-            {waypoints.length > 0 && (
+            {waypoints.length > 0 && stopsCollapsed && (
+              <div style={{
+                marginTop: 12, padding: '8px 10px', background: tokens.creamDark, borderRadius: 3,
+                fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkMid, lineHeight: 1.4,
+              }}>
+                {waypoints[0].name} → {waypoints[waypoints.length - 1].name}
+                {loop ? ' ↺' : ''}
+              </div>
+            )}
+            {waypoints.length > 0 && !stopsCollapsed && (
               <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {waypoints.map((w, i) => (
                   <div key={`${w.code}-${i}`} style={{
@@ -1252,6 +1305,64 @@ export function ItineraryPage({ user, embedded }: Props) {
               </div>
             )}
           </div>
+
+          {/* Route summary — distance, time, D+/D−, difficulty + average
+              speed. Mirrors the iOS detail view's stats bar. Sits between the
+              map and the elevation profile. */}
+          {distanceKm != null && (() => {
+            const avgSpeed = durationS && durationS > 0 ? distanceKm / (durationS / 3600) : null;
+            const diff = routeDifficulty(distanceKm, ascent);
+            return (
+              <div style={{
+                ...CARD, marginTop: 16,
+                display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap',
+              }}>
+                {[
+                  { label: t('itinerary.statDistance'), value: `${fmtNum(distanceKm, 1, lang)}`, unit: 'km',  color: tokens.ink },
+                  { label: t('itinerary.statTime'),     value: durationS != null ? formatDuration(durationS) : '—', unit: '', color: tokens.ink },
+                  { label: t('itinerary.statAscent'),   value: `${ascent.toLocaleString()}`,  unit: 'm', color: tokens.terra },
+                  { label: t('itinerary.statDescent'),  value: `${descent.toLocaleString()}`, unit: 'm', color: tokens.blue },
+                ].map(s => (
+                  <div key={s.label} style={{ minWidth: 0 }}>
+                    <div style={{ fontFamily: "'Playfair Display'", fontSize: 22, fontWeight: 800, color: s.color, lineHeight: 1.1 }}>
+                      {s.value}{s.unit && <span style={{ fontSize: 12, fontWeight: 600, marginLeft: 3, color: tokens.inkLight }}>{s.unit}</span>}
+                    </div>
+                    <div style={{ fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight, letterSpacing: '0.05em', marginTop: 2 }}>
+                      {s.label}
+                    </div>
+                  </div>
+                ))}
+                {/* Difficulty pill */}
+                <div style={{ minWidth: 0 }}>
+                  <span style={{
+                    display: 'inline-block', padding: '5px 12px', borderRadius: 14,
+                    background: diff.bg, color: diff.fg,
+                    fontFamily: "'Space Grotesk'", fontSize: 12, fontWeight: 700, letterSpacing: '0.03em',
+                  }}>
+                    {t(`itinerary.${diff.key}`)}
+                  </span>
+                  <div style={{ fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight, letterSpacing: '0.05em', marginTop: 4 }}>
+                    {t('itinerary.statDifficulty')}
+                  </div>
+                </div>
+                {/* Speed pill */}
+                {avgSpeed != null && (
+                  <div style={{ minWidth: 0 }}>
+                    <span style={{
+                      display: 'inline-block', padding: '5px 12px', borderRadius: 14,
+                      background: tokens.creamDark, color: tokens.inkMid,
+                      fontFamily: "'Space Grotesk'", fontSize: 12, fontWeight: 600, letterSpacing: '0.02em',
+                    }}>
+                      {t(`itinerary.${speedBand(avgSpeed)}`)} · {fmtNum(avgSpeed, 1, lang)} km/h
+                    </span>
+                    <div style={{ fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight, letterSpacing: '0.05em', marginTop: 4 }}>
+                      {t('itinerary.statSpeed')}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Elevation chart sits directly under the map so you can read both
               at once — and hovering it places a synced marker on the route
