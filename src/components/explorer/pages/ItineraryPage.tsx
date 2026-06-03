@@ -7,7 +7,7 @@ import { SectionTag, Label, useIsMobile } from '../ui';
 import { useT } from '@/i18n';
 import { UserId } from '../Sidebar';
 import { Waypoint, Itinerary } from '../itinerary/types';
-import { loadAll, upsert, remove, newId, syncFromServer } from '../itinerary/storage';
+import { loadAll, upsert, remove, newId, syncFromServer, loadOne } from '../itinerary/storage';
 import { downsampleByDistance, buildElevationSeries, ascentDescent, haversineM } from '../itinerary/elevation';
 import { ElevationChart } from '../itinerary/ElevationChart';
 import { buildGpx, downloadGpx, slugify as gpxSlug } from '../itinerary/gpx';
@@ -432,24 +432,32 @@ export function ItineraryPage({ user, embedded }: Props) {
     setName(it.name);
   };
 
-  const handleLoad = (it: Itinerary) => {
-    setActiveId(it.id);
-    setName(it.name);
-    setWaypoints(it.waypoints);
-    setTargetKm(it.targetKm);
-    setLoop(!!it.loop);
-    setGeometry(it.geometry ?? null);
-    setDistanceM(it.distanceKm != null ? it.distanceKm * 1000 : null);
-    setDurationS(it.durationMin != null ? it.durationMin * 60 : null);
+  const handleLoad = async (it: Itinerary) => {
+    // Server-only itineraries (e.g. saved on the iOS app) arrive in the
+    // library as summary stubs — no geometry/waypoints. Fetch the full
+    // payload before loading, otherwise clicking "opens" an empty route.
+    let full = it;
+    if (!it.geometry || (it.waypoints?.length ?? 0) === 0) {
+      const fetched = await loadOne(user, it.id);
+      if (fetched) full = fetched;
+    }
+    setActiveId(full.id);
+    setName(full.name);
+    setWaypoints(full.waypoints);
+    setTargetKm(full.targetKm);
+    setLoop(!!full.loop);
+    setGeometry(full.geometry ?? null);
+    setDistanceM(full.distanceKm != null ? full.distanceKm * 1000 : null);
+    setDurationS(full.durationMin != null ? full.durationMin * 60 : null);
     setRouteError(null);
     // Restore elevation cache if present — saves an opentopodata call.
-    if (it.geometry && it.elevSampleIndices && it.elevations) {
-      const series = buildElevationSeries(it.geometry, it.elevSampleIndices, it.elevations);
+    if (full.geometry && full.elevSampleIndices && full.elevations) {
+      const series = buildElevationSeries(full.geometry, full.elevSampleIndices, full.elevations);
       setElevSeries(series);
-      setElevations(it.elevations);
-      setElevIndices(it.elevSampleIndices);
-      setAscent(it.totalAscent ?? 0);
-      setDescent(it.totalDescent ?? 0);
+      setElevations(full.elevations);
+      setElevIndices(full.elevSampleIndices);
+      setAscent(full.totalAscent ?? 0);
+      setDescent(full.totalDescent ?? 0);
     } else {
       setElevSeries([]); setElevations(null); setElevIndices(null); setAscent(0); setDescent(0);
     }
@@ -918,7 +926,7 @@ export function ItineraryPage({ user, embedded }: Props) {
                 ...CARD, padding: 14,
                 borderTop: activeId === it.id ? `2px solid ${tokens.terra}` : `1px solid ${tokens.creamBorder}`,
                 cursor: 'pointer',
-              }} onClick={() => handleLoad(it)}>
+              }} onClick={() => { void handleLoad(it); }}>
                 <div style={{ fontFamily: "'Playfair Display'", fontSize: 16, fontWeight: 700, color: tokens.ink, marginBottom: 4 }}>
                   {it.loop ? '↺ ' : ''}{it.name}
                 </div>
