@@ -1,6 +1,6 @@
 'use client';
 
-import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis, ReferenceArea } from 'recharts';
+import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { tokens } from '../tokens';
 import { Label } from '../ui';
 
@@ -17,11 +17,6 @@ interface Props {
   // the map at the matching geometry point.
   onHover?:    (sampleIdx: number | null) => void;
 }
-
-// Highlight x-bands where the local gradient exceeds STEEP_PCT — cheap
-// way to give the user "where are the climbs" without computing a
-// multi-coloured custom shape.
-const STEEP_PCT = 5;
 
 // Pre-compute, for each sample, the local grade (between this point and
 // the previous one) and the cumulative D+ up to here. The tooltip reads
@@ -44,21 +39,24 @@ function enrich(data: RawPoint[]): Point[] {
   return out;
 }
 
-function steepBands(data: Point[]): { x1: number; x2: number }[] {
-  if (data.length < 2) return [];
-  const bands: { x1: number; x2: number }[] = [];
-  let bandStart: number | null = null;
-  for (let i = 1; i < data.length; i++) {
-    const isSteep = data[i].gradPct >= STEEP_PCT;
-    if (isSteep && bandStart == null) bandStart = data[i - 1].km;
-    if ((!isSteep || i === data.length - 1) && bandStart != null) {
-      const end = !isSteep ? data[i - 1].km : data[i].km;
-      if (end > bandStart) bands.push({ x1: bandStart, x2: end });
-      bandStart = null;
-    }
-  }
-  return bands;
+// Colour a segment by its slope %: green ≤2, yellow 3-5, orange 6-10, red >10.
+// Descents / flats fall in the green band.
+const GRADE_GREEN = '#5B9A5E';
+const GRADE_YELLOW = '#E3C13D';
+const GRADE_ORANGE = '#E0883D';
+const GRADE_RED = '#C0392B';
+function gradeColor(g: number): string {
+  if (g < 3) return GRADE_GREEN;
+  if (g < 6) return GRADE_YELLOW;
+  if (g <= 10) return GRADE_ORANGE;
+  return GRADE_RED;
 }
+const GRADE_LEGEND: { color: string; label: string }[] = [
+  { color: GRADE_GREEN,  label: '0–2 %' },
+  { color: GRADE_YELLOW, label: '3–5 %' },
+  { color: GRADE_ORANGE, label: '6–10 %' },
+  { color: GRADE_RED,    label: '> 10 %' },
+];
 
 // Recharts hands the active payload to the tooltip — we just pull out
 // our enriched fields and render them. Colour the slope value by sign
@@ -109,7 +107,16 @@ export function ElevationChart({ data, totalAscent, totalDescent, loading, onHov
   if (!data || data.length < 2) return null;
 
   const enriched = enrich(data);
-  const bands    = steepBands(enriched);
+  // Build a horizontal gradient coloured by each segment's slope. Two stops
+  // per segment (start + end offset, same colour) give hard band edges.
+  const km0  = enriched[0].km;
+  const span = Math.max(0.0001, enriched[enriched.length - 1].km - km0);
+  const gradeStops: { offset: number; color: string }[] = [];
+  for (let i = 1; i < enriched.length; i++) {
+    const color = gradeColor(enriched[i].gradPct);
+    gradeStops.push({ offset: (enriched[i - 1].km - km0) / span, color });
+    gradeStops.push({ offset: (enriched[i].km - km0) / span, color });
+  }
   const minEle   = Math.min(...enriched.map(d => d.ele));
   const maxEle   = Math.max(...enriched.map(d => d.ele));
   const padded   = Math.max(20, Math.round((maxEle - minEle) * 0.15));
@@ -151,19 +158,12 @@ export function ElevationChart({ data, totalAscent, totalDescent, loading, onHov
           onMouseLeave={() => onHover?.(null)}
         >
           <defs>
-            <linearGradient id="eleGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%"   stopColor={tokens.green}     stopOpacity={0.8} />
-              <stop offset="100%" stopColor={tokens.greenLight} stopOpacity={0.2} />
+            <linearGradient id="gradeGradient" x1="0" y1="0" x2="1" y2="0">
+              {gradeStops.map((s, i) => (
+                <stop key={i} offset={`${Math.min(100, Math.max(0, s.offset * 100)).toFixed(3)}%`} stopColor={s.color} />
+              ))}
             </linearGradient>
           </defs>
-          {bands.map((b, i) => (
-            <ReferenceArea
-              key={i}
-              x1={b.x1} x2={b.x2}
-              y1={minEle - padded} y2={maxEle + padded}
-              fill={tokens.terra} fillOpacity={0.12} stroke="none"
-            />
-          ))}
           <XAxis
             dataKey="km" type="number" domain={['dataMin', 'dataMax']}
             tickFormatter={(v) => `${v} km`}
@@ -185,16 +185,20 @@ export function ElevationChart({ data, totalAscent, totalDescent, loading, onHov
           />
           <Area
             type="monotone" dataKey="ele"
-            stroke={tokens.green} strokeWidth={2}
-            fill="url(#eleGradient)"
+            stroke="url(#gradeGradient)" strokeWidth={2.5}
+            fill="url(#gradeGradient)" fillOpacity={0.5}
             isAnimationActive={false}
           />
         </AreaChart>
       </ResponsiveContainer>
 
-      <div style={{ marginTop: 8, fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight, letterSpacing: '0.05em' }}>
-        <span style={{ display: 'inline-block', width: 12, height: 8, background: tokens.terra, opacity: 0.25, borderRadius: 2, verticalAlign: 'middle', marginRight: 6 }} />
-        Sections à plus de {STEEP_PCT}% de pente
+      <div style={{ marginTop: 8, display: 'flex', gap: 14, flexWrap: 'wrap', fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight, letterSpacing: '0.05em' }}>
+        {GRADE_LEGEND.map(g => (
+          <span key={g.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ display: 'inline-block', width: 12, height: 8, background: g.color, borderRadius: 2 }} />
+            {g.label}
+          </span>
+        ))}
       </div>
     </div>
   );

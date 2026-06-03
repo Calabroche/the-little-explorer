@@ -185,6 +185,35 @@ function fmtMeters(m: number): string {
   return m >= 1000 ? `${(m / 1000).toFixed(1).replace('.', ',')} km` : `${m} m`;
 }
 
+// Resample an elevation series onto a 100 m grid (the elevation API caps us
+// at 100 points, so we interpolate for display — same as the iOS app). The
+// geometry index is interpolated too so the hover marker stays aligned.
+function densifyTo100m(
+  series: { km: number; ele: number }[],
+  indices: number[],
+): { series: { km: number; ele: number }[]; indices: number[] } {
+  if (series.length < 2 || indices.length !== series.length) return { series, indices };
+  const total = series[series.length - 1].km;
+  if (total <= 0.1) return { series, indices };
+  const step = 0.1;
+  const count = Math.min(1500, Math.floor(total / step) + 1);
+  const outS: { km: number; ele: number }[] = [];
+  const outI: number[] = [];
+  let j = 0;
+  for (let i = 0; i < count; i++) {
+    const k = Math.min(total, i * step);
+    while (j < series.length - 2 && series[j + 1].km < k) j++;
+    const a = series[j];
+    const b = series[Math.min(j + 1, series.length - 1)];
+    const t = b.km > a.km ? (k - a.km) / (b.km - a.km) : 0;
+    outS.push({ km: +k.toFixed(3), ele: Math.round(a.ele + (b.ele - a.ele) * t) });
+    const ia = indices[j];
+    const ib = indices[Math.min(j + 1, indices.length - 1)];
+    outI.push(Math.round(ia + (ib - ia) * t));
+  }
+  return { series: outS, indices: outI };
+}
+
 // Waypoints actually sent to OSRM. When `loop` is on we append the
 // start village as the final stop so the route ends where it begins.
 function effectiveWaypoints(wp: Waypoint[], loop: boolean): Waypoint[] {
@@ -402,10 +431,14 @@ export function ItineraryPage({ user, embedded }: Props) {
       .then((data: { elevations: number[] }) => {
         if (cancelled) return;
         const series = buildElevationSeries(geometry, indices, data.elevations);
+        // D+/D− from the raw samples (interpolation would smooth out climbing).
         const { ascent, descent } = ascentDescent(data.elevations);
-        setElevSeries(series);
-        setElevations(data.elevations);
-        setElevIndices(indices);
+        // Densify to a 100 m grid for display + hover (series and indices stay
+        // aligned; we persist the dense pair so reloads keep the resolution).
+        const dense = densifyTo100m(series, indices);
+        setElevSeries(dense.series);
+        setElevIndices(dense.indices);
+        setElevations(dense.series.map(p => p.ele));
         setAscent(ascent);
         setDescent(descent);
       })
@@ -520,9 +553,10 @@ export function ItineraryPage({ user, embedded }: Props) {
     // Restore elevation cache if present — saves an opentopodata call.
     if (full.geometry && full.elevSampleIndices && full.elevations) {
       const series = buildElevationSeries(full.geometry, full.elevSampleIndices, full.elevations);
-      setElevSeries(series);
-      setElevations(full.elevations);
-      setElevIndices(full.elevSampleIndices);
+      const dense = densifyTo100m(series, full.elevSampleIndices);
+      setElevSeries(dense.series);
+      setElevIndices(dense.indices);
+      setElevations(dense.series.map(p => p.ele));
       setAscent(full.totalAscent ?? 0);
       setDescent(full.totalDescent ?? 0);
     } else {
