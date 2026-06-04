@@ -39,7 +39,29 @@ import { useRouter } from 'next/navigation';
 import { signIn, useSession } from 'next-auth/react';
 import { tokens } from '@/components/explorer/tokens';
 
-type Sport = 'cycling' | 'running' | 'both';
+import type { SportId } from '@/components/explorer/Sidebar';
+
+// Sports offered as a "prédilection" during onboarding. Values are real
+// SportIds so the app can default to the chosen one (it reads the favourite
+// from localStorage on load). A curated common set — enough choice without
+// drowning a new user in 25 options.
+const SPORT_OPTIONS: { v: SportId; label: string; icon: string }[] = [
+  { v: 'cycling',   label: 'Vélo',         icon: '🚴' },
+  { v: 'running',   label: 'Course',       icon: '🏃' },
+  { v: 'swim',      label: 'Natation',     icon: '🏊' },
+  { v: 'hiking',    label: 'Randonnée',    icon: '🥾' },
+  { v: 'walking',   label: 'Marche',       icon: '🚶' },
+  { v: 'ski',       label: 'Ski',          icon: '🎿' },
+  { v: 'snowboard', label: 'Snowboard',    icon: '🏂' },
+  { v: 'rowing',    label: 'Aviron',       icon: '🚣' },
+  { v: 'kayak',     label: 'Kayak',        icon: '🛶' },
+  { v: 'climbing',  label: 'Escalade',     icon: '🧗' },
+  { v: 'yoga',      label: 'Yoga',         icon: '🧘' },
+  { v: 'workout',   label: 'Renforcement', icon: '💪' },
+];
+
+// Only cycling needs the weight / bike-weight / FTP step (power model).
+const sportNeedsWeight = (s: SportId | null): boolean => s === 'cycling';
 
 interface MeResponse {
   id:         string;
@@ -62,7 +84,7 @@ export default function OnboardingPage() {
   // the full guide). Steps 1-3 are the original data-collection flow.
   const [step,        setStep]        = useState<0 | 1 | 2 | 3>(0);
   const [me,          setMe]          = useState<MeResponse | null>(null);
-  const [sport,       setSport]       = useState<Sport | null>(null);
+  const [sport,       setSport]       = useState<SportId | null>(null);
   const [riderKg,     setRiderKg]     = useState<string>('');
   const [bikeKg,      setBikeKg]      = useState<string>('');
   const [ftp,         setFtp]         = useState<string>('');
@@ -102,10 +124,22 @@ export default function OnboardingPage() {
     setStep(1);
   };
 
+  // Total visible steps: the weight step (2) is skipped for non-cyclists.
+  const totalSteps = sportNeedsWeight(sport) ? 3 : 2;
+
   const goStep2 = async () => {
     if (!sport) return;
+    // The chosen prédilection becomes the app's default sport — it reads
+    // these keys on load (and the logo "home" reset falls back to the
+    // favourite instead of always cycling).
+    try {
+      localStorage.setItem('tle_favorite_sport', sport);
+      localStorage.setItem('tle_sport', sport);
+    } catch { /* private mode — non-fatal, the choice is still logged */ }
     await fireEvent('onboarding_step_sport_done', { sport });
-    setStep(2);
+    // Weight / bike-weight / FTP only make sense for cycling — skip that
+    // step entirely for every other sport and go straight to Strava.
+    setStep(sportNeedsWeight(sport) ? 2 : 3);
   };
 
   const goStep3 = async () => {
@@ -203,7 +237,7 @@ export default function OnboardingPage() {
         borderRadius: 4,
         padding:      '40px 36px',
       }}>
-        {step >= 1 && <StepIndicator current={step as 1 | 2 | 3} />}
+        {step >= 1 && <StepIndicator current={step === 3 ? totalSteps : step} total={totalSteps} />}
 
         {error && (
           <div style={{
@@ -224,7 +258,7 @@ export default function OnboardingPage() {
             sport={sport}
             onChange={setSport}
             onNext={goStep2}
-            userName={me?.name ?? null}
+            total={totalSteps}
           />
         )}
         {step === 2 && (
@@ -241,6 +275,7 @@ export default function OnboardingPage() {
             onConnect={connectStrava}
             onSkip={skipStrava}
             saving={saving}
+            total={totalSteps}
           />
         )}
       </div>
@@ -296,39 +331,33 @@ function Step0({ userName, onNext }: {
 }
 
 // ── Step 1: sport ────────────────────────────────────────────────────────
-function Step1({ sport, onChange, onNext, userName }: {
-  sport: Sport | null;
-  onChange: (s: Sport) => void;
+function Step1({ sport, onChange, onNext, total }: {
+  sport: SportId | null;
+  onChange: (s: SportId) => void;
   onNext: () => void;
-  userName: string | null;
+  total: number;
 }) {
-  // userName retained for symmetry with the other steps; the greeting
-  // now lives on the welcome screen (Step 0).
-  void userName;
   return (
     <>
-      <Title small="§ ONBOARDING — 1/3" big="Ton sport" italic="le principal" />
-      <p style={blurb}>Pour t&apos;afficher les bonnes métriques, dis-moi ce que tu pratiques le plus.</p>
-      <div style={{ display: 'grid', gap: 10, marginTop: 18 }}>
-        {([
-          { v: 'cycling', label: 'Vélo',    icon: '🚴' },
-          { v: 'running', label: 'Course',  icon: '🏃' },
-          { v: 'both',    label: 'Les deux', icon: '🚴🏃' },
-        ] as const).map(opt => {
+      <Title small={`§ ONBOARDING — 1/${total}`} big="Ton sport" italic="de prédilection" />
+      <p style={blurb}>Choisis ton sport principal — c&apos;est lui qui s&apos;affichera en premier dans l&apos;app. Tu pourras suivre les autres aussi.</p>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 18 }}>
+        {SPORT_OPTIONS.map(opt => {
           const active = sport === opt.v;
           return (
             <button
               key={opt.v}
               onClick={() => onChange(opt.v)}
               style={{
-                padding: '14px 16px',
+                padding: '14px 14px',
                 background:   active ? tokens.terra : tokens.cream,
                 border:       `1px solid ${active ? tokens.terra : tokens.creamBorder}`,
                 color:        active ? '#fff' : tokens.ink,
                 borderRadius: 3,
-                display:      'flex', alignItems: 'center', gap: 12,
+                display:      'flex', alignItems: 'center', gap: 10,
                 cursor:       'pointer',
                 fontFamily:   "'Space Grotesk'", fontWeight: 600, fontSize: 14,
+                textAlign:    'left',
               }}
             >
               <span style={{ fontSize: 20 }}>{opt.icon}</span>
@@ -352,7 +381,7 @@ function Step2({ riderKg, setRiderKg, bikeKg, setBikeKg, ftp, setFtp, onNext, sa
 }) {
   return (
     <>
-      <Title small="§ ONBOARDING — 2/3" big="Tes mesures" italic="2 minutes" />
+      <Title small="§ ONBOARDING — 2/3" big="Tes mesures" italic="vélo" />
       <p style={blurb}>Ton poids sert à estimer ta puissance et ton TSS. Tu peux changer ces valeurs plus tard dans Paramètres.</p>
       <div style={{ display: 'grid', gap: 14, marginTop: 18 }}>
         <Field label="Ton poids (kg)" value={riderKg} onChange={setRiderKg} placeholder="ex. 66" />
@@ -365,14 +394,15 @@ function Step2({ riderKg, setRiderKg, bikeKg, setBikeKg, ftp, setFtp, onNext, sa
 }
 
 // ── Step 3: Strava ───────────────────────────────────────────────────────
-function Step3({ onConnect, onSkip, saving }: {
+function Step3({ onConnect, onSkip, saving, total }: {
   onConnect: () => void;
   onSkip:    () => void;
   saving:    boolean;
+  total:     number;
 }) {
   return (
     <>
-      <Title small="§ ONBOARDING — 3/3" big="Connecte Strava" italic="ou skip" />
+      <Title small={`§ ONBOARDING — ${total}/${total}`} big="Connecte Strava" italic="ou skip" />
       <p style={blurb}>
         Importer ton historique Strava te donne accès à tes records, ta FTP estimée
         et le calendrier rempli en un clic. Tu peux le faire plus tard depuis tes
@@ -417,10 +447,10 @@ function Step3({ onConnect, onSkip, saving }: {
 }
 
 // ── UI helpers ───────────────────────────────────────────────────────────
-function StepIndicator({ current }: { current: 1 | 2 | 3 }) {
+function StepIndicator({ current, total }: { current: number; total: number }) {
   return (
     <div style={{ display: 'flex', gap: 4, marginBottom: 24 }}>
-      {[1, 2, 3].map(n => (
+      {Array.from({ length: total }, (_, i) => i + 1).map(n => (
         <div
           key={n}
           style={{

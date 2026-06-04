@@ -86,7 +86,13 @@ export function ExplorerApp() {
     setDarkMode(dark);
     if (dark) document.documentElement.setAttribute('data-dark', '');
     const savedSport = localStorage.getItem('tle_sport') as SportId | null;
-    const validSports: SportId[] = ['cycling', 'running', 'hiking', 'ski', 'snowshoe', 'walking', 'swim'];
+    // Must cover every sport offered as an onboarding "prédilection",
+    // otherwise a non-cycling favourite gets rejected and silently
+    // falls back to cycling.
+    const validSports: SportId[] = [
+      'cycling', 'running', 'swim', 'hiking', 'walking', 'ski', 'snowshoe',
+      'snowboard', 'rowing', 'kayak', 'climbing', 'yoga', 'workout', 'cardio',
+    ];
     if (savedSport && validSports.includes(savedSport)) setSport(savedSport);
     const savedUser = localStorage.getItem('tle_user') as UserId | null;
     if (savedUser === 'florian' || savedUser === 'helena') setUser(savedUser);
@@ -128,9 +134,12 @@ export function ExplorerApp() {
       setUser('florian');
       localStorage.setItem('tle_user', 'florian');
     }
-    if (sport !== 'cycling') {
-      setSport('cycling');
-      localStorage.setItem('tle_sport', 'cycling');
+    // Reset to the rider's favourite sport (chosen at onboarding), not
+    // always cycling.
+    const fav = (localStorage.getItem('tle_favorite_sport') as SportId | null) ?? 'cycling';
+    if (sport !== fav) {
+      setSport(fav);
+      localStorage.setItem('tle_sport', fav);
     }
     setAnalysisActivity(null);
     setPage('feed');
