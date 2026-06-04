@@ -63,7 +63,7 @@ const ALL_NAV_ITEMS: { id: PageId; icon: string; label: string; sports: SportId[
   // (/itineraire still works and lands on the itinerary tab).
   { id: 'planner',   icon: '✦', label: 'Planificateur', sports: ['cycling'] },
   { id: 'compare',   icon: '⇄', label: 'Comparer',      sports: ALL_SPORTS },
-  { id: 'ftp',       icon: '⚡', label: 'FTP & Charge',  sports: ['cycling'] },
+  { id: 'ftp',       icon: '⚡', label: 'Puissance & Charge',  sports: ['cycling'] },
   { id: 'equipment', icon: '⚙', label: 'Matériel',      sports: ['cycling'] },
   { id: 'wrapped',   icon: '✺', label: 'Bilan',         sports: ALL_SPORTS },
 ];
