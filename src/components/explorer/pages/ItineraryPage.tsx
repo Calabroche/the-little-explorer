@@ -213,6 +213,17 @@ function fmtMeters(m: number): string {
   return m >= 1000 ? `${(m / 1000).toFixed(1).replace('.', ',')} km` : `${m} m`;
 }
 
+// ── Resupply points (water / food) along the route ──────────────────────────
+type PoiCategory = 'water' | 'supermarket' | 'convenience' | 'bakery';
+interface Poi { cat: PoiCategory; name: string | null; lat: number; lng: number }
+const POI_META: Record<PoiCategory, { color: string; icon: string; label: string }> = {
+  water:       { color: '#3DA5D9', icon: '💧', label: 'Eau' },
+  supermarket: { color: '#4F9A54', icon: '🛒', label: 'Supermarché' },
+  convenience: { color: '#2FA39A', icon: '🏪', label: 'Supérette' },
+  bakery:      { color: '#D98E3D', icon: '🥐', label: 'Boulangerie' },
+};
+const POI_ORDER: PoiCategory[] = ['water', 'supermarket', 'convenience', 'bakery'];
+
 // Resample an elevation series onto a 100 m grid (the elevation API caps us
 // at 100 points, so we interpolate for display — same as the iOS app). The
 // geometry index is interpolated too so the hover marker stays aligned.
@@ -376,6 +387,13 @@ export function ItineraryPage({ user, embedded }: Props) {
   // Way-type + surface breakdown (OSM-enriched, via /api/route-ways).
   const [wayAnalysis, setWayAnalysis] = useState<{ wayTypes: WayBucket[]; surfaces: WayBucket[] } | null>(null);
   const [wayLoading, setWayLoading]   = useState(false);
+
+  // Resupply points (water / food) along the route — OSM via /api/route-pois.
+  // Off by default (one Overpass call per toggle); fetched lazily on enable.
+  const [showPois, setShowPois]   = useState(false);
+  const [pois, setPois]           = useState<Poi[]>([]);
+  const [poisLoading, setPoisLoading] = useState(false);
+  const poiFetchedFor = useRef<string>('');
 
   // Render the cache instantly, then reconcile with the server (so a
   // freshly-logged-in user pulls their itineraries down without
@@ -566,6 +584,37 @@ export function ItineraryPage({ user, embedded }: Props) {
       .finally(() => { if (!cancelled) setWayLoading(false); });
     return () => { cancelled = true; };
   }, [geometry]);
+
+  // ── Resupply points: fetch water/food POIs once the toggle is on ──────────
+  // Lazy: only hits Overpass when the rider asks for it, and only re-fetches
+  // when the route geometry actually changes (keyed by point count + ends).
+  useEffect(() => {
+    if (!showPois || !geometry || geometry.length < 2) return;
+    const key = `${geometry.length}:${geometry[0].join(',')}:${geometry[geometry.length - 1].join(',')}`;
+    if (poiFetchedFor.current === key) return;
+    poiFetchedFor.current = key;
+    let cancelled = false;
+    setPoisLoading(true);
+    fetch('/api/route-pois', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ geometry }),
+    })
+      .then(r => r.ok ? r.json() : Promise.reject(r))
+      .then((data: { pois?: Poi[] }) => { if (!cancelled) setPois(data.pois ?? []); })
+      .catch(() => { if (!cancelled) setPois([]); })
+      .finally(() => { if (!cancelled) setPoisLoading(false); });
+    return () => { cancelled = true; };
+  }, [showPois, geometry]);
+
+  // Drop stale POIs (and reset the fetch guard) whenever the route changes.
+  useEffect(() => { setPois([]); poiFetchedFor.current = ''; }, [geometry]);
+
+  const poiCounts = useMemo(() => {
+    const c: Record<PoiCategory, number> = { water: 0, supermarket: 0, convenience: 0, bakery: 0 };
+    for (const p of pois) c[p.cat]++;
+    return c;
+  }, [pois]);
 
   // ── Auto-extend ──────────────────────────────────────────────────────────
   const handleAutoExtend = async () => {
@@ -1201,6 +1250,21 @@ export function ItineraryPage({ user, embedded }: Props) {
                   </Tooltip>
                 </CircleMarker>
               ))}
+              {/* Resupply points (water / food) along the route. */}
+              {showPois && pois.map((p, i) => (
+                <CircleMarker
+                  key={`poi-${i}`}
+                  center={[p.lat, p.lng]}
+                  radius={6}
+                  pathOptions={{ fillColor: POI_META[p.cat].color, color: '#fff', weight: 1.5, fillOpacity: 0.95 }}
+                >
+                  <Tooltip direction="top" offset={[0, -6]}>
+                    <span style={{ fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 600 }}>
+                      {POI_META[p.cat].icon} {p.name ?? POI_META[p.cat].label}
+                    </span>
+                  </Tooltip>
+                </CircleMarker>
+              ))}
               {/* Synced hover marker: tracks the cursor on the elevation chart.
                   Two stacked circles for a "halo" effect so it stands out
                   against the route polyline. */}
@@ -1233,6 +1297,46 @@ export function ItineraryPage({ user, embedded }: Props) {
               <FitBounds positions={polylinePositions ?? waypoints.map(w => [w.lat, w.lng] as [number, number])} />
             </MapContainer>
             <BasemapToggle basemap={basemap} onChange={setBasemap} />
+
+            {/* Resupply toggle — shows water/food points along the route.
+                Top-left, only once there's a route to analyse. */}
+            {geometry && geometry.length > 1 && (
+              <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
+                <button
+                  onClick={() => setShowPois(v => !v)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '7px 11px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                    background: showPois ? tokens.terra : 'rgba(255,255,255,0.92)',
+                    color: showPois ? '#fff' : tokens.ink,
+                    fontFamily: "'Space Grotesk'", fontSize: 12, fontWeight: 600,
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.15)', backdropFilter: 'blur(4px)',
+                  }}
+                >
+                  💧 {t('itinerary.resupply')}
+                  {showPois && poisLoading && <span style={{ opacity: 0.85 }}>…</span>}
+                  {showPois && !poisLoading && <span style={{ opacity: 0.85 }}>· {pois.length}</span>}
+                </button>
+                {showPois && !poisLoading && (
+                  <div style={{
+                    display: 'flex', flexWrap: 'wrap', gap: 8, maxWidth: 230,
+                    padding: '8px 10px', borderRadius: 8,
+                    background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(4px)',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                    fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkMid,
+                  }}>
+                    {pois.length === 0 ? (
+                      <span>{t('itinerary.resupplyNone')}</span>
+                    ) : POI_ORDER.filter(c => poiCounts[c] > 0).map(c => (
+                      <span key={c} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ width: 9, height: 9, borderRadius: '50%', background: POI_META[c].color, display: 'inline-block' }} />
+                        {POI_META[c].label} <strong style={{ color: tokens.ink }}>{poiCounts[c]}</strong>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             {/* Confirmation card — a plain DOM overlay positioned over the
                 clicked point. Sits outside <MapContainer>, so its button
                 clicks never reach Leaflet and can't spawn a phantom popup. */}
