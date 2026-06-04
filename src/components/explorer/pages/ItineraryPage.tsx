@@ -1299,9 +1299,10 @@ export function ItineraryPage({ user, embedded }: Props) {
             <BasemapToggle basemap={basemap} onChange={setBasemap} />
 
             {/* Resupply toggle — shows water/food points along the route.
-                Top-left, only once there's a route to analyse. */}
+                Sits below the zoom +/- control (also top-left) so the two
+                don't overlap. */}
             {geometry && geometry.length > 1 && (
-              <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
+              <div style={{ position: 'absolute', top: 84, left: 12, zIndex: 1100, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
                 <button
                   onClick={() => setShowPois(v => !v)}
                   style={{
