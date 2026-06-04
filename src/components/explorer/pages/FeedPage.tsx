@@ -224,7 +224,9 @@ function formatPredictedDate(iso: string) {
   return new Date(iso).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
-function TrainingProgram({ activities }: { activities: Activity[] }) {
+// Exported so the "Puissance & Charge" page (FtpPage) can render it — the
+// power-records + training-program blocks now live there, not on the feed.
+export function TrainingProgram({ activities }: { activities: Activity[] }) {
   const isMobile = useIsMobile();
   const { t } = useT();
 
@@ -772,7 +774,10 @@ export function FeedPage({ activities, stats, sport, onSelect }: Props) {
           <Goals activities={filteredActivities} />
         </div>
       </div>
-      <PersonalRecords activities={filteredActivities} sport={sport} />
+      {/* Cycling power records + training program moved to the
+          "Puissance & Charge" page. Running keeps its pace records here
+          since it has no dedicated performance page. */}
+      {sport === 'running' && <PersonalRecords activities={filteredActivities} sport={sport} />}
       {sport === 'running' && <RunPaceZones activities={filteredActivities} />}
       {/* Cycling-only — the whole TSS / NP / IF / FTP framework is
           power-meter-on-a-bike specific. Running has its own
@@ -781,7 +786,6 @@ export function FeedPage({ activities, stats, sport, onSelect }: Props) {
           model. Hide the card entirely outside cycling rather than
           render placeholders that ask the rider for data they
           can't have. */}
-      {sport === 'cycling' && <TrainingProgram activities={filteredActivities} />}
 
       {/* If the bike filter is on but matches no activities, surface
           a focused empty state with a one-click "Clear" — better than

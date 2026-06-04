@@ -8,6 +8,8 @@ import { tokens, Activity } from '../tokens';
 import { SectionTag, Label, useIsMobile } from '../ui';
 import { useT } from '@/i18n';
 import { FtpEvolution } from '../FtpEvolution';
+import { PersonalRecords } from '../PersonalRecords';
+import { TrainingProgram } from './FeedPage';
 
 const RIDER_KG = 66;
 const DEFAULT_FTP_W = 291;
@@ -118,6 +120,10 @@ export function FtpPage({ activities }: { activities: Activity[] }) {
         {t('ftp.headline')}<br />
         <em style={{ color: tokens.terra, fontStyle: 'italic', fontWeight: 700 }}>{t('ftp.headlineEm')}</em>
       </h1>
+
+      {/* Power records — "tes meilleures puissances". Lives here now
+          rather than on the activity feed. */}
+      <PersonalRecords activities={activities} sport="cycling" />
 
       {/* FTP card */}
       <div style={CARD}>
@@ -257,6 +263,9 @@ export function FtpPage({ activities }: { activities: Activity[] }) {
           </p>
         </div>
       </div>
+
+      {/* Training program — analysis + next ride. Moved off the feed. */}
+      <TrainingProgram activities={activities} />
     </div>
   );
 }
