@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { Activity, GlobalStats, deriveStats, tokens } from './tokens';
 import { Sidebar, GlobalLangToggle, PageId, SportId, UserId } from './Sidebar';
 import { FeatureAnnouncement } from './FeatureAnnouncement';
+import { WhatsNewPanel } from './WhatsNewPanel';
 import { useT } from '@/i18n';
 import { useIsMobile } from './ui';
 import { FeedPage } from './pages/FeedPage';
@@ -78,6 +79,7 @@ export function ExplorerApp() {
   // area (charts, map) gets +220px of horizontal space — useful for
   // reading dense ride-detail charts.
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [showWhatsNew, setShowWhatsNew] = useState(false);
   const isMobile = useIsMobile();
   const { t, lang, setLang } = useT();
 
@@ -373,6 +375,8 @@ export function ExplorerApp() {
     <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: '100dvh', overflow: 'hidden' }}>
       {/* "What's new" popup — shows the latest undismissed feature note. */}
       <FeatureAnnouncement />
+      {/* The full changelog, opened from the "i" button. */}
+      {showWhatsNew && <WhatsNewPanel onClose={() => setShowWhatsNew(false)} />}
       {!isMobile && !sidebarCollapsed && (
         <Sidebar activePage={page} onNav={handleNav} stats={filteredStats} darkMode={darkMode} onToggleDark={toggleDark}
                  sport={sport} onSportChange={handleSportChange} user={user} onUserChange={handleUserChange} onHome={handleHome} availableSports={availableSports}
@@ -402,6 +406,20 @@ export function ExplorerApp() {
             bottom-nav top row. */}
         {!isMobile && (
           <div style={{ position: 'absolute', top: 16, right: 16, zIndex: 1000, display: 'flex', gap: 6, alignItems: 'center' }}>
+            <button
+              onClick={() => setShowWhatsNew(true)}
+              title={lang === 'en' ? "What's new" : 'Nouveautés'}
+              aria-label="What's new"
+              style={{
+                width: 32, height: 32, borderRadius: 16,
+                background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
+                color: tokens.terra, fontSize: 15, fontWeight: 800, fontStyle: 'italic', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontFamily: "'Playfair Display'", boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+              }}
+            >
+              i
+            </button>
             <button
               onClick={toggleDark}
               title={darkMode ? 'Mode clair' : 'Mode sombre'}

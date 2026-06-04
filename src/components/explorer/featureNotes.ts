@@ -10,6 +10,7 @@
 export interface FeatureNote {
   id:   string;   // stable dismissal key — never reuse
   icon: string;   // emoji shown at the top of the card
+  date: string;   // 'YYYY-MM-DD' — drives the "today / this week / this month" grouping
   fr: { title: string; body: string };
   en: { title: string; body: string };
 }
@@ -18,6 +19,7 @@ export const FEATURE_NOTES: FeatureNote[] = [
   {
     id: 'ravito-2026-06',
     icon: '💧',
+    date: '2026-06-04',
     fr: {
       title: 'Points de ravitaillement sur ton parcours',
       body: "Sur la carte du planificateur, active le bouton « Ravito » : l'app repère le long de ton trajet les points d'eau (fontaines, robinets, cimetières) et les commerces où manger ou acheter de l'eau (supermarchés, supérettes, boulangeries). Plus jamais à sec en pleine sortie.",
