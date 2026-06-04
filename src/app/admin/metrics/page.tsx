@@ -29,6 +29,8 @@ interface Metrics {
     signups_7d: number; exports_total: number; dau_today: number;
   };
   dau: { day: string; count: number }[];
+  dauDays: string[];
+  dauByUser: { userId: string; name: string | null; total: number; days: Record<string, number> }[];
   funnel: {
     signup: number; welcome_done: number; sport_done: number; profile_done: number;
     strava_connected: number; strava_skipped: number; complete: number;
@@ -86,6 +88,7 @@ export default function MetricsPage() {
           <>
             <KpiGrid totals={data.totals} sync={data.sync} />
             <DauChart series={data.dau} />
+            <PerUserHeatmap days={data.dauDays} rows={data.dauByUser} />
             <FunnelSection funnel={data.funnel} />
             <EventBreakdown events={data.events} />
             <RecentTable rows={data.recent} />
@@ -239,6 +242,72 @@ function DauChart({ series }: { series: Metrics['dau'] }) {
             <Bar dataKey="count" fill={tokens.terra} radius={[3, 3, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
+      )}
+    </section>
+  );
+}
+
+// ── Per-user activity heatmap ─────────────────────────────────────────
+// One row per user, one cell per day (last 30 days), shaded by how many
+// events that user fired that day. Keeps each rider's daily presence so the
+// data isn't lost as days roll past — unlike the aggregate DAU count above.
+function PerUserHeatmap({ days, rows }: { days: string[]; rows: Metrics['dauByUser'] }) {
+  const max = Math.max(1, ...rows.flatMap(r => Object.values(r.days)));
+  const cell = (count: number) => {
+    if (!count) return tokens.creamBorder;
+    const t = 0.25 + 0.75 * Math.min(1, count / max); // 0.25..1 opacity
+    return `rgba(196,96,42,${t.toFixed(2)})`; // terra ramp
+  };
+  return (
+    <section style={{
+      background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
+      borderRadius: 4, padding: 20, marginTop: 16,
+    }}>
+      <div style={{
+        fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 700, letterSpacing: '0.12em',
+        textTransform: 'uppercase', color: tokens.terra, marginBottom: 14,
+      }}>Activité par utilisateur — par jour (30j)</div>
+
+      {rows.length === 0 ? (
+        <div style={{ fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.inkLight }}>
+          Aucune activité sur la période.
+        </div>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 'fit-content' }}>
+            {rows.map(r => (
+              <div key={r.userId} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{
+                  width: 120, flexShrink: 0, fontFamily: "'Space Grotesk'", fontSize: 12,
+                  color: tokens.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                }} title={r.name ?? r.userId}>
+                  {r.name ?? r.userId.slice(0, 8)}
+                </div>
+                <div style={{ display: 'flex', gap: 2 }}>
+                  {days.map(d => {
+                    const c = r.days[d] ?? 0;
+                    return (
+                      <div key={d}
+                        title={`${r.name ?? r.userId.slice(0, 8)} · ${d} · ${c} évènement${c > 1 ? 's' : ''}`}
+                        style={{ width: 12, height: 12, borderRadius: 2, background: cell(c) }} />
+                    );
+                  })}
+                </div>
+                <div style={{
+                  marginLeft: 8, fontFamily: 'monospace', fontSize: 11, color: tokens.inkMid, flexShrink: 0,
+                }}>{r.total}</div>
+              </div>
+            ))}
+          </div>
+          {/* Axis hint: first / last day. */}
+          <div style={{
+            display: 'flex', justifyContent: 'space-between', marginTop: 8, marginLeft: 128,
+            fontFamily: "'Space Grotesk'", fontSize: 9, color: tokens.inkLight, letterSpacing: '0.05em',
+          }}>
+            <span>{days[0]?.slice(5)}</span>
+            <span>{days[days.length - 1]?.slice(5)}</span>
+          </div>
+        </div>
       )}
     </section>
   );

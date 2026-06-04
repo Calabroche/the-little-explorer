@@ -41,6 +41,17 @@ interface MetricsResponse {
     dau_today:     number;
   };
   dau: { day: string; count: number }[];
+  // The 30 contiguous day labels (oldest → newest) for the per-user grid.
+  dauDays: string[];
+  // Per-user activity, day by day, over the 30-day window. The aggregate
+  // `dau` count loses *who* was active each day — this keeps each rider's
+  // daily presence so the data isn't lost as the days roll by.
+  dauByUser: {
+    userId: string;
+    name:   string | null;
+    total:  number;                   // events in the window
+    days:   Record<string, number>;   // day → event count
+  }[];
   funnel: {
     signup:            number;
     welcome_done:      number;
@@ -113,11 +124,41 @@ export async function GET(req: NextRequest) {
     set.add(row.user_id as string);
   }
   // Build a contiguous 30-day series so the chart doesn't skip days.
-  const dau: { day: string; count: number }[] = [];
+  const dauDays: string[] = [];
   for (let i = 29; i >= 0; i--) {
-    const day = new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10);
-    dau.push({ day, count: dauMap.get(day)?.size ?? 0 });
+    dauDays.push(new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10));
   }
+  const dau: { day: string; count: number }[] = dauDays.map(day => ({
+    day, count: dauMap.get(day)?.size ?? 0,
+  }));
+
+  // Per-user-per-day activity over the same window. Keeps *who* was active
+  // each day so daily engagement isn't lost as the chart's count collapses it.
+  const perUser = new Map<string, Map<string, number>>(); // user_id → (day → count)
+  for (const row of dauRaw ?? []) {
+    const uid = row.user_id as string;
+    const day = (row.occurred_at as string).slice(0, 10);
+    let m = perUser.get(uid);
+    if (!m) { m = new Map(); perUser.set(uid, m); }
+    m.set(day, (m.get(day) ?? 0) + 1);
+  }
+  const perUserIds = Array.from(perUser.keys());
+  const perUserName = new Map<string, string>();
+  if (perUserIds.length > 0) {
+    const { data: nm } = await db.schema('next_auth')
+      .from('users').select('id, name, email').in('id', perUserIds);
+    for (const u of (nm ?? [])) {
+      const disp = (u.name as string | null)?.trim() || (u.email as string | null) || null;
+      if (disp) perUserName.set(u.id as string, disp);
+    }
+  }
+  const dauByUser = perUserIds.map(uid => {
+    const m = perUser.get(uid)!;
+    const days: Record<string, number> = {};
+    let total = 0;
+    m.forEach((c, d) => { days[d] = c; total += c; });
+    return { userId: uid, name: perUserName.get(uid) ?? null, total, days };
+  }).sort((a, b) => b.total - a.total);
 
   // Onboarding funnel — count events of each type all-time. Tiny set,
   // sequential fetches kept readable.
@@ -220,6 +261,8 @@ export async function GET(req: NextRequest) {
       dau_today:     dauToday,
     },
     dau,
+    dauDays,
+    dauByUser,
     funnel: {
       signup:           funnel_signup,
       welcome_done:     funnel_welcome,
