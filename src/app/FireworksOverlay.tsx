@@ -16,12 +16,26 @@ const HIDE_AT = 5300;    // unmount
 interface Spark { vx: number; vy: number; size: number; color: string }
 interface Burst { cx: number; cy: number; sparks: Spark[]; start: number }
 
+const SESSION_KEY = 'tle_fireworks_shown';
+
 export function FireworksOverlay() {
-  const [visible, setVisible] = useState(true);
+  // Start hidden so server and first client render match (no hydration
+  // mismatch). On mount, show it only if it hasn't already played this
+  // browser session.
+  const [visible, setVisible] = useState(false);
   const [fading, setFading] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
+    try {
+      if (sessionStorage.getItem(SESSION_KEY)) return;
+      sessionStorage.setItem(SESSION_KEY, '1');
+    } catch { /* private mode / storage disabled — just show it */ }
+    setVisible(true);
+  }, []);
+
+  useEffect(() => {
+    if (!visible) return;
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
@@ -106,7 +120,7 @@ export function FireworksOverlay() {
       clearTimeout(fadeT);
       clearTimeout(hideT);
     };
-  }, []);
+  }, [visible]);
 
   if (!visible) return null;
 
