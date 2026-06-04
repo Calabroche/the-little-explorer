@@ -82,7 +82,8 @@ export default function OnboardingPage() {
   const { update: refreshSession } = useSession();
   // Step 0 is the welcome screen (greeting + "what you can do" + link to
   // the full guide). Steps 1-3 are the original data-collection flow.
-  const [step,        setStep]        = useState<0 | 1 | 2 | 3>(0);
+  // 0 welcome · 1 sport · 2 measures (cycling only) · 3 contact note · 4 Strava
+  const [step,        setStep]        = useState<0 | 1 | 2 | 3 | 4>(0);
   const [me,          setMe]          = useState<MeResponse | null>(null);
   const [sport,       setSport]       = useState<SportId | null>(null);
   const [riderKg,     setRiderKg]     = useState<string>('');
@@ -124,8 +125,17 @@ export default function OnboardingPage() {
     setStep(1);
   };
 
-  // Total visible steps: the weight step (2) is skipped for non-cyclists.
-  const totalSteps = sportNeedsWeight(sport) ? 3 : 2;
+  // Visible steps: sport · [measures, cycling only] · contact note · Strava.
+  // The measures step is skipped for non-cyclists, so 4 steps or 3.
+  const totalSteps = sportNeedsWeight(sport) ? 4 : 3;
+  // Map an internal step number to its 1-based position in the indicator
+  // (measures = step 2 is absent for non-cyclists).
+  const posOf = (s: number): number => {
+    if (s === 1) return 1;
+    if (s === 2) return 2;
+    if (s === 3) return sportNeedsWeight(sport) ? 3 : 2; // contact note
+    return totalSteps;                                    // Strava (step 4)
+  };
 
   const goStep2 = async () => {
     if (!sport) return;
@@ -138,7 +148,7 @@ export default function OnboardingPage() {
     } catch { /* private mode — non-fatal, the choice is still logged */ }
     await fireEvent('onboarding_step_sport_done', { sport });
     // Weight / bike-weight / FTP only make sense for cycling — skip that
-    // step entirely for every other sport and go straight to Strava.
+    // step entirely for every other sport and jump to the contact note.
     setStep(sportNeedsWeight(sport) ? 2 : 3);
   };
 
@@ -169,6 +179,12 @@ export default function OnboardingPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  // Contact note → Strava (the final step).
+  const goStep4 = async () => {
+    await fireEvent('onboarding_step_contact_seen', { sport });
+    setStep(4);
   };
 
   const connectStrava = async () => {
@@ -237,7 +253,7 @@ export default function OnboardingPage() {
         borderRadius: 4,
         padding:      '40px 36px',
       }}>
-        {step >= 1 && <StepIndicator current={step === 3 ? totalSteps : step} total={totalSteps} />}
+        {step >= 1 && <StepIndicator current={posOf(step)} total={totalSteps} />}
 
         {error && (
           <div style={{
@@ -271,6 +287,9 @@ export default function OnboardingPage() {
           />
         )}
         {step === 3 && (
+          <ContactStep onNext={goStep4} pos={posOf(3)} total={totalSteps} />
+        )}
+        {step === 4 && (
           <Step3
             onConnect={connectStrava}
             onSkip={skipStrava}
@@ -389,6 +408,46 @@ function Step2({ riderKg, setRiderKg, bikeKg, setBikeKg, ftp, setFtp, onNext, sa
         <Field label="FTP (W) — optionnel" value={ftp} onChange={setFtp} placeholder="auto-dérivée si vide" />
       </div>
       <PrimaryButton onClick={onNext} disabled={saving || !riderKg.trim()} label={saving ? 'ENREGISTREMENT…' : 'CONTINUER'} />
+    </>
+  );
+}
+
+// ── Contact note (just before Strava) ────────────────────────────────────
+// A human beat before the last action: what the app is for, and how to reach
+// the maker if anything breaks. Builds trust + a direct support channel.
+function ContactStep({ onNext, pos, total }: { onNext: () => void; pos: number; total: number }) {
+  return (
+    <>
+      <Title small={`§ ONBOARDING — ${pos}/${total}`} big="Un projet" italic="fait pour toi" />
+      <p style={blurb}>
+        The Little Explorer est pensée pour t&apos;aider à progresser dans ton sport —
+        suivre ta forme, planifier tes sorties et te donner envie d&apos;y retourner.
+      </p>
+      <div style={{
+        marginTop: 18, padding: 16,
+        background: tokens.creamDark, borderRadius: 4,
+        border: `1px solid ${tokens.creamBorder}`,
+      }}>
+        <p style={{ fontSize: 13, color: tokens.ink, lineHeight: 1.6, margin: 0 }}>
+          <strong>Un bug, un souci, une idée&nbsp;?</strong><br />
+          Écris-moi en DM sur Instagram — je suis là pour corriger vite et améliorer l&apos;app.
+        </p>
+        <a
+          href="https://www.instagram.com/_iamfc_/"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 12,
+            padding: '10px 14px', borderRadius: 8, textDecoration: 'none',
+            background: 'linear-gradient(45deg, #F58529, #DD2A7B, #8134AF)',
+            color: '#fff', fontFamily: "'Space Grotesk'", fontWeight: 700, fontSize: 14,
+            letterSpacing: '0.02em',
+          }}
+        >
+          📸 @_iamfc_
+        </a>
+      </div>
+      <PrimaryButton onClick={onNext} disabled={false} label="CONTINUER" />
     </>
   );
 }
