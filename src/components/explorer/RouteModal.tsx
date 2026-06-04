@@ -19,6 +19,28 @@ const HOME: [number, number] = [45.8183, 4.7521];
 
 interface OSRMResult { positions: [number, number][]; distKm: number; }
 
+// Drop any waypoint that revisits a point already on the route (within
+// ~45 m), including the home start/finish. Several curated routes repeat a
+// waypoint (go to a point and come back through it) — feeding those to OSRM
+// makes the ride pass through the same place twice. After dedup the loop
+// only ever shares the home point at its start and end. Combined with
+// `continue_straight=true` this keeps the generated parcours a clean loop.
+function dedupeWaypoints(start: [number, number], wps: [number, number][]): [number, number][] {
+  const near = (a: [number, number], b: [number, number]) => {
+    const dLat = (a[0] - b[0]) * 111_000;
+    const dLng = (a[1] - b[1]) * 111_000 * Math.cos((a[0] * Math.PI) / 180);
+    return Math.hypot(dLat, dLng) < 45;
+  };
+  const seen: [number, number][] = [start];
+  const out: [number, number][] = [];
+  for (const w of wps) {
+    if (seen.some(s => near(s, w))) continue;
+    seen.push(w);
+    out.push(w);
+  }
+  return out;
+}
+
 async function fetchOSRMRoute(waypoints: [number, number][]): Promise<OSRMResult> {
   const coords = waypoints.map(([lat, lng]) => `${lng},${lat}`).join(';');
   // continue_straight=true : interdit les demi-tours aux waypoints intermédiaires
@@ -81,7 +103,9 @@ export function RouteModal({
     setRoute([]);
     setOsrmDist(null);
     const track = proposal.tracks[selectedIdx];
-    const pts: [number, number][] = [start, ...track.waypoints, start];
+    // Never route through the same place twice — only the home start/finish
+    // is allowed to repeat (it closes the loop).
+    const pts: [number, number][] = [start, ...dedupeWaypoints(start, track.waypoints), start];
     fetchOSRMRoute(pts)
       .then(r => { setRoute(r.positions); setOsrmDist(r.distKm); setLoading(false); })
       .catch(() => { setRoute(pts); setLoading(false); });
