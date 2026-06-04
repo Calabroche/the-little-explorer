@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { Activity, GlobalStats, deriveStats, tokens } from './tokens';
 import { Sidebar, GlobalLangToggle, PageId, SportId, UserId } from './Sidebar';
+import { FeatureAnnouncement } from './FeatureAnnouncement';
 import { useT } from '@/i18n';
 import { useIsMobile } from './ui';
 import { FeedPage } from './pages/FeedPage';
@@ -370,6 +371,8 @@ export function ExplorerApp() {
 
   return (
     <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: '100dvh', overflow: 'hidden' }}>
+      {/* "What's new" popup — shows the latest undismissed feature note. */}
+      <FeatureAnnouncement />
       {!isMobile && !sidebarCollapsed && (
         <Sidebar activePage={page} onNav={handleNav} stats={filteredStats} darkMode={darkMode} onToggleDark={toggleDark}
                  sport={sport} onSportChange={handleSportChange} user={user} onUserChange={handleUserChange} onHome={handleHome} availableSports={availableSports}
