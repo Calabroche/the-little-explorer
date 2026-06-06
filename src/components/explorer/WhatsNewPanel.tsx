@@ -2,37 +2,37 @@
 
 import { useT } from '@/i18n';
 import { tokens } from './tokens';
-import { FEATURE_NOTES, FeatureNote } from './featureNotes';
+import { FEATURE_NOTES, FeatureNote, FeatureSport } from './featureNotes';
 import { WhyBetterThanStrava } from './WhyBetterThanStrava';
 
-// Recency buckets, relative to today.
-type Bucket = 'today' | 'week' | 'month' | 'earlier';
-function bucketOf(dateStr: string): Bucket {
+// Features are grouped BY SPORT in the panel.
+const SPORT_ORDER: FeatureSport[] = ['all', 'cycling', 'running'];
+const SPORT_LABELS: Record<FeatureSport, { fr: string; en: string }> = {
+  all:     { fr: 'Tous les sports', en: 'All sports' },
+  cycling: { fr: '🚴 Vélo',         en: '🚴 Cycling' },
+  running: { fr: '🏃 Course',       en: '🏃 Running' },
+};
+
+// Small "when" caption per item (the recency is still visible without
+// being the primary grouping).
+function relDate(dateStr: string, en: boolean): string {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const d = new Date(`${dateStr}T00:00:00`);
   const days = Math.floor((today.getTime() - d.getTime()) / 86_400_000);
-  if (days <= 0) return 'today';
-  if (days <= 7) return 'week';
-  if (days <= 30) return 'month';
-  return 'earlier';
+  if (days <= 0) return en ? 'today' : "aujourd'hui";
+  if (days === 1) return en ? 'yesterday' : 'hier';
+  if (days <= 30) return en ? `${days}d ago` : `il y a ${days} j`;
+  return d.toLocaleDateString(en ? 'en-US' : 'fr-FR', { day: '2-digit', month: 'short' });
 }
 
-const SECTION_LABELS: Record<Bucket, { fr: string; en: string }> = {
-  today:   { fr: "Aujourd'hui",       en: 'Today' },
-  week:    { fr: '7 derniers jours',  en: 'Last 7 days' },
-  month:   { fr: '30 derniers jours', en: 'Last 30 days' },
-  earlier: { fr: 'Plus tôt',          en: 'Earlier' },
-};
-const ORDER: Bucket[] = ['today', 'week', 'month', 'earlier'];
-
 // The full "what's new" archive, opened from the "i" button. Lists every
-// feature note grouped into today / this week / this month / earlier.
+// feature note grouped by sport (newest first within each).
 export function WhatsNewPanel({ onClose }: { onClose: () => void }) {
   const { lang } = useT();
   const en = lang === 'en';
 
-  const grouped: Record<Bucket, FeatureNote[]> = { today: [], week: [], month: [], earlier: [] };
-  for (const n of FEATURE_NOTES) grouped[bucketOf(n.date)].push(n);
+  const grouped: Record<FeatureSport, FeatureNote[]> = { all: [], cycling: [], running: [] };
+  for (const n of FEATURE_NOTES) grouped[n.sport].push(n);
 
   return (
     <div
@@ -78,16 +78,16 @@ export function WhatsNewPanel({ onClose }: { onClose: () => void }) {
           <div style={{ marginTop: 12 }}>
             <WhyBetterThanStrava />
           </div>
-          {ORDER.filter(b => grouped[b].length > 0).map(b => (
-            <div key={b} style={{ marginTop: 16 }}>
+          {SPORT_ORDER.filter(sp => grouped[sp].length > 0).map(sp => (
+            <div key={sp} style={{ marginTop: 16 }}>
               <div style={{
                 fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
-                color: tokens.inkLight, marginBottom: 10,
+                color: tokens.terra, marginBottom: 10,
               }}>
-                {en ? SECTION_LABELS[b].en : SECTION_LABELS[b].fr}
+                {en ? SPORT_LABELS[sp].en : SPORT_LABELS[sp].fr}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {grouped[b].map(n => {
+                {grouped[sp].map(n => {
                   const copy = en ? n.en : n.fr;
                   return (
                     <div key={n.id} style={{
@@ -96,8 +96,9 @@ export function WhatsNewPanel({ onClose }: { onClose: () => void }) {
                     }}>
                       <span style={{ fontSize: 22, lineHeight: '24px', flexShrink: 0 }}>{n.icon}</span>
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 13.5, fontWeight: 700, color: tokens.ink, marginBottom: 3 }}>
-                          {copy.title}
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 3 }}>
+                          <span style={{ fontSize: 13.5, fontWeight: 700, color: tokens.ink }}>{copy.title}</span>
+                          <span style={{ marginLeft: 'auto', flexShrink: 0, fontSize: 10, color: tokens.inkLight }}>{relDate(n.date, en)}</span>
                         </div>
                         <div style={{ fontSize: 12.5, color: tokens.inkMid, lineHeight: 1.5 }}>
                           {copy.body}
