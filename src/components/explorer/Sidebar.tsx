@@ -61,7 +61,7 @@ const ALL_NAV_ITEMS: { id: PageId; icon: string; label: string; sports: SportId[
   // 'itinerary' is no longer a top-level destination — it lives as a
   // tab inside Planner. Kept as a PageId for backward-compat URLs
   // (/itineraire still works and lands on the itinerary tab).
-  { id: 'planner',   icon: '✦', label: 'Planificateur', sports: ['cycling'] },
+  { id: 'planner',   icon: '✦', label: 'Planificateur', sports: ['cycling', 'running'] },
   { id: 'compare',   icon: '⇄', label: 'Comparer',      sports: ALL_SPORTS },
   { id: 'ftp',       icon: '⚡', label: 'Puissance & Charge',  sports: ['cycling'] },
   { id: 'equipment', icon: '⚙', label: 'Matériel',      sports: ['cycling'] },

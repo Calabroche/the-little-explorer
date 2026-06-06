@@ -114,8 +114,12 @@ export function ExplorerApp() {
     setSport(s);
     localStorage.setItem('tle_sport', s);
     setAnalysisActivity(null);
-    // Sur les pages spécifiques au vélo, retomber sur le feed quand on passe en course.
-    if (s !== 'cycling' && (page === 'planner' || page === 'ftp' || page === 'training-load' || page === 'equipment' || page === 'itinerary')) {
+    // Cycling-only pages: fall back to the feed when leaving cycling. The
+    // planner now supports running (route planner + training plan), so it's
+    // no longer in this list.
+    const cyclingOnly = page === 'ftp' || page === 'training-load' || page === 'equipment';
+    const plannerButRunningOk = (page === 'planner' || page === 'itinerary') && s !== 'running';
+    if (s !== 'cycling' && (cyclingOnly || plannerButRunningOk)) {
       setPage('feed');
       window.history.pushState(null, '', '/');
     }
@@ -357,8 +361,8 @@ export function ExplorerApp() {
       // still resolves but routes into PlannerPage with the itinerary
       // tab pre-selected — same destination, sidebar declutters down
       // to one nav item.
-      case 'planner':   return <PlannerPage activities={filteredActivities} user={user} initialTab="itineraire" />;
-      case 'itinerary': return <PlannerPage activities={filteredActivities} user={user} initialTab="itineraire" />;
+      case 'planner':   return <PlannerPage activities={filteredActivities} user={user} initialTab="itineraire" sport={sport} />;
+      case 'itinerary': return <PlannerPage activities={filteredActivities} user={user} initialTab="itineraire" sport={sport} />;
       case 'compare':   return <ComparePage activities={filteredActivities} />;
       case 'wrapped':   return <WrappedPage activities={filteredActivities} sport={sport} />;
       // 'ftp' + 'training-load' both land on PerformancePage now —

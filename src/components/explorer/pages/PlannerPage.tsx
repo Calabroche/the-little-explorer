@@ -8,7 +8,7 @@ import { RouteProposals } from '../RouteProposals';
 import { TrainingPlan } from '../TrainingPlan';
 import { ItineraryPage } from './ItineraryPage';
 import { useT } from '@/i18n';
-import { UserId } from '../Sidebar';
+import { UserId, SportId } from '../Sidebar';
 
 type PlannerTab = 'itineraire' | 'plan' | 'auto' | 'proposals';
 
@@ -19,6 +19,7 @@ interface Props {
   // specific sub-tool: hitting /itineraire shows itineraire, hitting
   // /planificateur shows the training plan by default.
   initialTab?: PlannerTab;
+  sport?: SportId;
 }
 
 const TABS: { id: PlannerTab; icon: string; labelKey: string }[] = [
@@ -28,13 +29,18 @@ const TABS: { id: PlannerTab; icon: string; labelKey: string }[] = [
   { id: 'proposals',  icon: '✺', labelKey: 'planner.tab.proposals'  },
 ];
 
-export function PlannerPage({ activities, user, initialTab = 'itineraire' }: Props) {
+export function PlannerPage({ activities, user, initialTab = 'itineraire', sport = 'cycling' }: Props) {
   const isMobile = useIsMobile();
   const { t } = useT();
-  const [tab, setTab] = useState<PlannerTab>(initialTab);
+  // Auto-generated loops (auto / proposals) come from a cycling-only route
+  // library, so runners only get the route planner + training plan.
+  const isRunning = sport === 'running';
+  const tabs = isRunning ? TABS.filter(t => t.id === 'itineraire' || t.id === 'plan') : TABS;
+  const safeInitial: PlannerTab = tabs.some(t => t.id === initialTab) ? initialTab : 'itineraire';
+  const [tab, setTab] = useState<PlannerTab>(safeInitial);
 
   // Sync internal tab when the host changes initialTab (URL navigation).
-  useEffect(() => { setTab(initialTab); }, [initialTab]);
+  useEffect(() => { setTab(safeInitial); }, [safeInitial]);
 
   // Per-tab metadata shown under the headline so the user knows what
   // each pane actually does — addresses the "too many similar things"
@@ -75,7 +81,7 @@ export function PlannerPage({ activities, user, initialTab = 'itineraire' }: Pro
           if (e.deltaY !== 0) el.scrollLeft += e.deltaY;
         }}
       >
-        {TABS.map(({ id, icon, labelKey }) => {
+        {tabs.map(({ id, icon, labelKey }) => {
           const active = tab === id;
           return (
             <button
@@ -101,8 +107,8 @@ export function PlannerPage({ activities, user, initialTab = 'itineraire' }: Pro
       {/* Pane content — only one feature visible at a time, no more
           stacked confusion. */}
       <div style={{ marginTop: 20 }}>
-        {tab === 'itineraire' && <ItineraryPage user={user} embedded />}
-        {tab === 'plan'       && <TrainingPlan   activities={activities} />}
+        {tab === 'itineraire' && <ItineraryPage user={user} embedded sport={isRunning ? 'running' : 'cycling'} />}
+        {tab === 'plan'       && <TrainingPlan   activities={activities} initialSport={sport} />}
         {tab === 'auto'       && <RouteBuilder   activities={activities} />}
         {tab === 'proposals'  && <RouteProposals activities={activities} />}
       </div>

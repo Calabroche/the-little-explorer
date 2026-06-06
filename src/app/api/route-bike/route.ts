@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
   const tooBig = enforceBodySize(req, 10_000);
   if (tooBig) return tooBig;
 
-  let body: { waypoints?: [number, number][]; steps?: boolean };
+  let body: { waypoints?: [number, number][]; steps?: boolean; profile?: string };
   try {
     body = await req.json();
   } catch {
@@ -78,6 +78,8 @@ export async function POST(req: NextRequest) {
   }
   const wp    = body.waypoints;
   const steps = !!body.steps;
+  // 'foot' for running (allows footpaths / pedestrian ways), 'bike' default.
+  const osrmHost = body.profile === 'foot' ? 'routed-foot' : 'routed-bike';
   if (!Array.isArray(wp) || wp.length < 2) {
     return NextResponse.json({ error: 'need_at_least_2_waypoints' }, { status: 400 });
   }
@@ -91,7 +93,7 @@ export async function POST(req: NextRequest) {
   }
 
   const coords = wp.map(([lat, lng]) => `${lng.toFixed(6)},${lat.toFixed(6)}`).join(';');
-  const url = `https://routing.openstreetmap.de/routed-bike/route/v1/driving/${coords}`
+  const url = `https://routing.openstreetmap.de/${osrmHost}/route/v1/driving/${coords}`
     + `?overview=full&geometries=geojson&alternatives=false`
     + `&steps=${steps ? 'true' : 'false'}`;
 

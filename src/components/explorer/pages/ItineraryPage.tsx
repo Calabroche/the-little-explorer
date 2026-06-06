@@ -30,6 +30,9 @@ interface Props {
   // we skip the page-level wrapper (padding/scroll) and the
   // SectionTag/headline — the host page handles those.
   embedded?: boolean;
+  // Routing profile: 'cycling' (default) or 'running' (OSRM foot profile,
+  // allows footpaths). Drives /api/route-bike's `profile`.
+  sport?: 'cycling' | 'running';
 }
 
 // ── Hooks ───────────────────────────────────────────────────────────────────
@@ -331,7 +334,7 @@ async function findDetour(
 
 // ── Main component ──────────────────────────────────────────────────────────
 
-export function ItineraryPage({ user, embedded }: Props) {
+export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
   const { t, lang } = useT();
   const isMobile = useIsMobile();
   // Lets the user collapse the (potentially long) stops list to free up
@@ -487,6 +490,8 @@ export function ItineraryPage({ user, embedded }: Props) {
           // Always request turn-by-turn steps so the Watch can do
           // voice nav (Phase E.2). 10-25 KB extra payload is fine.
           steps: true,
+          // OSRM foot profile for running so footpaths are allowed.
+          profile: sport === 'running' ? 'foot' : 'bike',
         }),
       });
       const data = await res.json();
@@ -502,7 +507,7 @@ export function ItineraryPage({ user, embedded }: Props) {
     } finally {
       setRouting(false);
     }
-  }, [waypoints, loop]);
+  }, [waypoints, loop, sport]);
 
   useEffect(() => {
     if (skipRecomputeRef.current) {

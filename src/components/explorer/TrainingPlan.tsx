@@ -5,6 +5,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Cell,
 } from 'recharts';
 import { tokens, Activity } from './tokens';
+import { SportId } from './Sidebar';
 import { Label, useIsMobile } from './ui';
 import { useT, formatDateLocale } from '@/i18n';
 
@@ -256,12 +257,22 @@ function buildPlan(
   return { weeks, tooSteep, peak, totalWeeks };
 }
 
+// Per-activity training load. Cycling activities carry a power-derived TSS;
+// running ones usually don't, so we fall back to a duration-based estimate
+// (rTSS proxy) — ~65 load/hour running, ~55 cycling — so a runner's plan
+// isn't stuck on the default baseline.
+function loadOf(a: Activity, sport: SportId): number {
+  if (a.tss != null && a.tss > 0) return a.tss;
+  if (a.duration_min && a.duration_min > 0) return (a.duration_min / 60) * (sport === 'running' ? 65 : 55);
+  return 0;
+}
+
 // Compute baseline weekly TSS from last 4 weeks of activities.
-function baselineWeeklyTss(activities: Activity[]): { tss: number; hasData: boolean } {
+function baselineWeeklyTss(activities: Activity[], sport: SportId): { tss: number; hasData: boolean } {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - 28);
   const recent = activities.filter(a => new Date(a.rawDate) >= cutoff);
-  const total = recent.reduce((s, a) => s + (a.tss ?? 0), 0);
+  const total = recent.reduce((s, a) => s + loadOf(a, sport), 0);
   if (recent.length < 2 || total <= 0) return { tss: 250, hasData: false };
   return { tss: Math.max(150, Math.round(total / 4)), hasData: true };
 }
@@ -275,7 +286,7 @@ const PHASE_COLOR: Record<Phase, string> = {
   race:    tokens.green,
 };
 
-export function TrainingPlan({ activities }: { activities: Activity[] }) {
+export function TrainingPlan({ activities, initialSport = 'cycling' }: { activities: Activity[]; initialSport?: SportId }) {
   const { t, lang } = useT();
   const isMobile = useIsMobile();
 
@@ -289,7 +300,7 @@ export function TrainingPlan({ activities }: { activities: Activity[] }) {
   // Sport picker — drives whether the form shows the cycling inputs
   // (km + D+) or the running inputs (km + target pace). Same plan
   // engine downstream, only the per-sport TSS estimate diverges.
-  const [sport,      setSport]      = useState<'cycling' | 'running'>('cycling');
+  const [sport,      setSport]      = useState<'cycling' | 'running'>(initialSport === 'running' ? 'running' : 'cycling');
   const [targetKm,   setTargetKm]   = useState(100);
   const [targetElev, setTargetElev] = useState(1500);
   // Running-only target pace expressed in seconds per km. Slider works
@@ -315,7 +326,7 @@ export function TrainingPlan({ activities }: { activities: Activity[] }) {
     queueMicrotask(() => setTargetKm(clampedKm));
   }
 
-  const { tss: baselineTss, hasData } = useMemo(() => baselineWeeklyTss(activities), [activities]);
+  const { tss: baselineTss, hasData } = useMemo(() => baselineWeeklyTss(activities, sport), [activities, sport]);
 
   const dateError = useMemo(() => {
     if (!generated) return null;
