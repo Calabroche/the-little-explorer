@@ -19,10 +19,11 @@ export function FeatureAnnouncement() {
   const [note, setNote] = useState<FeatureNote | null>(null);
 
   // Decide on mount (client-only) to avoid an SSR hydration mismatch.
+  // Only the NEWEST note can pop up — older/backfilled entries live in the
+  // "i" panel and must never resurface as launch popups.
   useEffect(() => {
-    const seen = readSeen();
-    const next = FEATURE_NOTES.find(n => !seen.includes(n.id));
-    if (next) setNote(next);
+    const newest = FEATURE_NOTES[0];
+    if (newest && !readSeen().includes(newest.id)) setNote(newest);
   }, []);
 
   if (!note) return null;

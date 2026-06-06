@@ -12,15 +12,15 @@ function bucketOf(dateStr: string): Bucket {
   const days = Math.floor((today.getTime() - d.getTime()) / 86_400_000);
   if (days <= 0) return 'today';
   if (days <= 7) return 'week';
-  if (days <= 31) return 'month';
+  if (days <= 30) return 'month';
   return 'earlier';
 }
 
 const SECTION_LABELS: Record<Bucket, { fr: string; en: string }> = {
-  today:   { fr: 'Nouveauté du jour',      en: 'Today' },
-  week:    { fr: 'Nouveautés de la semaine', en: 'This week' },
-  month:   { fr: 'Nouveautés du mois',      en: 'This month' },
-  earlier: { fr: 'Avant',                   en: 'Earlier' },
+  today:   { fr: "Aujourd'hui",       en: 'Today' },
+  week:    { fr: '7 derniers jours',  en: 'Last 7 days' },
+  month:   { fr: '30 derniers jours', en: 'Last 30 days' },
+  earlier: { fr: 'Plus tôt',          en: 'Earlier' },
 };
 const ORDER: Bucket[] = ['today', 'week', 'month', 'earlier'];
 
