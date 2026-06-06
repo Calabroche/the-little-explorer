@@ -11,6 +11,7 @@ import { Label, TypeBadge, StatChip, useIsMobile } from './ui';
 import { useT, formatDateLocale } from '@/i18n';
 import { formatPace } from '@/utils/format';
 import { detectClimbs, Climb } from '@/lib/climbs';
+import { GradeAdjustedPace } from './GradeAdjustedPace';
 
 const ActivityRouteMap = dynamic(
   () => import('./ActivityRouteMap').then(m => m.ActivityRouteMap),
@@ -715,6 +716,9 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
         {activity.max_hr    != null && <StatChip label={t('analysis.hrMax')} value={activity.max_hr}     unit="bpm" />}
         {activity.calories  != null && <StatChip label={t('analysis.cal')}  value={activity.calories}   unit="kcal" />}
       </div>
+
+      {/* Grade-adjusted pace (running) */}
+      <GradeAdjustedPace activity={activity} />
 
       {/* FTP banner */}
       {activity.np && (
