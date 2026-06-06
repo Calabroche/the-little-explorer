@@ -40,6 +40,7 @@ import { signIn, useSession } from 'next-auth/react';
 import { tokens } from '@/components/explorer/tokens';
 
 import type { SportId } from '@/components/explorer/Sidebar';
+import { WhyBetterThanStrava } from '@/components/explorer/WhyBetterThanStrava';
 
 // Sports offered as a "prédilection" during onboarding. Values are real
 // SportIds so the app can default to the chosen one (it reads the favourite
@@ -331,6 +332,11 @@ function Step0({ userName, onNext }: {
             <span style={{ fontSize: 13, color: tokens.inkMid, lineHeight: 1.5 }}>{h.text}</span>
           </div>
         ))}
+      </div>
+
+      {/* Why we beat Strava — the pitch, right on the welcome step. */}
+      <div style={{ marginTop: 18 }}>
+        <WhyBetterThanStrava />
       </div>
       <a
         href="/guide"

@@ -3,6 +3,7 @@
 import { useT } from '@/i18n';
 import { tokens } from './tokens';
 import { FEATURE_NOTES, FeatureNote } from './featureNotes';
+import { WhyBetterThanStrava } from './WhyBetterThanStrava';
 
 // Recency buckets, relative to today.
 type Bucket = 'today' | 'week' | 'month' | 'earlier';
@@ -73,6 +74,10 @@ export function WhatsNewPanel({ onClose }: { onClose: () => void }) {
         </div>
 
         <div style={{ overflowY: 'auto', padding: '4px 22px 22px' }}>
+          {/* Pinned: why The Little Explorer beats Strava. */}
+          <div style={{ marginTop: 12 }}>
+            <WhyBetterThanStrava />
+          </div>
           {ORDER.filter(b => grouped[b].length > 0).map(b => (
             <div key={b} style={{ marginTop: 16 }}>
               <div style={{
