@@ -22,6 +22,13 @@ export interface FeatureNote {
 
 export const FEATURE_NOTES: FeatureNote[] = [
   {
+    id: 'running-gap-2026-06', icon: '📉', date: '2026-06-06', sport: 'running',
+    fr: { title: 'Allure ajustée à la pente (course)',
+          body: "Sur l'analyse d'une sortie course, l'app calcule ton allure « à plat équivalent » en corrigeant le dénivelé (modèle de Minetti). Compare tes sorties vallonnées et plates à armes égales. Strava fait payer ça." },
+    en: { title: 'Grade-adjusted pace (running)',
+          body: 'On a running activity analysis, the app computes your flat-equivalent pace, correcting for hills (Minetti model). Compare hilly and flat runs fairly. Strava charges for this.' },
+  },
+  {
     id: 'running-predictor-2026-06', icon: '🏁', date: '2026-06-06', sport: 'running',
     fr: { title: 'Prédicteur de chrono + allures (course)',
           body: "Prévois tes temps sur 5 km / 10 km / semi / marathon depuis ta meilleure sortie récente, et obtiens tes allures d'entraînement (endurance, seuil, VO2…). Strava fait payer ça — ici c'est gratuit." },
