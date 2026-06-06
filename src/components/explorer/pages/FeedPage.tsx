@@ -12,6 +12,7 @@ import { ActivityCalendar } from '../ActivityCalendar';
 import { Goals } from '../Goals';
 import { PersonalRecords } from '../PersonalRecords';
 import { RunPaceZones } from '../RunPaceZones';
+import { RaceProjector } from '../RaceProjector';
 import type { SportId } from '../Sidebar';
 import { useT } from '@/i18n';
 
@@ -779,6 +780,7 @@ export function FeedPage({ activities, stats, sport, onSelect }: Props) {
           since it has no dedicated performance page. */}
       {sport === 'running' && <PersonalRecords activities={filteredActivities} sport={sport} />}
       {sport === 'running' && <RunPaceZones activities={filteredActivities} />}
+      {sport === 'running' && <RaceProjector activities={filteredActivities} />}
       {/* Cycling-only — the whole TSS / NP / IF / FTP framework is
           power-meter-on-a-bike specific. Running has its own
           equivalents (Daniels / Banister) and our other sports
