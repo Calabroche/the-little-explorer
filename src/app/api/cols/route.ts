@@ -32,7 +32,7 @@ async function runOverpass(query: string): Promise<OverpassResp | null> {
   for (const url of OVERPASS_HOSTS) {
     try {
       const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 12_000);
+      const timer = setTimeout(() => ctrl.abort(), 20_000);
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json', 'User-Agent': UA },
@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
   // (the Alps would flood a 100 km box), so cap them to a tighter box — the
   // local "monts" people ride to are within ~40 km anyway.
   const bboxCols = box(radiusKm);
-  const bboxPeaks = box(Math.min(radiusKm, 40));
+  const bboxPeaks = box(Math.min(radiusKm, 25));
 
   const query =
     `[out:json][timeout:25];(` +
