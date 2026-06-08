@@ -380,7 +380,7 @@ export function ExplorerApp() {
       {/* "What's new" popup — shows the latest undismissed feature note. */}
       <FeatureAnnouncement />
       {/* The full changelog, opened from the "i" button. */}
-      {showWhatsNew && <WhatsNewPanel onClose={() => setShowWhatsNew(false)} />}
+      {showWhatsNew && <WhatsNewPanel onClose={() => setShowWhatsNew(false)} initialSport={sport === 'running' ? 'running' : 'cycling'} />}
       {!isMobile && !sidebarCollapsed && (
         <Sidebar activePage={page} onNav={handleNav} stats={filteredStats} darkMode={darkMode} onToggleDark={toggleDark}
                  sport={sport} onSportChange={handleSportChange} user={user} onUserChange={handleUserChange} onHome={handleHome} availableSports={availableSports}

@@ -1,20 +1,14 @@
 'use client';
 
+import { useState } from 'react';
 import { useT } from '@/i18n';
 import { tokens } from './tokens';
-import { FEATURE_NOTES, FeatureNote, FeatureSport } from './featureNotes';
+import { FEATURE_NOTES } from './featureNotes';
 import { WhyBetterThanStrava } from './WhyBetterThanStrava';
 
-// Features are grouped BY SPORT in the panel.
-const SPORT_ORDER: FeatureSport[] = ['all', 'cycling', 'running'];
-const SPORT_LABELS: Record<FeatureSport, { fr: string; en: string }> = {
-  all:     { fr: 'Tous les sports', en: 'All sports' },
-  cycling: { fr: '🚴 Vélo',         en: '🚴 Cycling' },
-  running: { fr: '🏃 Course',       en: '🏃 Running' },
-};
+type PanelTab = 'cycling' | 'running' | 'strava';
 
-// Small "when" caption per item (the recency is still visible without
-// being the primary grouping).
+// Small "when" caption per item.
 function relDate(dateStr: string, en: boolean): string {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const d = new Date(`${dateStr}T00:00:00`);
@@ -25,14 +19,25 @@ function relDate(dateStr: string, en: boolean): string {
   return d.toLocaleDateString(en ? 'en-US' : 'fr-FR', { day: '2-digit', month: 'short' });
 }
 
-// The full "what's new" archive, opened from the "i" button. Lists every
-// feature note grouped by sport (newest first within each).
-export function WhatsNewPanel({ onClose }: { onClose: () => void }) {
+// The "what's new" panel, opened from the "i" button. Tabs: Vélo / Course /
+// Mieux que Strava. Sport tabs show that sport's notes plus the cross-sport
+// ('all') ones; the Strava tab holds the comparison pitch.
+export function WhatsNewPanel({ onClose, initialSport = 'cycling' }: { onClose: () => void; initialSport?: 'cycling' | 'running' | string }) {
   const { lang } = useT();
   const en = lang === 'en';
+  const [tab, setTab] = useState<PanelTab>(initialSport === 'running' ? 'running' : 'cycling');
 
-  const grouped: Record<FeatureSport, FeatureNote[]> = { all: [], cycling: [], running: [] };
-  for (const n of FEATURE_NOTES) grouped[n.sport].push(n);
+  const TABS: { id: PanelTab; label: string }[] = [
+    { id: 'cycling', label: '🚴 ' + (en ? 'Cycling' : 'Vélo') },
+    { id: 'running', label: '🏃 ' + (en ? 'Running' : 'Course') },
+    { id: 'strava',  label: '🟧 ' + (en ? 'vs Strava' : 'vs Strava') },
+  ];
+
+  const notes = tab === 'cycling'
+    ? FEATURE_NOTES.filter(n => n.sport === 'cycling' || n.sport === 'all')
+    : tab === 'running'
+      ? FEATURE_NOTES.filter(n => n.sport === 'running' || n.sport === 'all')
+      : [];
 
   return (
     <div
@@ -53,7 +58,7 @@ export function WhatsNewPanel({ onClose }: { onClose: () => void }) {
           fontFamily: "'Space Grotesk'",
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 22px 12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 22px 10px' }}>
           <div>
             <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: tokens.terra }}>
               ✦ {en ? 'Changelog' : 'Nouveautés'}
@@ -73,46 +78,52 @@ export function WhatsNewPanel({ onClose }: { onClose: () => void }) {
           >✕</button>
         </div>
 
+        {/* Tab bar */}
+        <div style={{ display: 'flex', gap: 6, padding: '0 22px 12px' }}>
+          {TABS.map(tb => {
+            const active = tab === tb.id;
+            return (
+              <button
+                key={tb.id}
+                onClick={() => setTab(tb.id)}
+                style={{
+                  flex: 1, padding: '8px 6px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                  background: active ? tokens.terra : tokens.creamDark,
+                  color: active ? '#fff' : tokens.inkMid,
+                  fontFamily: "'Space Grotesk'", fontSize: 12, fontWeight: active ? 700 : 500,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {tb.label}
+              </button>
+            );
+          })}
+        </div>
+
         <div style={{ overflowY: 'auto', padding: '4px 22px 22px' }}>
-          {/* Pinned: why The Little Explorer beats Strava. */}
-          <div style={{ marginTop: 12 }}>
+          {tab === 'strava' ? (
             <WhyBetterThanStrava />
-          </div>
-          {SPORT_ORDER.filter(sp => grouped[sp].length > 0).map(sp => (
-            <div key={sp} style={{ marginTop: 16 }}>
-              <div style={{
-                fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
-                color: tokens.terra, marginBottom: 10,
-              }}>
-                {en ? SPORT_LABELS[sp].en : SPORT_LABELS[sp].fr}
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {grouped[sp].map(n => {
-                  const copy = en ? n.en : n.fr;
-                  return (
-                    <div key={n.id} style={{
-                      display: 'flex', gap: 12, padding: 12,
-                      background: tokens.creamDark, borderRadius: 8,
-                    }}>
-                      <span style={{ fontSize: 22, lineHeight: '24px', flexShrink: 0 }}>{n.icon}</span>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 3 }}>
-                          <span style={{ fontSize: 13.5, fontWeight: 700, color: tokens.ink }}>{copy.title}</span>
-                          <span style={{ marginLeft: 'auto', flexShrink: 0, fontSize: 10, color: tokens.inkLight }}>{relDate(n.date, en)}</span>
-                        </div>
-                        <div style={{ fontSize: 12.5, color: tokens.inkMid, lineHeight: 1.5 }}>
-                          {copy.body}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-          {FEATURE_NOTES.length === 0 && (
+          ) : notes.length === 0 ? (
             <div style={{ fontSize: 13, color: tokens.inkLight, padding: '20px 0' }}>
-              {en ? 'Nothing yet.' : 'Rien pour le moment.'}
+              {en ? 'Nothing yet for this sport.' : 'Rien pour le moment pour ce sport.'}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {notes.map(n => {
+                const copy = en ? n.en : n.fr;
+                return (
+                  <div key={n.id} style={{ display: 'flex', gap: 12, padding: 12, background: tokens.creamDark, borderRadius: 8 }}>
+                    <span style={{ fontSize: 22, lineHeight: '24px', flexShrink: 0 }}>{n.icon}</span>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 3 }}>
+                        <span style={{ fontSize: 13.5, fontWeight: 700, color: tokens.ink }}>{copy.title}</span>
+                        <span style={{ marginLeft: 'auto', flexShrink: 0, fontSize: 10, color: tokens.inkLight }}>{relDate(n.date, en)}</span>
+                      </div>
+                      <div style={{ fontSize: 12.5, color: tokens.inkMid, lineHeight: 1.5 }}>{copy.body}</div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
