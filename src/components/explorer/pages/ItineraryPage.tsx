@@ -865,9 +865,9 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
       {/* Single column: map (full width) on top, builder underneath.
           `order` puts the map first without moving the JSX blocks. */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-        {/* ─── BUILDER (rendered below the map via order) ────────────────── */}
+        {/* ─── BUILDER (rendered above the map via order) ────────────────── */}
         <div style={{
-          order: 2,
+          order: 1,
           display: 'grid', gap: 16, alignItems: 'start',
           gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(300px, 1fr))',
         }}>
@@ -1233,8 +1233,8 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
           )}
         </div>
 
-        {/* ─── MAP + elevation profile (rendered first via order) ───────── */}
-        <div style={{ order: 1, display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0 }}>
+        {/* ─── MAP + elevation profile (rendered below the builder via order) ─ */}
+        <div style={{ order: 2, display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0 }}>
           <div style={mapCardStyle}>
             <MapContainer
               center={mapCenter}
