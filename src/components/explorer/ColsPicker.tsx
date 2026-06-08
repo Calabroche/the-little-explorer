@@ -229,14 +229,14 @@ const HEADER_ROW: CSSProperties = {
   gap: 12, flexWrap: 'wrap', marginBottom: 14,
 };
 const GRID: CSSProperties = {
-  // 2 cols per row, ~5 rows visible, then scroll/swipe inside the card.
+  // 3 cols per row, ~5 rows visible, then scroll/swipe inside the card.
   display: 'grid', gap: 8,
-  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
   maxHeight: 290, overflowY: 'auto', overscrollBehavior: 'contain',
   WebkitOverflowScrolling: 'touch',
 };
 const COL_CARD: CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px',
+  display: 'flex', alignItems: 'center', gap: 7, padding: '7px 8px',
   borderRadius: 8, cursor: 'pointer', textAlign: 'left', width: '100%', boxSizing: 'border-box',
 };
 const RETRY_BTN: CSSProperties = {
