@@ -417,21 +417,36 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
   );
   const removeWaypoint = (idx: number) => setWaypoints(prev => prev.filter((_, i) => i !== idx));
 
-  // Toggle a nearby col in/out of the route (added as a waypoint).
-  const toggleCol = (col: Col) => {
+  // Which waypoint (if any) represents a given col. A col counts as "in the
+  // route" when a waypoint sits on it: either the synthetic code added via the
+  // toggle, OR — for routes built before the cols feature, where the col was
+  // added by search / map-click — a waypoint within ~250 m of the col node.
+  const colWaypointIndex = useCallback((col: Col): number => {
     const code = colCode(col);
-    setWaypoints(prev => {
-      const idx = prev.findIndex(w => w.code === code);
-      if (idx >= 0) return prev.filter((_, i) => i !== idx);
-      return [...prev, {
-        name: col.name, code, lat: col.lat, lng: col.lng,
-        label: col.ele != null ? `${col.name} · ${col.ele} m` : col.name,
-        kind: 'locality' as const,
-      }];
+    const exact = waypoints.findIndex(w => w.code === code);
+    if (exact >= 0) return exact;
+    let best = -1, bestD = 250;  // metres
+    waypoints.forEach((w, i) => {
+      const d = haversineM([w.lat, w.lng], [col.lat, col.lng]);
+      if (d < bestD) { bestD = d; best = i; }
     });
+    return best;
+  }, [waypoints]);
+  const isColSelected = useCallback((col: Col): boolean => colWaypointIndex(col) >= 0, [colWaypointIndex]);
+
+  // Toggle a nearby col in/out of the route (added as a waypoint). Removal works
+  // by proximity too, so clicking an already-on col from an older route drops
+  // the matching stop.
+  const toggleCol = (col: Col) => {
+    const idx = colWaypointIndex(col);
+    if (idx >= 0) { setWaypoints(prev => prev.filter((_, i) => i !== idx)); return; }
+    const code = colCode(col);
+    setWaypoints(prev => prev.some(p => p.code === code) ? prev : [...prev, {
+      name: col.name, code, lat: col.lat, lng: col.lng,
+      label: col.ele != null ? `${col.name} · ${col.ele} m` : col.name,
+      kind: 'locality' as const,
+    }]);
   };
-  // Set of waypoint codes — lets ColsPicker show which cols are selected.
-  const selectedColCodes = useMemo(() => new Set(waypoints.map(w => w.code)), [waypoints]);
 
   // Nearby cols (cycling only) — fetched once here, then shown BOTH as always-on
   // markers on the map and as the picker list below. The departure (waypoint #1)
@@ -1062,7 +1077,7 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
               loading={colsLoading}
               errored={colsErrored}
               retry={colsRetry}
-              selectedCodes={selectedColCodes}
+              isSelected={isColSelected}
               onToggle={toggleCol}
             />
           )}
@@ -1235,7 +1250,7 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
                   it to / remove it from the route. Marker clicks never register
                   as a map click, so no phantom add-point popup. */}
               {sport === 'cycling' && colIcons && nearbyCols.map(c => {
-                const sel = selectedColCodes.has(colCode(c));
+                const sel = isColSelected(c);
                 const icon = c.kind === 'col'
                   ? (sel ? colIcons.colSel : colIcons.col)
                   : (sel ? colIcons.sommetSel : colIcons.sommet);

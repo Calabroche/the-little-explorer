@@ -82,7 +82,7 @@ export function useNearbyCols(center: [number, number] | null, radiusKm: number)
 // data comes from useNearbyCols, lifted to the planner so the map can use it
 // too.
 export function ColsPicker({
-  center, radiusKm, setRadiusKm, cols, loading, errored, retry, selectedCodes, onToggle,
+  center, radiusKm, setRadiusKm, cols, loading, errored, retry, isSelected, onToggle,
 }: {
   center: [number, number] | null;
   radiusKm: number;
@@ -91,7 +91,7 @@ export function ColsPicker({
   loading: boolean;
   errored: boolean;
   retry: () => void;
-  selectedCodes: Set<string>;
+  isSelected: (col: Col) => boolean;
   onToggle: (col: Col) => void;
 }) {
   const { lang } = useT();
@@ -103,7 +103,7 @@ export function ColsPicker({
     return s ? cols.filter(c => c.name.toLowerCase().includes(s)) : cols;
   }, [cols, q]);
 
-  const selectedCount = cols.filter(c => selectedCodes.has(colCode(c))).length;
+  const selectedCount = cols.filter(c => isSelected(c)).length;
 
   const header = (
     <div style={HEADER_ROW}>
@@ -197,7 +197,7 @@ export function ColsPicker({
       {filtered.length > 0 && (
         <div style={GRID}>
           {filtered.map(c => {
-            const sel = selectedCodes.has(colCode(c));
+            const sel = isSelected(c);
             const sub = [c.city, c.ele != null ? `${c.ele} m` : null, `${c.distKm} km`].filter(Boolean).join(' · ');
             return (
               <button key={colCode(c)} onClick={() => onToggle(c)} style={{
