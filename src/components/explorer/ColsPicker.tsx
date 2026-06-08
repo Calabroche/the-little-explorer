@@ -21,7 +21,7 @@ export function colCode(c: { lat: number; lng: number }): string {
   return `col:${c.lat.toFixed(5)},${c.lng.toFixed(5)}`;
 }
 
-const RADII = [10, 15, 25, 50, 100];
+const RADII = [10, 15, 25, 50];
 
 // "Cols à proximité": lists the mountain passes + named summits within a
 // radius of the departure, nearest first, with elevation + distance. Tapping
