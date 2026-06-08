@@ -24,7 +24,7 @@ const FitBounds    = dynamic(() => import('../itinerary/FitBounds').then(m => m.
 const BasemapTiles = dynamic(() => import('../MapBasemap').then(m => m.BasemapTiles), { ssr: false });
 import { useBasemap, BasemapToggle } from '../MapBasemap';
 import { useZoomPercent, ZoomPercentPill } from '../MapZoomControl';
-import { ColsPicker, Col, colCode } from '../ColsPicker';
+import { ColsPicker, Col, colCode, useNearbyCols, COL_COLORS } from '../ColsPicker';
 
 interface Props {
   user: UserId;
@@ -429,6 +429,16 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
   };
   // Set of waypoint codes — lets ColsPicker show which cols are selected.
   const selectedColCodes = useMemo(() => new Set(waypoints.map(w => w.code)), [waypoints]);
+
+  // Nearby cols (cycling only) — fetched once here, then shown BOTH as always-on
+  // markers on the map and as the picker list below. The departure (waypoint #1)
+  // is the search centre.
+  const [colRadiusKm, setColRadiusKm] = useState(25);
+  const colCenter = useMemo<[number, number] | null>(
+    () => (sport === 'cycling' && waypoints[0]) ? [waypoints[0].lat, waypoints[0].lng] : null,
+    [sport, waypoints],
+  );
+  const { cols: nearbyCols, loading: colsLoading, errored: colsErrored, retry: colsRetry } = useNearbyCols(colCenter, colRadiusKm);
 
   // ── Click-to-add a precise map point ─────────────────────────────────────
   // Clicking the map opens the confirmation popup at the exact spot and kicks
@@ -1218,7 +1228,13 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
           {sport === 'cycling' && (
             <div style={{ gridColumn: '1 / -1' }}>
               <ColsPicker
-                center={waypoints[0] ? [waypoints[0].lat, waypoints[0].lng] : null}
+                center={colCenter}
+                radiusKm={colRadiusKm}
+                setRadiusKm={setColRadiusKm}
+                cols={nearbyCols}
+                loading={colsLoading}
+                errored={colsErrored}
+                retry={colsRetry}
                 selectedCodes={selectedColCodes}
                 onToggle={toggleCol}
               />
@@ -1261,6 +1277,31 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
                   </Tooltip>
                 </CircleMarker>
               ))}
+              {/* Cols & summits near the departure — always shown (cycling),
+                  each labelled with its altitude. Click a marker to add it to
+                  the route (or remove it if already in). Marker click never
+                  registers as a map click, so no phantom add-point popup. */}
+              {sport === 'cycling' && nearbyCols.map(c => {
+                const sel = selectedColCodes.has(colCode(c));
+                return (
+                  <CircleMarker
+                    key={`col-${colCode(c)}`}
+                    center={[c.lat, c.lng]}
+                    radius={sel ? 7 : 5}
+                    pathOptions={{
+                      fillColor: sel ? tokens.terra : COL_COLORS[c.kind],
+                      color: '#fff', weight: 1.5, fillOpacity: 1,
+                    }}
+                    eventHandlers={{ click: () => toggleCol(c) }}
+                  >
+                    <Tooltip permanent direction="top" offset={[0, -6]} opacity={0.92}>
+                      <span style={{ fontFamily: "'Space Grotesk'", fontSize: 10, fontWeight: 700, color: sel ? tokens.terra : tokens.ink }}>
+                        {sel ? '✓ ' : ''}{c.kind === 'col' ? '⛰' : '🗻'} {c.ele != null ? `${c.ele} m` : c.name}
+                      </span>
+                    </Tooltip>
+                  </CircleMarker>
+                );
+              })}
               {/* Resupply points (water / food) along the route. */}
               {showPois && pois.map((p, i) => (
                 <CircleMarker

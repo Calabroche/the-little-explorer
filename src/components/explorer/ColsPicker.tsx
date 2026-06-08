@@ -21,25 +21,26 @@ export function colCode(c: { lat: number; lng: number }): string {
   return `col:${c.lat.toFixed(5)},${c.lng.toFixed(5)}`;
 }
 
-const RADII = [10, 15, 25, 50];
+export const COL_RADII = [10, 15, 25, 50];
 
-// "Cols à proximité": lists the mountain passes + named summits within a
-// radius of the departure, nearest first, with elevation + distance + commune.
-// Tapping one adds it to the route (the planner's stats bar then shows the
-// total D+ / difficulty of the selected set).
-export function ColsPicker({ center, selectedCodes, onToggle }: {
-  center: [number, number] | null;
-  selectedCodes: Set<string>;
-  onToggle: (col: Col) => void;
-}) {
-  const { lang } = useT();
-  const en = lang === 'en';
-  const [radiusKm, setRadiusKm] = useState(25);
+// Marker colours on the map (and the list icons): cols vs named summits.
+export const COL_COLORS = { col: '#3E7C5A', sommet: '#7B6CA6' } as const;
+
+export interface NearbyCols {
+  cols: Col[];
+  loading: boolean;
+  errored: boolean;
+  retry: () => void;
+}
+
+// Shared fetch hook so the map markers and the picker list draw from ONE
+// request. The public Overpass mirrors flake, so we auto-retry once on an
+// empty result and expose a manual retry().
+export function useNearbyCols(center: [number, number] | null, radiusKm: number): NearbyCols {
   const [cols, setCols] = useState<Col[]>([]);
   const [loading, setLoading] = useState(false);
   const [errored, setErrored] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
-  const [q, setQ] = useState('');
   const autoRetried = useRef(false);
 
   const cLat = center?.[0];
@@ -59,8 +60,6 @@ export function ColsPicker({ center, selectedCodes, onToggle }: {
         if (cancelled) return;
         const list = d.cols ?? [];
         setCols(list);
-        // The public Overpass mirrors flake intermittently → an empty result
-        // is often a transient miss. Auto-retry ONCE before giving up.
         if (list.length === 0 && !autoRetried.current) {
           autoRetried.current = true;
           setReloadKey(k => k + 1);
@@ -71,8 +70,33 @@ export function ColsPicker({ center, selectedCodes, onToggle }: {
     return () => { cancelled = true; };
   }, [cLat, cLng, radiusKm, reloadKey]);
 
-  // Reset the auto-retry guard when the query target changes.
   useEffect(() => { autoRetried.current = false; }, [cLat, cLng, radiusKm]);
+
+  const retry = () => { autoRetried.current = true; setReloadKey(k => k + 1); };
+  return { cols, loading, errored, retry };
+}
+
+// "Cols à proximité": the mountain passes + named summits within a radius of
+// the departure, nearest first, with elevation + distance + commune. Tapping
+// one adds it to the route (mirrors the map markers). Presentational — the
+// data comes from useNearbyCols, lifted to the planner so the map can use it
+// too.
+export function ColsPicker({
+  center, radiusKm, setRadiusKm, cols, loading, errored, retry, selectedCodes, onToggle,
+}: {
+  center: [number, number] | null;
+  radiusKm: number;
+  setRadiusKm: (v: number) => void;
+  cols: Col[];
+  loading: boolean;
+  errored: boolean;
+  retry: () => void;
+  selectedCodes: Set<string>;
+  onToggle: (col: Col) => void;
+}) {
+  const { lang } = useT();
+  const en = lang === 'en';
+  const [q, setQ] = useState('');
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -80,9 +104,7 @@ export function ColsPicker({ center, selectedCodes, onToggle }: {
   }, [cols, q]);
 
   const selectedCount = cols.filter(c => selectedCodes.has(colCode(c))).length;
-  const retry = () => { autoRetried.current = true; setReloadKey(k => k + 1); };
 
-  // ── Header (always shown) ──────────────────────────────────────────────
   const header = (
     <div style={HEADER_ROW}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 0 }}>
@@ -95,7 +117,7 @@ export function ColsPicker({ center, selectedCodes, onToggle }: {
       </div>
       {center != null && (
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          {RADII.map(r => (
+          {COL_RADII.map(r => (
             <button key={r} onClick={() => setRadiusKm(r)} style={{
               padding: '4px 11px', borderRadius: 999, border: 'none', cursor: 'pointer',
               fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 600,
@@ -108,14 +130,13 @@ export function ColsPicker({ center, selectedCodes, onToggle }: {
     </div>
   );
 
-  // ── No departure yet ───────────────────────────────────────────────────
   if (center == null) {
     return (
       <div style={CARD}>
         {header}
         <p style={HINT}>{en
-          ? 'Add a start point (§ 01) to discover the cols you can ride to from there.'
-          : 'Ajoute un point de départ (§ 01) pour découvrir les cols accessibles depuis là.'}</p>
+          ? 'Add a start point (§ 01) to see every col on the map, with its altitude — tap a marker to add it to your route.'
+          : 'Ajoute un point de départ (§ 01) pour voir tous les cols sur la carte, avec leur altitude. Clique un point pour l’ajouter au parcours.'}</p>
       </div>
     );
   }
@@ -123,6 +144,12 @@ export function ColsPicker({ center, selectedCodes, onToggle }: {
   return (
     <div style={CARD}>
       {header}
+
+      <p style={{ ...HINT, marginTop: 0, marginBottom: 12 }}>
+        {en
+          ? 'All cols & summits are shown on the map above. Tap a marker — or a card below — to add or remove it from your route.'
+          : 'Tous les cols et monts sont affichés sur la carte ci-dessus. Clique un point (ou une carte ci-dessous) pour l’ajouter ou le retirer du parcours.'}
+      </p>
 
       <input
         value={q}
@@ -136,11 +163,10 @@ export function ColsPicker({ center, selectedCodes, onToggle }: {
         }}
       />
 
-      {/* Loading */}
       {loading && cols.length === 0 && (
         <div style={GRID}>
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} style={{ ...COL_CARD, opacity: 0.5, animation: 'pulse 1.2s ease-in-out infinite' }}>
+            <div key={i} style={{ ...COL_CARD, opacity: 0.5 }}>
               <span style={{ fontSize: 18 }}>⛰️</span>
               <span style={{ flex: 1 }}>
                 <span style={{ display: 'block', height: 11, width: '70%', background: tokens.creamDark, borderRadius: 3 }} />
@@ -151,7 +177,6 @@ export function ColsPicker({ center, selectedCodes, onToggle }: {
         </div>
       )}
 
-      {/* Empty / error → retry */}
       {!loading && filtered.length === 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10, padding: '8px 0' }}>
           <p style={{ ...HINT, marginTop: 0 }}>
@@ -169,7 +194,6 @@ export function ColsPicker({ center, selectedCodes, onToggle }: {
         </div>
       )}
 
-      {/* Results — wrapping card grid (uses the full section width) */}
       {filtered.length > 0 && (
         <div style={GRID}>
           {filtered.map(c => {
