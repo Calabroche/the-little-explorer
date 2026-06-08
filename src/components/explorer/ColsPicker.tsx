@@ -145,10 +145,10 @@ export function ColsPicker({
     <div style={CARD}>
       {header}
 
-      <p style={{ ...HINT, marginTop: 0, marginBottom: 12 }}>
+      <p style={{ ...HINT, marginTop: 0, marginBottom: 10 }}>
         {en
-          ? 'All cols & summits are shown on the map above. Tap a marker — or a card below — to add or remove it from your route.'
-          : 'Tous les cols et monts sont affichés sur la carte ci-dessus. Clique un point (ou une carte ci-dessous) pour l’ajouter ou le retirer du parcours.'}
+          ? 'Also on the map. Tap to add / remove.'
+          : 'Aussi sur la carte. Clique pour ajouter ou retirer.'}
       </p>
 
       <input
@@ -229,9 +229,11 @@ const HEADER_ROW: CSSProperties = {
   gap: 12, flexWrap: 'wrap', marginBottom: 14,
 };
 const GRID: CSSProperties = {
+  // 2 cols per row, ~5 rows visible, then scroll/swipe inside the card.
   display: 'grid', gap: 8,
-  gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))',
-  maxHeight: 320, overflowY: 'auto',
+  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+  maxHeight: 290, overflowY: 'auto', overscrollBehavior: 'contain',
+  WebkitOverflowScrolling: 'touch',
 };
 const COL_CARD: CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px',

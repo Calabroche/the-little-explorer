@@ -1049,99 +1049,32 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
             )}
           </div>
 
-          {/* Step 2: target distance — only while building, hidden once a
-              route is open (it's already created, the target is moot). */}
-          {!isOpen && (
-          <div style={CARD}>
-            <Label style={{ display: 'block', marginBottom: 10 }}>{t('itinerary.step2')}</Label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input
-                type="number" min={5} max={400} step={5}
-                value={targetKm}
-                onChange={e => setTargetKm(Math.max(0, Number(e.target.value) || 0))}
-                style={{
-                  width: 80, padding: '8px 10px',
-                  fontFamily: "'Playfair Display'", fontSize: 18, fontWeight: 700, color: tokens.ink,
-                  background: tokens.cream, border: `1px solid ${tokens.creamBorder}`, borderRadius: 4,
-                  outline: 'none',
-                }}
-              />
-              <span style={{ fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.inkLight }}>km</span>
-              <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
-                {[30, 50, 80].map(km => (
-                  <button key={km} onClick={() => setTargetKm(km)} style={{
-                    padding: '4px 10px', fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 500,
-                    background: targetKm === km ? tokens.terra : tokens.creamDark,
-                    color: targetKm === km ? '#fff' : tokens.inkMid,
-                    border: 'none', borderRadius: 12, cursor: 'pointer',
-                  }}>{km}</button>
-                ))}
-              </div>
+          {/* Cols à proximité — takes the slot the target-distance card used to
+              occupy (cycling only). Selecting one adds it to the route. The
+              computed distance / D+ / time live in the route summary below the
+              map, so nothing is lost by dropping the target card. */}
+          {sport === 'cycling' && (
+            <ColsPicker
+              center={colCenter}
+              radiusKm={colRadiusKm}
+              setRadiusKm={setColRadiusKm}
+              cols={nearbyCols}
+              loading={colsLoading}
+              errored={colsErrored}
+              retry={colsRetry}
+              selectedCodes={selectedColCodes}
+              onToggle={toggleCol}
+            />
+          )}
+          {routing && !isOpen && (
+            <div style={{ ...CARD, fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+              {t('itinerary.computing')}
             </div>
-
-            {distanceKm != null && (
-              <div style={{ marginTop: 14, padding: 12, background: tokens.creamDark, borderRadius: 6 }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, flexWrap: 'wrap', marginBottom: 8 }}>
-                  <span style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
-                    <span style={{ fontFamily: "'Playfair Display'", fontSize: 24, fontWeight: 800, color: tokens.terra }}>
-                      {distanceKm}
-                    </span>
-                    <span style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight }}>km {t('itinerary.computed')}</span>
-                  </span>
-                  {ascent > 0 && (
-                    <span style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
-                      <span style={{ fontFamily: "'Playfair Display'", fontSize: 18, fontWeight: 800, color: tokens.ink }}>
-                        {Math.round(ascent)}
-                      </span>
-                      <span style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight }}>m D+</span>
-                    </span>
-                  )}
-                  {durationS != null && (
-                    <span style={{ marginLeft: 'auto', fontFamily: "'Space Grotesk'", fontSize: 12, fontWeight: 600, color: tokens.inkMid }}>
-                      ≈ {formatDuration(durationS)}
-                    </span>
-                  )}
-                </div>
-                {deltaKm != null && (
-                  <div style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkMid, lineHeight: 1.5 }}>
-                    {Math.abs(deltaPct) < 8 ? (
-                      <span style={{ color: tokens.green, fontWeight: 600 }}>
-                        ✓ {t('itinerary.onTarget')}
-                      </span>
-                    ) : deltaKm > 0 ? (
-                      <>{t('itinerary.tooLong').replace('{n}', String(Math.abs(deltaKm)))}</>
-                    ) : (
-                      <>{t('itinerary.tooShort').replace('{n}', String(Math.abs(deltaKm)))}</>
-                    )}
-                  </div>
-                )}
-                {canExtend && (
-                  <button
-                    onClick={handleAutoExtend}
-                    disabled={extending}
-                    style={{
-                      marginTop: 10, width: '100%', padding: '8px 10px',
-                      fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase',
-                      background: tokens.green, color: '#fff', border: 'none', borderRadius: 3,
-                      cursor: extending ? 'wait' : 'pointer', opacity: extending ? 0.6 : 1,
-                    }}
-                  >
-                    {extending ? t('itinerary.extending') : t('itinerary.extendAuto')}
-                  </button>
-                )}
-              </div>
-            )}
-            {routing && (
-              <div style={{ marginTop: 10, fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-                {t('itinerary.computing')}
-              </div>
-            )}
-            {routeError && (
-              <div style={{ marginTop: 10, fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.terra, lineHeight: 1.5 }}>
-                {t('itinerary.routeError')}: {routeError}
-              </div>
-            )}
-          </div>
+          )}
+          {routeError && !isOpen && (
+            <div style={{ ...CARD, fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.terra, lineHeight: 1.5 }}>
+              {t('itinerary.routeError')}: {routeError}
+            </div>
           )}
 
           {/* Step 3: save + export. Compact action bar once a route is open. */}
@@ -1258,25 +1191,6 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
               ▶ {t('itinerary.startNav')}
             </button>
           </div>
-          )}
-
-          {/* Cols near the departure — cycling only. Spans the full builder
-              width (its own band under the 3 step cards). Selecting one adds it
-              to the route; the stats bar then shows total D+ / difficulty. */}
-          {sport === 'cycling' && (
-            <div style={{ gridColumn: '1 / -1' }}>
-              <ColsPicker
-                center={colCenter}
-                radiusKm={colRadiusKm}
-                setRadiusKm={setColRadiusKm}
-                cols={nearbyCols}
-                loading={colsLoading}
-                errored={colsErrored}
-                retry={colsRetry}
-                selectedCodes={selectedColCodes}
-                onToggle={toggleCol}
-              />
-            </div>
           )}
 
         </div>
