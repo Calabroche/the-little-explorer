@@ -7,11 +7,13 @@ import { tokens } from './tokens';
 // route map and the itinerary planner so they behave identically and share
 // the chosen level across maps.
 export const ZOOM_PERCENT_KEY = 'tle_map_zoom_percent_v1';
-export const ZOOM_OPTIONS = [50, 75, 100, 125, 150, 200];
+export const ZOOM_OPTIONS = [50, 75, 100, 110, 115, 120, 125, 150, 200];
 
-// Leaflet zoom offset applied on top of fitBounds for a given %.
+// Leaflet zoom offset applied on top of fitBounds for a given %. Fractional
+// (no rounding) so the fine steps (110/115/120) actually differ — the map
+// needs zoomSnap={0} for fractional zoom to take effect.
 export function zoomOffsetFromPercent(percent: number): number {
-  return Math.round((percent - 100) / 25);
+  return (percent - 100) / 25;
 }
 
 export function useZoomPercent(): [number, (v: number) => void] {

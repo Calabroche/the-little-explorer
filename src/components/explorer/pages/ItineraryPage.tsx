@@ -1207,6 +1207,7 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
               style={{ height: mapInnerHeight, width: '100%' }}
               maxZoom={20}
               minZoom={4}
+              zoomSnap={0}
             >
               <BasemapTiles basemap={basemap} darkMode={dark} />
               <MapClickHandler onClick={handleMapClick} />

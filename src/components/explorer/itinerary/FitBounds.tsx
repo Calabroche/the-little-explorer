@@ -14,7 +14,8 @@ export function FitBounds({ positions, zoomPercent = 100 }: { positions: [number
   useEffect(() => {
     if (!positions || positions.length === 0) return;
     // % → Leaflet zoom-level offset applied on top of the fit (100% = none).
-    const offset = Math.round((zoomPercent - 100) / 25);
+    // Fractional so 110/115/120 differ — needs zoomSnap={0} on the map.
+    const offset = (zoomPercent - 100) / 25;
     if (positions.length === 1) {
       map.setView(positions[0], 13 + offset);
       return;
