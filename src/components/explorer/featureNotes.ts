@@ -22,6 +22,13 @@ export interface FeatureNote {
 
 export const FEATURE_NOTES: FeatureNote[] = [
   {
+    id: 'cols-picker-2026-06', icon: '⛰️', date: '2026-06-08', sport: 'cycling',
+    fr: { title: 'Cols à proximité de ton départ',
+          body: "Depuis un point de départ, le planificateur liste tous les cols et monts accessibles (10, 15, 25 ou 50 km), du plus proche au plus loin, avec leur commune et leur altitude. Ils s'affichent aussi sur la carte : clique un sommet pour l'ajouter à ton parcours ou l'enlever." },
+    en: { title: 'Cols & climbs near your start',
+          body: 'From a start point, the planner lists every col and summit you can reach (10, 15, 25 or 50 km), nearest to farthest, with its town and altitude. They also show on the map: tap a peak to add it to your route or remove it.' },
+  },
+  {
     id: 'running-gap-2026-06', icon: '📉', date: '2026-06-06', sport: 'running',
     fr: { title: 'Allure ajustée à la pente (course)',
           body: "Sur l'analyse d'une sortie course, l'app calcule ton allure « à plat équivalent » en corrigeant le dénivelé (modèle de Minetti). Compare tes sorties vallonnées et plates à armes égales. Strava fait payer ça." },
