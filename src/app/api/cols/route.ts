@@ -13,7 +13,7 @@ import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
-export const maxDuration = 45;
+export const maxDuration = 60;
 
 // Several Overpass mirrors — the public ones go down / overload often, so we
 // fall through to the next on any failure or timeout.
@@ -31,7 +31,7 @@ async function runOverpass(query: string): Promise<OverpassResp | null> {
   for (const url of OVERPASS_HOSTS) {
     try {
       const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 22_000);
+      const timer = setTimeout(() => ctrl.abort(), 26_000);
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json', 'User-Agent': UA },
