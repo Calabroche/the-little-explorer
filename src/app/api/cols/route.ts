@@ -9,6 +9,7 @@
  * Best-effort: if Overpass is down we return an empty list.
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { unstable_cache } from 'next/cache';
 import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
@@ -136,62 +137,40 @@ function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): nu
   return R * 2 * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-export async function POST(req: NextRequest) {
-  const limited = enforceRateLimit(req, RATE_LIMITS.commune, 'cols');
-  if (limited) return limited;
-
-  let body: { lat?: number; lng?: number; radiusKm?: number };
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: 'bad_json' }, { status: 400 });
-  }
-  const { lat, lng } = body;
-  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat!) > 90 || Math.abs(lng!) > 180) {
-    return NextResponse.json({ error: 'invalid_coordinates' }, { status: 400 });
-  }
-  const radiusKm = Math.max(10, Math.min(150, body.radiusKm ?? 80));
-
-  // Use a BOUNDING BOX (index-based, fast) instead of `around` (which computes
-  // a distance per node — painfully slow over big areas for natural=peak).
-  // Over-fetch the square, then filter to the circle in code.
+// Find every named col / saddle / summit within `radiusKm` of (lat,lng), with
+// elevation, distance and commune. ONE combined Overpass query (raced + retried
+// across mirrors) so there's no artificial floor from waiting on a second
+// query. Returns [] if every mirror keeps failing.
+async function computeCols(lat: number, lng: number, radiusKm: number): Promise<Col[]> {
+  // BOUNDING BOX (index-based, fast) instead of `around` (a distance per node —
+  // painfully slow for dense natural=peak). Over-fetch the square, filter to
+  // the circle in code.
   const box = (rkm: number): string => {
     const dLat = rkm / 111;
-    const dLng = rkm / (111 * Math.cos((lat! * Math.PI) / 180));
-    return `${(lat! - dLat).toFixed(4)},${(lng! - dLng).toFixed(4)},${(lat! + dLat).toFixed(4)},${(lng! + dLng).toFixed(4)}`;
+    const dLng = rkm / (111 * Math.cos((lat * Math.PI) / 180));
+    return `${(lat - dLat).toFixed(4)},${(lng - dLng).toFixed(4)},${(lat + dLat).toFixed(4)},${(lng + dLng).toFixed(4)}`;
   };
   // Cols/saddles are sparse → cheap at the full radius. Named peaks are dense
-  // (the Alps would flood a 100 km box), so cap them to a tighter box — the
-  // local "monts" people ride to are within ~40 km anyway.
+  // (the Alps would flood a 100 km box), so cap them to a tighter box.
   const bboxCols = box(radiusKm);
   const bboxPeaks = box(Math.min(radiusKm, 15));
-
-  // Two independent queries, raced in parallel. Cols/saddles are the headline
-  // result and get the bigger budget; named peaks are a heavier, best-effort
-  // extra (if their query keeps failing we still return the cols). This way a
-  // slow peaks lookup can never sink the whole response.
-  const colsQuery =
+  const query =
     `[out:json][timeout:25];(` +
     `node(${bboxCols})[mountain_pass=yes];` +
     `node(${bboxCols})[natural=saddle][name];` +
+    `node(${bboxPeaks})[natural=peak][name];` +
     `);out;`;
-  const peaksQuery =
-    `[out:json][timeout:20];(node(${bboxPeaks})[natural=peak][name];);out;`;
 
-  const [colsData, peaksData] = await Promise.all([
-    runOverpass(colsQuery, 14_000, 40_000),
-    runOverpass(peaksQuery, 12_000, 24_000),
-  ]);
-  if (!colsData && !peaksData) return NextResponse.json({ cols: [] });
-  const elements = [...(colsData?.elements ?? []), ...(peaksData?.elements ?? [])];
+  const data = await runOverpass(query, 14_000, 32_000);
+  if (!data) return [];
 
   const seen = new Set<string>();
   const cols: Col[] = [];
-  for (const el of elements) {
+  for (const el of data.elements ?? []) {
     const tags = el.tags ?? {};
     const name = tags.name;
     if (!name || el.lat == null || el.lon == null) continue;        // named cols only
-    const dist = haversineKm(lat!, lng!, el.lat, el.lon);
+    const dist = haversineKm(lat, lng, el.lat, el.lon);
     if (dist > radiusKm) continue;                                  // square → circle
     const key = name.toLowerCase().trim();
     if (seen.has(key)) continue;
@@ -210,9 +189,55 @@ export async function POST(req: NextRequest) {
   cols.sort((a, b) => a.distKm - b.distKm);
   const top = cols.slice(0, 120);
   await attachCities(top);
+  return top;
+}
+
+// Cache successful lookups in Vercel's Data Cache for a day, keyed by rounded
+// coordinates (~1 km cells) + radius. Cols are static geography, and the public
+// Overpass instances throttle cloud IPs hard, so without this every request
+// pays the full slow round-trip. The callback THROWS on an empty result so
+// failures are never cached — a flaky moment doesn't get frozen for a day.
+function getColsCached(lat: number, lng: number, radiusKm: number): Promise<Col[]> {
+  return unstable_cache(
+    async () => {
+      const cols = await computeCols(lat, lng, radiusKm);
+      if (cols.length === 0) throw new Error('empty — do not cache');
+      return cols;
+    },
+    ['cols-v2', lat.toFixed(2), lng.toFixed(2), String(radiusKm)],
+    { revalidate: 86_400 },
+  )();
+}
+
+export async function POST(req: NextRequest) {
+  const limited = enforceRateLimit(req, RATE_LIMITS.commune, 'cols');
+  if (limited) return limited;
+
+  let body: { lat?: number; lng?: number; radiusKm?: number };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'bad_json' }, { status: 400 });
+  }
+  const { lat, lng } = body;
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat!) > 90 || Math.abs(lng!) > 180) {
+    return NextResponse.json({ error: 'invalid_coordinates' }, { status: 400 });
+  }
+  const radiusKm = Math.max(10, Math.min(150, body.radiusKm ?? 80));
+  // Round to ~1 km so nearby departures share a cache entry (and the cache key
+  // matches the coordinates actually used for the query + distances).
+  const rlat = +lat!.toFixed(2);
+  const rlng = +lng!.toFixed(2);
+
+  let cols: Col[];
+  try {
+    cols = await getColsCached(rlat, rlng, radiusKm);
+  } catch {
+    cols = [];  // every mirror failed this round — empty, uncached, retryable
+  }
 
   return NextResponse.json(
-    { cols: top },
+    { cols },
     { headers: { 'Cache-Control': 'public, max-age=600, s-maxage=600' } },
   );
 }
