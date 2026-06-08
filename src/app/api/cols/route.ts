@@ -15,36 +15,48 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
-// Several Overpass mirrors — the public ones go down / overload often, so we
-// fall through to the next on any failure or timeout.
+// Several Overpass mirrors. The public ones go down / overload constantly and
+// querying them sequentially means one slow host stalls the whole request, so
+// we RACE all of them in parallel and take the first that answers with a valid
+// element list. Total latency = the fastest healthy mirror, not the sum.
 const OVERPASS_HOSTS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
 ];
 const UA = 'TheLittleExplorer/0.1 (+https://the-little-explorer-app.vercel.app)';
 
 interface OverpassResp { elements?: { type: string; id: number; lat?: number; lon?: number; tags?: Record<string, string> }[] }
 
-// Run an Overpass query against the mirrors in order; first one that answers
-// with a valid element list wins. Each host gets a 12 s budget.
-async function runOverpass(query: string): Promise<OverpassResp | null> {
-  for (const url of OVERPASS_HOSTS) {
-    try {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 26_000);
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json', 'User-Agent': UA },
-        body: 'data=' + encodeURIComponent(query),
-        signal: ctrl.signal,
-      });
-      clearTimeout(timer);
-      if (!res.ok) continue;
-      const json = await res.json() as OverpassResp;
-      if (json && Array.isArray(json.elements)) return json;
-    } catch { /* timed out / network error → try next mirror */ }
+async function fetchOverpass(url: string, query: string): Promise<OverpassResp> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 25_000);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json', 'User-Agent': UA },
+      body: 'data=' + encodeURIComponent(query),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) throw new Error(`http ${res.status}`);
+    const json = await res.json() as OverpassResp;
+    if (!json || !Array.isArray(json.elements)) throw new Error('bad shape');
+    return json;
+  } finally {
+    clearTimeout(timer);
   }
-  return null;
+}
+
+// Race every mirror; first valid answer wins. Promise.any rejects only if ALL
+// mirrors fail, in which case we return null and the caller yields an empty
+// list.
+async function runOverpass(query: string): Promise<OverpassResp | null> {
+  try {
+    return await Promise.any(OVERPASS_HOSTS.map(url => fetchOverpass(url, query)));
+  } catch {
+    return null;
+  }
 }
 
 export interface Col {

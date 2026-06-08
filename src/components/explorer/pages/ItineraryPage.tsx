@@ -1001,7 +1001,7 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
               />
               <span style={{ fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.inkLight }}>km</span>
               <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
-                {[30, 50, 80, 120].map(km => (
+                {[30, 50, 80].map(km => (
                   <button key={km} onClick={() => setTargetKm(km)} style={{
                     padding: '4px 10px', fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 500,
                     background: targetKm === km ? tokens.terra : tokens.creamDark,
@@ -1212,14 +1212,17 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
           </div>
           )}
 
-          {/* Cols near the departure — cycling only. Selecting one adds it to
-              the route; the stats bar then shows total D+ / difficulty. */}
+          {/* Cols near the departure — cycling only. Spans the full builder
+              width (its own band under the 3 step cards). Selecting one adds it
+              to the route; the stats bar then shows total D+ / difficulty. */}
           {sport === 'cycling' && (
-            <ColsPicker
-              center={waypoints[0] ? [waypoints[0].lat, waypoints[0].lng] : null}
-              selectedCodes={selectedColCodes}
-              onToggle={toggleCol}
-            />
+            <div style={{ gridColumn: '1 / -1' }}>
+              <ColsPicker
+                center={waypoints[0] ? [waypoints[0].lat, waypoints[0].lng] : null}
+                selectedCodes={selectedColCodes}
+                onToggle={toggleCol}
+              />
+            </div>
           )}
 
         </div>
