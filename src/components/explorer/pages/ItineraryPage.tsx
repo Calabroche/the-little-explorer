@@ -24,6 +24,7 @@ const FitBounds    = dynamic(() => import('../itinerary/FitBounds').then(m => m.
 const BasemapTiles = dynamic(() => import('../MapBasemap').then(m => m.BasemapTiles), { ssr: false });
 import { useBasemap, BasemapToggle } from '../MapBasemap';
 import { useZoomPercent, ZoomPercentPill } from '../MapZoomControl';
+import { ColsPicker, Col, colCode } from '../ColsPicker';
 
 interface Props {
   user: UserId;
@@ -412,6 +413,22 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
     prev.some(p => p.code === w.code) ? prev : [...prev, w]
   );
   const removeWaypoint = (idx: number) => setWaypoints(prev => prev.filter((_, i) => i !== idx));
+
+  // Toggle a nearby col in/out of the route (added as a waypoint).
+  const toggleCol = (col: Col) => {
+    const code = colCode(col);
+    setWaypoints(prev => {
+      const idx = prev.findIndex(w => w.code === code);
+      if (idx >= 0) return prev.filter((_, i) => i !== idx);
+      return [...prev, {
+        name: col.name, code, lat: col.lat, lng: col.lng,
+        label: col.ele != null ? `${col.name} · ${col.ele} m` : col.name,
+        kind: 'locality' as const,
+      }];
+    });
+  };
+  // Set of waypoint codes — lets ColsPicker show which cols are selected.
+  const selectedColCodes = useMemo(() => new Set(waypoints.map(w => w.code)), [waypoints]);
 
   // ── Click-to-add a precise map point ─────────────────────────────────────
   // Clicking the map opens the confirmation popup at the exact spot and kicks
@@ -1193,6 +1210,16 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
               ▶ {t('itinerary.startNav')}
             </button>
           </div>
+          )}
+
+          {/* Cols near the departure — cycling only. Selecting one adds it to
+              the route; the stats bar then shows total D+ / difficulty. */}
+          {sport === 'cycling' && (
+            <ColsPicker
+              center={waypoints[0] ? [waypoints[0].lat, waypoints[0].lng] : null}
+              selectedCodes={selectedColCodes}
+              onToggle={toggleCol}
+            />
           )}
 
         </div>
