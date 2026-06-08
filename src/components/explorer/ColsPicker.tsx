@@ -33,7 +33,7 @@ export function ColsPicker({ center, selectedCodes, onToggle }: {
 }) {
   const { lang } = useT();
   const en = lang === 'en';
-  const [radiusKm, setRadiusKm] = useState(100);
+  const [radiusKm, setRadiusKm] = useState(50);
   const [cols, setCols] = useState<Col[]>([]);
   const [loading, setLoading] = useState(false);
   const [q, setQ] = useState('');

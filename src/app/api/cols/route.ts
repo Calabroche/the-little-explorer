@@ -13,10 +13,40 @@ import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
-export const maxDuration = 30;
+export const maxDuration = 45;
 
-const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
+// Several Overpass mirrors — the public ones go down / overload often, so we
+// fall through to the next on any failure or timeout.
+const OVERPASS_HOSTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
+];
 const UA = 'TheLittleExplorer/0.1 (+https://the-little-explorer-app.vercel.app)';
+
+interface OverpassResp { elements?: { type: string; id: number; lat?: number; lon?: number; tags?: Record<string, string> }[] }
+
+// Run an Overpass query against the mirrors in order; first one that answers
+// with a valid element list wins. Each host gets a 12 s budget.
+async function runOverpass(query: string): Promise<OverpassResp | null> {
+  for (const url of OVERPASS_HOSTS) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 12_000);
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json', 'User-Agent': UA },
+        body: 'data=' + encodeURIComponent(query),
+        signal: ctrl.signal,
+      });
+      clearTimeout(timer);
+      if (!res.ok) continue;
+      const json = await res.json() as OverpassResp;
+      if (json && Array.isArray(json.elements)) return json;
+    } catch { /* timed out / network error → try next mirror */ }
+  }
+  return null;
+}
 
 export interface Col {
   name: string;
@@ -26,9 +56,6 @@ export interface Col {
   ele:  number | null;     // summit elevation (m), when known
   distKm: number;          // straight-line distance from the departure
 }
-
-interface OverpassNode { type: 'node'; id: number; lat?: number; lon?: number; tags?: Record<string, string> }
-interface OverpassResponse { elements?: OverpassNode[] }
 
 function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): number {
   const R = 6371;
@@ -53,29 +80,31 @@ export async function POST(req: NextRequest) {
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat!) > 90 || Math.abs(lng!) > 180) {
     return NextResponse.json({ error: 'invalid_coordinates' }, { status: 400 });
   }
-  const radiusKm = Math.max(10, Math.min(200, body.radiusKm ?? 100));
-  const radiusM = Math.round(radiusKm * 1000);
-  const c = `${radiusM},${lat!.toFixed(5)},${lng!.toFixed(5)}`;
+  const radiusKm = Math.max(10, Math.min(150, body.radiusKm ?? 80));
+
+  // Use a BOUNDING BOX (index-based, fast) instead of `around` (which computes
+  // a distance per node — painfully slow over big areas for natural=peak).
+  // Over-fetch the square, then filter to the circle in code.
+  const box = (rkm: number): string => {
+    const dLat = rkm / 111;
+    const dLng = rkm / (111 * Math.cos((lat! * Math.PI) / 180));
+    return `${(lat! - dLat).toFixed(4)},${(lng! - dLng).toFixed(4)},${(lat! + dLat).toFixed(4)},${(lng! + dLng).toFixed(4)}`;
+  };
+  // Cols/saddles are sparse → cheap at the full radius. Named peaks are dense
+  // (the Alps would flood a 100 km box), so cap them to a tighter box — the
+  // local "monts" people ride to are within ~40 km anyway.
+  const bboxCols = box(radiusKm);
+  const bboxPeaks = box(Math.min(radiusKm, 40));
 
   const query =
     `[out:json][timeout:25];(` +
-    `node(around:${c})[mountain_pass=yes];` +
-    `node(around:${c})[natural=saddle][name];` +
-    `node(around:${c})[natural=peak][name];` +
+    `node(${bboxCols})[mountain_pass=yes];` +
+    `node(${bboxCols})[natural=saddle][name];` +
+    `node(${bboxPeaks})[natural=peak][name];` +
     `);out;`;
 
-  let data: OverpassResponse;
-  try {
-    const res = await fetch(OVERPASS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json', 'User-Agent': UA },
-      body: 'data=' + encodeURIComponent(query),
-    });
-    if (!res.ok) return NextResponse.json({ cols: [] });
-    data = await res.json() as OverpassResponse;
-  } catch {
-    return NextResponse.json({ cols: [] });
-  }
+  const data = await runOverpass(query);
+  if (!data) return NextResponse.json({ cols: [] });
 
   const seen = new Set<string>();
   const cols: Col[] = [];
@@ -83,6 +112,8 @@ export async function POST(req: NextRequest) {
     const tags = el.tags ?? {};
     const name = tags.name;
     if (!name || el.lat == null || el.lon == null) continue;        // named cols only
+    const dist = haversineKm(lat!, lng!, el.lat, el.lon);
+    if (dist > radiusKm) continue;                                  // square → circle
     const key = name.toLowerCase().trim();
     if (seen.has(key)) continue;
     seen.add(key);
@@ -93,13 +124,13 @@ export async function POST(req: NextRequest) {
       lat: el.lat,
       lng: el.lon,
       ele: Number.isFinite(eleRaw) ? Math.round(eleRaw) : null,
-      distKm: +haversineKm(lat!, lng!, el.lat, el.lon).toFixed(1),
+      distKm: +dist.toFixed(1),
     });
   }
   cols.sort((a, b) => a.distKm - b.distKm);
 
   return NextResponse.json(
-    { cols: cols.slice(0, 100) },
+    { cols: cols.slice(0, 120) },
     { headers: { 'Cache-Control': 'public, max-age=600, s-maxage=600' } },
   );
 }
