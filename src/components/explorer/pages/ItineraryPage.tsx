@@ -822,10 +822,13 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
   // leftover height instead of leaving a gap below the elevation profile.
   // `minHeight` keeps it usable when the builder column is short. On mobile
   // the columns stack, so the map keeps a fixed, comfortable height.
-  const mapCardStyle: CSSProperties = isMobile
-    ? { ...CARD, padding: 0, overflow: 'hidden', height: 460, position: 'relative' }
-    : { ...CARD, padding: 0, overflow: 'hidden', flex: 1, minHeight: 'clamp(340px, calc(100dvh - 440px), 720px)', position: 'relative' };
-  const mapInnerHeight: number | string = isMobile ? 460 : '100%';
+  // Map sits full-width on top of the planner and takes most of the screen;
+  // the builder (steps / distance / save) stacks underneath.
+  const mapCardStyle: CSSProperties = {
+    ...CARD, padding: 0, overflow: 'hidden', position: 'relative',
+    height: isMobile ? 460 : 'clamp(420px, 70vh, 820px)',
+  };
+  const mapInnerHeight: number | string = '100%';
 
   const canExtend = distanceKm != null && targetKm - distanceKm >= 3 && !extending && !routing;
   // A route is "open" once it's been saved/loaded (activeId set). The
@@ -857,9 +860,15 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
         </>
       )}
 
-      <div style={{ display: 'grid', gap: 24, gridTemplateColumns: isMobile ? '1fr' : '380px 1fr' }}>
-        {/* ─── LEFT COLUMN: builder ─────────────────────────────────────── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Single column: map (full width) on top, builder underneath.
+          `order` puts the map first without moving the JSX blocks. */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+        {/* ─── BUILDER (rendered below the map via order) ────────────────── */}
+        <div style={{
+          order: 2,
+          display: 'grid', gap: 16, alignItems: 'start',
+          gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(300px, 1fr))',
+        }}>
           {/* Step 1: villages */}
           <div style={CARD}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
@@ -1222,8 +1231,8 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
           )}
         </div>
 
-        {/* ─── RIGHT COLUMN: map + elevation profile ───────────────────── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0 }}>
+        {/* ─── MAP + elevation profile (rendered first via order) ───────── */}
+        <div style={{ order: 1, display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0 }}>
           <div style={mapCardStyle}>
             <MapContainer
               center={mapCenter}
