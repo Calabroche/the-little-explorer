@@ -23,6 +23,7 @@ const MapAutoResize = dynamic(() => import('../itinerary/MapClickHandler').then(
 const FitBounds    = dynamic(() => import('../itinerary/FitBounds').then(m => m.FitBounds), { ssr: false });
 const BasemapTiles = dynamic(() => import('../MapBasemap').then(m => m.BasemapTiles), { ssr: false });
 import { useBasemap, BasemapToggle } from '../MapBasemap';
+import { useZoomPercent, ZoomPercentPill } from '../MapZoomControl';
 
 interface Props {
   user: UserId;
@@ -810,6 +811,7 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
   // <BasemapTiles>. Kept the comment trail in case we need to refactor
   // basemap selection again.
   const [basemap, setBasemap] = useBasemap();
+  const [zoomPercent, setZoomPercent] = useZoomPercent();
 
   // ── Layout ───────────────────────────────────────────────────────────────
   const CARD: CSSProperties = {
@@ -1308,9 +1310,12 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
                 />
               )}
               <ClickPopupTracker point={clickPoint} onMove={setClickPixel} />
-              <FitBounds positions={polylinePositions ?? waypoints.map(w => [w.lat, w.lng] as [number, number])} />
+              <FitBounds positions={polylinePositions ?? waypoints.map(w => [w.lat, w.lng] as [number, number])} zoomPercent={zoomPercent} />
             </MapContainer>
             <BasemapToggle basemap={basemap} onChange={setBasemap} />
+            {/* Zoom-% pill — same control as the activity map (top-left,
+                beside Leaflet's +/-). */}
+            <ZoomPercentPill value={zoomPercent} onChange={setZoomPercent} />
 
             {/* Resupply toggle — shows water/food points along the route.
                 Sits below the zoom +/- control (also top-left) so the two

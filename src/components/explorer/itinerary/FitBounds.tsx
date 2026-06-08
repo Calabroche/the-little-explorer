@@ -9,12 +9,14 @@ import { useMap } from 'react-leaflet';
 //
 // Lazy-imported via next/dynamic in the parent because react-leaflet's
 // useMap() hook touches `window` at import time.
-export function FitBounds({ positions }: { positions: [number, number][] | null }) {
+export function FitBounds({ positions, zoomPercent = 100 }: { positions: [number, number][] | null; zoomPercent?: number }) {
   const map = useMap();
   useEffect(() => {
     if (!positions || positions.length === 0) return;
+    // % → Leaflet zoom-level offset applied on top of the fit (100% = none).
+    const offset = Math.round((zoomPercent - 100) / 25);
     if (positions.length === 1) {
-      map.setView(positions[0], 13);
+      map.setView(positions[0], 13 + offset);
       return;
     }
     const lats = positions.map(p => p[0]);
@@ -23,7 +25,8 @@ export function FitBounds({ positions }: { positions: [number, number][] | null 
       [Math.min(...lats), Math.min(...lngs)],
       [Math.max(...lats), Math.max(...lngs)],
     ];
-    map.fitBounds(bounds, { padding: [40, 40] });
-  }, [positions, map]);
+    map.fitBounds(bounds, { padding: [40, 40], animate: false });
+    if (offset !== 0) map.setZoom(map.getZoom() + offset, { animate: false });
+  }, [positions, map, zoomPercent]);
   return null;
 }
