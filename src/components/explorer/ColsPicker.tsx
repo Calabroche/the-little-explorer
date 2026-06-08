@@ -12,6 +12,7 @@ export interface Col {
   lng: number;
   ele: number | null;
   distKm: number;
+  city: string | null;
 }
 
 // Synthetic waypoint code for a selected col — lets the planner dedupe and
@@ -20,7 +21,7 @@ export function colCode(c: { lat: number; lng: number }): string {
   return `col:${c.lat.toFixed(5)},${c.lng.toFixed(5)}`;
 }
 
-const RADII = [50, 100, 150];
+const RADII = [10, 15, 25, 50, 100];
 
 // "Cols à proximité": lists the mountain passes + named summits within a
 // radius of the departure, nearest first, with elevation + distance. Tapping
@@ -33,7 +34,7 @@ export function ColsPicker({ center, selectedCodes, onToggle }: {
 }) {
   const { lang } = useT();
   const en = lang === 'en';
-  const [radiusKm, setRadiusKm] = useState(50);
+  const [radiusKm, setRadiusKm] = useState(25);
   const [cols, setCols] = useState<Col[]>([]);
   const [loading, setLoading] = useState(false);
   const [q, setQ] = useState('');
@@ -76,14 +77,14 @@ export function ColsPicker({ center, selectedCodes, onToggle }: {
     <div style={CARD}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
         <Label>{en ? 'CLIMBS NEARBY' : 'COLS À PROXIMITÉ'}{selectedCount > 0 && <span style={{ color: tokens.terra }}> · {selectedCount}</span>}</Label>
-        <div style={{ display: 'flex', gap: 4 }}>
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {RADII.map(r => (
             <button key={r} onClick={() => setRadiusKm(r)} style={{
               padding: '3px 8px', borderRadius: 12, border: 'none', cursor: 'pointer',
               fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 600,
               background: radiusKm === r ? tokens.terra : tokens.creamDark,
               color: radiusKm === r ? '#fff' : tokens.inkMid,
-            }}>{r} km</button>
+            }}>{r}</button>
           ))}
         </div>
       </div>
@@ -114,8 +115,8 @@ export function ColsPicker({ center, selectedCodes, onToggle }: {
               <span style={{ fontSize: 16, flexShrink: 0 }}>{c.kind === 'col' ? '⛰️' : '🗻'}</span>
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ display: 'block', fontFamily: "'Space Grotesk'", fontSize: 13, fontWeight: 600, color: tokens.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</span>
-                <span style={{ display: 'block', fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight }}>
-                  {c.ele != null ? `${c.ele} m · ` : ''}{c.distKm} km
+                <span style={{ display: 'block', fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {c.city ? `${c.city} · ` : ''}{c.ele != null ? `${c.ele} m · ` : ''}{c.distKm} km
                 </span>
               </span>
               <span style={{ flexShrink: 0, fontSize: 16, fontWeight: 700, color: sel ? tokens.terra : tokens.inkLight }}>{sel ? '✓' : '+'}</span>

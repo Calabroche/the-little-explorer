@@ -54,6 +54,50 @@ export interface Col {
   lng:  number;
   ele:  number | null;     // summit elevation (m), when known
   distKm: number;          // straight-line distance from the departure
+  city: string | null;     // commune / village the col sits in (reverse-geocoded)
+}
+
+// Minimal CSV line parser (handles quoted fields — BAN quotes the context
+// column which contains commas).
+function parseCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = '', q = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (q) {
+      if (ch === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; }
+      else cur += ch;
+    } else if (ch === '"') q = true;
+    else if (ch === ',') { out.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  out.push(cur);
+  return out;
+}
+
+// Reverse-geocode every col in ONE batch via the French BAN address API's
+// CSV endpoint, attaching the commune (result_city). Best-effort.
+async function attachCities(cols: Col[]): Promise<void> {
+  if (cols.length === 0) return;
+  const csv = 'latitude,longitude\n' + cols.map(c => `${c.lat},${c.lng}`).join('\n');
+  try {
+    const form = new FormData();
+    form.append('data', new Blob([csv], { type: 'text/csv' }), 'cols.csv');
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 12_000);
+    const res = await fetch('https://api-adresse.data.gouv.fr/reverse/csv/', { method: 'POST', body: form, signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!res.ok) return;
+    const lines = (await res.text()).split('\n').filter(l => l.trim().length > 0);
+    if (lines.length < 2) return;
+    const header = parseCsvLine(lines[0]);
+    const cityIdx = header.indexOf('result_city');
+    if (cityIdx < 0) return;
+    for (let i = 1; i < lines.length && i - 1 < cols.length; i++) {
+      const city = parseCsvLine(lines[i])[cityIdx]?.trim();
+      if (city) cols[i - 1].city = city;
+    }
+  } catch { /* best-effort — cols still returned without a city */ }
 }
 
 function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): number {
@@ -124,12 +168,15 @@ export async function POST(req: NextRequest) {
       lng: el.lon,
       ele: Number.isFinite(eleRaw) ? Math.round(eleRaw) : null,
       distKm: +dist.toFixed(1),
+      city: null,
     });
   }
   cols.sort((a, b) => a.distKm - b.distKm);
+  const top = cols.slice(0, 120);
+  await attachCities(top);
 
   return NextResponse.json(
-    { cols: cols.slice(0, 120) },
+    { cols: top },
     { headers: { 'Cache-Control': 'public, max-age=600, s-maxage=600' } },
   );
 }
