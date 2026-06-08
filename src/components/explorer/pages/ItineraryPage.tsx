@@ -1194,43 +1194,6 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
           </div>
           )}
 
-          {/* Way-type + surface breakdown — sits under the navigate action. */}
-          {wayAnalysis && (wayAnalysis.wayTypes.length > 0 || wayAnalysis.surfaces.length > 0) && (
-            <div style={{ ...CARD, display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {([
-                { title: 'Types de chemins', buckets: wayAnalysis.wayTypes },
-                { title: 'Surfaces',          buckets: wayAnalysis.surfaces },
-              ] as const).map(({ title, buckets }) => {
-                if (buckets.length === 0) return null;
-                const total = Math.max(1, buckets.reduce((s, b) => s + b.meters, 0));
-                return (
-                  <div key={title}>
-                    <Label style={{ display: 'block', marginBottom: 8 }}>{title}</Label>
-                    <div style={{ display: 'flex', height: 11, borderRadius: 6, overflow: 'hidden', gap: 1, marginBottom: 8 }}>
-                      {buckets.map(b => (
-                        <div key={b.key} style={{ width: `${(b.meters / total) * 100}%`, background: WAY_COLORS[b.key] ?? '#999' }} />
-                      ))}
-                    </div>
-                    {buckets.map((b, i) => (
-                      <div key={b.key} style={{
-                        display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0',
-                        borderBottom: i < buckets.length - 1 ? `1px solid ${tokens.creamBorder}` : 'none',
-                      }}>
-                        <span style={{ width: 14, height: 14, borderRadius: 4, background: WAY_COLORS[b.key] ?? '#999', flexShrink: 0 }} />
-                        <span style={{ fontFamily: "'Space Grotesk'", fontSize: 13, color: tokens.ink }}>{b.label}</span>
-                        <span style={{ marginLeft: 'auto', fontFamily: 'monospace', fontSize: 12, color: tokens.inkMid }}>{fmtMeters(b.meters)}</span>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          {wayLoading && !wayAnalysis && (
-            <div style={{ ...CARD, fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.inkLight }}>
-              Analyse des chemins et surfaces…
-            </div>
-          )}
         </div>
 
         {/* ─── MAP + elevation profile (rendered below the builder via order) ─ */}
@@ -1533,6 +1496,45 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
               loading={eleLoading && elevSeries.length === 0}
               onHover={setHoverEleIdx}
             />
+          )}
+
+          {/* Way types + surfaces — below the elevation profile, side by side
+              (Types de chemins | Surfaces). */}
+          {wayAnalysis && (wayAnalysis.wayTypes.length > 0 || wayAnalysis.surfaces.length > 0) && (
+            <div style={{ ...CARD, marginTop: 16, display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 24 }}>
+              {([
+                { title: 'Types de chemins', buckets: wayAnalysis.wayTypes },
+                { title: 'Surfaces',          buckets: wayAnalysis.surfaces },
+              ] as const).map(({ title, buckets }) => {
+                if (buckets.length === 0) return null;
+                const total = Math.max(1, buckets.reduce((s, b) => s + b.meters, 0));
+                return (
+                  <div key={title} style={{ minWidth: 0 }}>
+                    <Label style={{ display: 'block', marginBottom: 8 }}>{title}</Label>
+                    <div style={{ display: 'flex', height: 11, borderRadius: 6, overflow: 'hidden', gap: 1, marginBottom: 8 }}>
+                      {buckets.map(b => (
+                        <div key={b.key} style={{ width: `${(b.meters / total) * 100}%`, background: WAY_COLORS[b.key] ?? '#999' }} />
+                      ))}
+                    </div>
+                    {buckets.map((b, i) => (
+                      <div key={b.key} style={{
+                        display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0',
+                        borderBottom: i < buckets.length - 1 ? `1px solid ${tokens.creamBorder}` : 'none',
+                      }}>
+                        <span style={{ width: 14, height: 14, borderRadius: 4, background: WAY_COLORS[b.key] ?? '#999', flexShrink: 0 }} />
+                        <span style={{ fontFamily: "'Space Grotesk'", fontSize: 13, color: tokens.ink }}>{b.label}</span>
+                        <span style={{ marginLeft: 'auto', fontFamily: 'monospace', fontSize: 12, color: tokens.inkMid }}>{fmtMeters(b.meters)}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {wayLoading && !wayAnalysis && (
+            <div style={{ ...CARD, marginTop: 16, fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.inkLight }}>
+              Analyse des chemins et surfaces…
+            </div>
           )}
 
         </div>
