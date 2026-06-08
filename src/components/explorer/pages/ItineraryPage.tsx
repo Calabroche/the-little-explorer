@@ -990,6 +990,40 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
                 </button>
               </div>
             )}
+
+            {/* Loop toggle — lives with the stops (it's about returning to
+                village #1), not with the target distance. While building only. */}
+            {!isOpen && waypoints.length >= 1 && (
+              <div style={{
+                marginTop: 14, display: 'flex', alignItems: 'center', gap: 10,
+                padding: '10px 12px', background: loop ? tokens.terraLight : tokens.creamDark,
+                borderRadius: 6, border: `1px solid ${loop ? tokens.terra : 'transparent'}`,
+                transition: 'all 0.15s',
+              }}>
+                <button
+                  role="switch"
+                  aria-checked={loop}
+                  onClick={() => setLoop(v => !v)}
+                  style={{
+                    width: 36, height: 20, padding: 2, flexShrink: 0,
+                    background: loop ? tokens.terra : tokens.creamBorder,
+                    border: 'none', borderRadius: 10, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: loop ? 'flex-end' : 'flex-start',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  <span style={{ width: 16, height: 16, borderRadius: '50%', background: '#fff' }} />
+                </button>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontFamily: "'Space Grotesk'", fontSize: 13, fontWeight: 600, color: tokens.ink }}>
+                    ↺ {t('itinerary.loop')}
+                  </div>
+                  <div style={{ fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight, letterSpacing: '0.04em', marginTop: 1 }}>
+                    {t('itinerary.loopHint')}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Step 2: target distance — only while building, hidden once a
@@ -1022,44 +1056,25 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
               </div>
             </div>
 
-            {/* Loop toggle */}
-            <div style={{
-              marginTop: 12, display: 'flex', alignItems: 'center', gap: 10,
-              padding: '8px 10px', background: tokens.creamDark, borderRadius: 3,
-            }}>
-              <button
-                role="switch"
-                aria-checked={loop}
-                onClick={() => setLoop(v => !v)}
-                style={{
-                  width: 36, height: 20, padding: 2,
-                  background: loop ? tokens.terra : tokens.creamBorder,
-                  border: 'none', borderRadius: 10, cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: loop ? 'flex-end' : 'flex-start',
-                  transition: 'all 0.15s',
-                }}
-              >
-                <span style={{ width: 16, height: 16, borderRadius: '50%', background: '#fff' }} />
-              </button>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontFamily: "'Space Grotesk'", fontSize: 13, fontWeight: 600, color: tokens.ink }}>
-                  {t('itinerary.loop')}
-                </div>
-                <div style={{ fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight, letterSpacing: '0.04em', marginTop: 1 }}>
-                  {t('itinerary.loopHint')}
-                </div>
-              </div>
-            </div>
-
             {distanceKm != null && (
-              <div style={{ marginTop: 14, padding: 12, background: tokens.creamDark, borderRadius: 3 }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
-                  <span style={{ fontFamily: "'Playfair Display'", fontSize: 24, fontWeight: 800, color: tokens.terra }}>
-                    {distanceKm}
+              <div style={{ marginTop: 14, padding: 12, background: tokens.creamDark, borderRadius: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, flexWrap: 'wrap', marginBottom: 8 }}>
+                  <span style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                    <span style={{ fontFamily: "'Playfair Display'", fontSize: 24, fontWeight: 800, color: tokens.terra }}>
+                      {distanceKm}
+                    </span>
+                    <span style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight }}>km {t('itinerary.computed')}</span>
                   </span>
-                  <span style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight }}>km {t('itinerary.computed')}</span>
+                  {ascent > 0 && (
+                    <span style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                      <span style={{ fontFamily: "'Playfair Display'", fontSize: 18, fontWeight: 800, color: tokens.ink }}>
+                        {Math.round(ascent)}
+                      </span>
+                      <span style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight }}>m D+</span>
+                    </span>
+                  )}
                   {durationS != null && (
-                    <span style={{ marginLeft: 'auto', fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight }}>
+                    <span style={{ marginLeft: 'auto', fontFamily: "'Space Grotesk'", fontSize: 12, fontWeight: 600, color: tokens.inkMid }}>
                       ≈ {formatDuration(durationS)}
                     </span>
                   )}

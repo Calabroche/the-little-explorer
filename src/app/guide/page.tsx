@@ -15,8 +15,10 @@
  */
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
 import { tokens } from '@/components/explorer/tokens';
+import { WhyBetterThanStrava } from '@/components/explorer/WhyBetterThanStrava';
 
 interface Section {
   id:       string;
@@ -259,11 +261,36 @@ const CARD_STYLE: React.CSSProperties = {
   marginBottom: 24,
 };
 
+/// Suspense boundary required by Next.js 13 when a Client Component
+/// reads useSearchParams() — without it the page errors on build.
 export default function GuidePage() {
+  return (
+    <Suspense fallback={null}>
+      <GuidePageInner />
+    </Suspense>
+  );
+}
+
+function GuidePageInner() {
   // Smooth scroll on TOC click. Uses native scrollIntoView — works
   // everywhere modern.
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
+
+  // ?welcome=1 → this is a first-time visitor that the middleware
+  // bounced here before /onboarding. We prepend a hello banner +
+  // primary CTA, and SWAP the "← Paramètres" header link for a
+  // skip link (they don't have a /settings page yet, they're not
+  // onboarded). Once they hit "Commencer", they land on /onboarding;
+  // once onboarded, the middleware never sends them back here.
+  const searchParams = useSearchParams();
+  const isWelcome    = searchParams?.get('welcome') === '1';
+  const fromPath     = searchParams?.get('from') ?? null;
+  // Preserve `from` through to /onboarding so post-onboarding logic
+  // (if any) can bounce the user back where they originally were.
+  const onboardingHref = fromPath
+    ? `/onboarding?from=${encodeURIComponent(fromPath)}`
+    : '/onboarding';
 
   return (
     // globals.css sets `body { overflow: hidden }`, which clamps any
@@ -352,34 +379,122 @@ export default function GuidePage() {
       `}</style>
 
       <div className="tle-guide-wrap">
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', color: tokens.terra, textTransform: 'uppercase', marginBottom: 6 }}>
-              § DOCUMENTATION
-            </div>
-            <h1 className="tle-guide-h1">
-              Guide d&apos;utilisation
-            </h1>
-            <p style={{ color: tokens.inkLight, fontSize: 13, margin: '8px 0 0', maxWidth: 600, lineHeight: 1.6 }}>
-              Toutes les fonctionnalités de The Little Explorer — pour le web, l&apos;app iOS et l&apos;Apple Watch.
-            </p>
-          </div>
-          <Link
-            href="/settings"
+        {/* Welcome banner — only on first visit (?welcome=1, set by
+            middleware for users with onboarded_at IS NULL). Replaces
+            the regular header section to set the tone: "hello, here's
+            what TLE is, click to start". The full guide is still
+            below for anyone who wants to skim before onboarding. */}
+        {isWelcome && (
+          <div
             style={{
-              padding: '8px 14px',
-              background: tokens.surface,
-              border: `1px solid ${tokens.creamBorder}`,
-              borderRadius: 3,
-              color: tokens.inkMid,
-              fontSize: 11, fontWeight: 600,
-              letterSpacing: '0.04em', textTransform: 'uppercase',
-              textDecoration: 'none', whiteSpace: 'nowrap',
+              background: tokens.ink,
+              color: tokens.cream,
+              borderRadius: 6,
+              padding: '28px 24px',
+              marginBottom: 28,
             }}
           >
-            ← Paramètres
-          </Link>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.16em', color: tokens.terra, textTransform: 'uppercase', marginBottom: 10 }}>
+              § Bienvenue
+            </div>
+            <h1
+              style={{
+                fontFamily: "'Playfair Display', serif",
+                fontWeight: 800,
+                lineHeight: 1.1,
+                fontSize: 30,
+                color: tokens.cream,
+                margin: '0 0 12px',
+              }}
+            >
+              Bienvenue sur The&nbsp;Little&nbsp;Explorer.
+            </h1>
+            <p style={{ fontSize: 14, lineHeight: 1.65, color: tokens.creamBorder, margin: '0 0 8px', maxWidth: 640 }}>
+              The Little Explorer, c&apos;est ton <strong style={{ color: tokens.cream }}>second cerveau de sportif</strong> — un compagnon qui
+              récupère tes sorties Strava, calcule ce que Strava ne calcule pas (FTP, charge, records, montées, usure du matériel) et
+              t&apos;aide à <strong style={{ color: tokens.cream }}>planifier ta prochaine sortie</strong>.
+            </p>
+            <p style={{ fontSize: 14, lineHeight: 1.65, color: tokens.creamBorder, margin: '0 0 18px', maxWidth: 640 }}>
+              Tu peux l&apos;utiliser sur <strong style={{ color: tokens.cream }}>le web</strong>, <strong style={{ color: tokens.cream }}>l&apos;app iOS</strong> et
+              {' '}<strong style={{ color: tokens.cream }}>l&apos;Apple Watch</strong> (recording GPS standalone). Ce guide te donne le tour
+              du proprio en quelques minutes — ou si t&apos;es du genre pressé, lance-toi tout de suite.
+            </p>
+
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <Link
+                href={onboardingHref}
+                style={{
+                  display: 'inline-block',
+                  padding: '12px 22px',
+                  background: tokens.terra,
+                  color: '#fff',
+                  borderRadius: 4,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  textDecoration: 'none',
+                }}
+              >
+                Commencer →
+              </Link>
+              <a
+                href="#activites"
+                style={{
+                  display: 'inline-block',
+                  padding: '12px 18px',
+                  color: tokens.creamBorder,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  letterSpacing: '0.04em',
+                  textTransform: 'uppercase',
+                  textDecoration: 'none',
+                  borderBottom: `1px solid ${tokens.creamBorder}`,
+                }}
+              >
+                ↓ Lire d&apos;abord
+              </a>
+            </div>
+          </div>
+        )}
+
+        {/* Header — collapsed to a thin "documentation" caption in
+            welcome mode so the dark welcome banner stays the visual
+            anchor. In normal mode, the usual h1 + "← Paramètres". */}
+        {!isWelcome && (
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', color: tokens.terra, textTransform: 'uppercase', marginBottom: 6 }}>
+                § DOCUMENTATION
+              </div>
+              <h1 className="tle-guide-h1">
+                Guide d&apos;utilisation
+              </h1>
+              <p style={{ color: tokens.inkLight, fontSize: 13, margin: '8px 0 0', maxWidth: 600, lineHeight: 1.6 }}>
+                Toutes les fonctionnalités de The Little Explorer — pour le web, l&apos;app iOS et l&apos;Apple Watch.
+              </p>
+            </div>
+            <Link
+              href="/settings"
+              style={{
+                padding: '8px 14px',
+                background: tokens.surface,
+                border: `1px solid ${tokens.creamBorder}`,
+                borderRadius: 3,
+                color: tokens.inkMid,
+                fontSize: 11, fontWeight: 600,
+                letterSpacing: '0.04em', textTransform: 'uppercase',
+                textDecoration: 'none', whiteSpace: 'nowrap',
+              }}
+            >
+              ← Paramètres
+            </Link>
+          </div>
+        )}
+
+        {/* Why The Little Explorer beats Strava. */}
+        <div style={CARD_STYLE}>
+          <WhyBetterThanStrava />
         </div>
 
         {/* TOC */}
@@ -441,6 +556,31 @@ export default function GuidePage() {
             )}
           </section>
         ))}
+
+        {/* Welcome footer CTA — gives the first-time visitor an exit
+            ramp after they've scrolled the whole guide, instead of
+            forcing them to scroll back up to the dark banner. */}
+        {isWelcome && (
+          <div style={{ textAlign: 'center', marginTop: 32, marginBottom: 8 }}>
+            <Link
+              href={onboardingHref}
+              style={{
+                display: 'inline-block',
+                padding: '14px 28px',
+                background: tokens.terra,
+                color: '#fff',
+                borderRadius: 4,
+                fontSize: 13,
+                fontWeight: 700,
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                textDecoration: 'none',
+              }}
+            >
+              Commencer mon aventure →
+            </Link>
+          </div>
+        )}
 
         {/* Footer */}
         <div style={{ textAlign: 'center', marginTop: 32, color: tokens.inkLight, fontSize: 12 }}>

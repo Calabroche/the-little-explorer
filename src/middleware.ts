@@ -55,11 +55,20 @@ export default withAuth(
     if (ONBOARDING_BYPASS.has(path)) return;
     if (ONBOARDING_BYPASS_PREFIX.some(prefix => path.startsWith(prefix))) return;
 
-    // Not onboarded + not on a bypass route → send to /onboarding,
-    // preserving the original path as `from` so future polish can
-    // bounce them back where they were trying to go.
+    // Not onboarded + not on a bypass route → send to the welcome
+    // guide. /guide?welcome=1 shows a hello banner + CTA "Commencer"
+    // that routes to /onboarding; without ?welcome=1 the regular guide
+    // renders (used by the "Voir le guide complet" link on the
+    // onboarding welcome screen). Once onboarded_at is set, the user
+    // never lands here again because this whole branch is gated by
+    // `!isOnboarded`.
+    //
+    // We preserve the original path as `from` so the welcome page —
+    // and downstream /onboarding — can bounce them back where they
+    // were trying to go.
     const url = req.nextUrl.clone();
-    url.pathname = '/onboarding';
+    url.pathname = '/guide';
+    url.searchParams.set('welcome', '1');
     url.searchParams.set('from', path);
     return NextResponse.redirect(url);
   },
