@@ -824,11 +824,12 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
   // leftover height instead of leaving a gap below the elevation profile.
   // `minHeight` keeps it usable when the builder column is short. On mobile
   // the columns stack, so the map keeps a fixed, comfortable height.
-  // Map sits full-width on top of the planner and takes most of the screen;
-  // the builder (steps / distance / save) stacks underneath.
+  // Map is full-width; height is capped so the stats bar + elevation profile
+  // that sit right under it stay visible in the same viewport (no scroll to
+  // see the profile). ~400px is reserved below for those two cards.
   const mapCardStyle: CSSProperties = {
     ...CARD, padding: 0, overflow: 'hidden', position: 'relative',
-    height: isMobile ? 460 : 'clamp(420px, 70vh, 820px)',
+    height: isMobile ? 420 : 'clamp(320px, calc(100vh - 400px), 600px)',
   };
   const mapInnerHeight: number | string = '100%';
 
