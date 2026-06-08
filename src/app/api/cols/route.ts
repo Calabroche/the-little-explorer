@@ -15,23 +15,25 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
-// Several Overpass mirrors. The public ones go down / overload constantly and
-// querying them sequentially means one slow host stalls the whole request, so
-// we RACE all of them in parallel and take the first that answers with a valid
-// element list. Total latency = the fastest healthy mirror, not the sum.
+// Overpass mirrors, best-first. The public instances overload constantly
+// (overpass-api.de 504s under load; some are regional extracts that answer 200
+// with ZERO elements for France, which is worse than an error). The French
+// instance is fast and reliable for our area, so it leads. We RACE all mirrors
+// in parallel AND retry each on failure until a shared deadline — so a
+// transient 504 self-heals instead of bubbling up as "no col found".
 const OVERPASS_HOSTS = [
-  'https://overpass-api.de/api/interpreter',
+  'https://overpass.openstreetmap.fr/api/interpreter',  // FR, fast + reliable here
+  'https://overpass-api.de/api/interpreter',            // canonical, often busy
   'https://overpass.kumi.systems/api/interpreter',
   'https://overpass.private.coffee/api/interpreter',
-  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
 ];
 const UA = 'TheLittleExplorer/0.1 (+https://the-little-explorer-app.vercel.app)';
 
 interface OverpassResp { elements?: { type: string; id: number; lat?: number; lon?: number; tags?: Record<string, string> }[] }
 
-async function fetchOverpass(url: string, query: string): Promise<OverpassResp> {
+async function fetchOverpass(url: string, query: string, timeoutMs: number): Promise<OverpassResp> {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 25_000);
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const res = await fetch(url, {
       method: 'POST',
@@ -48,12 +50,25 @@ async function fetchOverpass(url: string, query: string): Promise<OverpassResp> 
   }
 }
 
-// Race every mirror; first valid answer wins. Promise.any rejects only if ALL
-// mirrors fail, in which case we return null and the caller yields an empty
-// list.
-async function runOverpass(query: string): Promise<OverpassResp | null> {
+// Race every mirror, each retrying on failure until the shared deadline. First
+// valid answer wins; returns null only if every mirror keeps failing for the
+// whole budget.
+async function runOverpass(query: string, perAttemptMs: number, deadlineMs: number): Promise<OverpassResp | null> {
+  const deadline = Date.now() + deadlineMs;
+  const tryHost = async (url: string): Promise<OverpassResp> => {
+    let lastErr: unknown;
+    while (Date.now() < deadline) {
+      try {
+        return await fetchOverpass(url, query, perAttemptMs);
+      } catch (e) {
+        lastErr = e;
+        await new Promise(r => setTimeout(r, 600));  // brief backoff before retry
+      }
+    }
+    throw lastErr ?? new Error('deadline');
+  };
   try {
-    return await Promise.any(OVERPASS_HOSTS.map(url => fetchOverpass(url, query)));
+    return await Promise.any(OVERPASS_HOSTS.map(tryHost));
   } catch {
     return null;
   }
@@ -151,19 +166,28 @@ export async function POST(req: NextRequest) {
   const bboxCols = box(radiusKm);
   const bboxPeaks = box(Math.min(radiusKm, 15));
 
-  const query =
+  // Two independent queries, raced in parallel. Cols/saddles are the headline
+  // result and get the bigger budget; named peaks are a heavier, best-effort
+  // extra (if their query keeps failing we still return the cols). This way a
+  // slow peaks lookup can never sink the whole response.
+  const colsQuery =
     `[out:json][timeout:25];(` +
     `node(${bboxCols})[mountain_pass=yes];` +
     `node(${bboxCols})[natural=saddle][name];` +
-    `node(${bboxPeaks})[natural=peak][name];` +
     `);out;`;
+  const peaksQuery =
+    `[out:json][timeout:20];(node(${bboxPeaks})[natural=peak][name];);out;`;
 
-  const data = await runOverpass(query);
-  if (!data) return NextResponse.json({ cols: [] });
+  const [colsData, peaksData] = await Promise.all([
+    runOverpass(colsQuery, 14_000, 40_000),
+    runOverpass(peaksQuery, 12_000, 24_000),
+  ]);
+  if (!colsData && !peaksData) return NextResponse.json({ cols: [] });
+  const elements = [...(colsData?.elements ?? []), ...(peaksData?.elements ?? [])];
 
   const seen = new Set<string>();
   const cols: Col[] = [];
-  for (const el of data.elements ?? []) {
+  for (const el of elements) {
     const tags = el.tags ?? {};
     const name = tags.name;
     if (!name || el.lat == null || el.lon == null) continue;        // named cols only
