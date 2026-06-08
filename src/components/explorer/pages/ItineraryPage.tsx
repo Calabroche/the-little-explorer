@@ -1294,9 +1294,16 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
                     }}
                     eventHandlers={{ click: () => toggleCol(c) }}
                   >
-                    <Tooltip permanent direction="top" offset={[0, -6]} opacity={0.92}>
-                      <span style={{ fontFamily: "'Space Grotesk'", fontSize: 10, fontWeight: 700, color: sel ? tokens.terra : tokens.ink }}>
-                        {sel ? '✓ ' : ''}{c.kind === 'col' ? '⛰' : '🗻'} {c.ele != null ? `${c.ele} m` : c.name}
+                    <Tooltip permanent direction="top" offset={[0, -7]} opacity={1}>
+                      <span style={{ display: 'block', textAlign: 'center', lineHeight: 1.25, fontFamily: "'Space Grotesk'", color: sel ? tokens.terra : tokens.ink }}>
+                        <span style={{ display: 'block', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                          {sel ? '✓ ' : ''}{c.kind === 'col' ? '⛰' : '🗻'} {c.name}
+                        </span>
+                        {c.ele != null && (
+                          <span style={{ display: 'block', fontSize: 12, fontWeight: 800, color: tokens.terra }}>
+                            {c.ele} m
+                          </span>
+                        )}
                       </span>
                     </Tooltip>
                   </CircleMarker>
