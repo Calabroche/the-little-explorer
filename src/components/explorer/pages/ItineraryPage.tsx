@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo, CSSProperties } from 'react';
 import dynamic from 'next/dynamic';
+import type { DivIcon } from 'leaflet';
 import { tokens } from '../tokens';
 import { SectionTag, Label, useIsMobile } from '../ui';
 import { useT } from '@/i18n';
@@ -16,6 +17,7 @@ import { buildGpx, downloadGpx, slugify as gpxSlug } from '../itinerary/gpx';
 const MapContainer = dynamic(() => import('react-leaflet').then(m => m.MapContainer), { ssr: false });
 const Polyline     = dynamic(() => import('react-leaflet').then(m => m.Polyline),     { ssr: false });
 const CircleMarker = dynamic(() => import('react-leaflet').then(m => m.CircleMarker), { ssr: false });
+const Marker       = dynamic(() => import('react-leaflet').then(m => m.Marker),       { ssr: false });
 const Tooltip      = dynamic(() => import('react-leaflet').then(m => m.Tooltip),      { ssr: false });
 const MapClickHandler = dynamic(() => import('../itinerary/MapClickHandler').then(m => m.MapClickHandler), { ssr: false });
 const ClickPopupTracker = dynamic(() => import('../itinerary/MapClickHandler').then(m => m.ClickPopupTracker), { ssr: false });
@@ -24,7 +26,7 @@ const FitBounds    = dynamic(() => import('../itinerary/FitBounds').then(m => m.
 const BasemapTiles = dynamic(() => import('../MapBasemap').then(m => m.BasemapTiles), { ssr: false });
 import { useBasemap, BasemapToggle } from '../MapBasemap';
 import { useZoomPercent, ZoomPercentPill } from '../MapZoomControl';
-import { ColsPicker, Col, colCode, useNearbyCols, COL_COLORS } from '../ColsPicker';
+import { ColsPicker, Col, colCode, useNearbyCols } from '../ColsPicker';
 
 interface Props {
   user: UserId;
@@ -338,6 +340,7 @@ async function findDetour(
 
 export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
   const { t, lang } = useT();
+  const en = lang === 'en';
   const isMobile = useIsMobile();
   // Lets the user collapse the (potentially long) stops list to free up
   // vertical space while keeping the search + everything below in reach.
@@ -439,6 +442,26 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
     [sport, waypoints],
   );
   const { cols: nearbyCols, loading: colsLoading, errored: colsErrored, retry: colsRetry } = useNearbyCols(colCenter, colRadiusKm);
+
+  // Small ⛰/🗻 emoji pins for the col markers, built client-side (leaflet needs
+  // `window`). Selected pins get a terra badge so they stand out.
+  const [colIcons, setColIcons] = useState<Record<'col' | 'colSel' | 'sommet' | 'sommetSel', DivIcon> | null>(null);
+  useEffect(() => {
+    let active = true;
+    import('leaflet').then(mod => {
+      const L = mod.default ?? mod;
+      const make = (emoji: string, sel: boolean) => L.divIcon({
+        className: 'tle-col-pin',
+        html: `<div style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;font-size:13px;line-height:1;background:${sel ? tokens.terra : 'rgba(255,255,255,0.92)'};border:1.5px solid ${sel ? '#fff' : 'rgba(0,0,0,0.3)'};box-shadow:0 1px 3px rgba(0,0,0,0.45);cursor:pointer;">${emoji}</div>`,
+        iconSize: [22, 22], iconAnchor: [11, 11], tooltipAnchor: [0, -4],
+      });
+      if (active) setColIcons({
+        col: make('⛰️', false), colSel: make('⛰️', true),
+        sommet: make('🗻', false), sommetSel: make('🗻', true),
+      });
+    });
+    return () => { active = false; };
+  }, []);
 
   // ── Click-to-add a precise map point ─────────────────────────────────────
   // Clicking the map opens the confirmation popup at the exact spot and kicks
@@ -1292,36 +1315,39 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
                   </Tooltip>
                 </CircleMarker>
               ))}
-              {/* Cols & summits near the departure — always shown (cycling),
-                  each labelled with its altitude. Click a marker to add it to
-                  the route (or remove it if already in). Marker click never
-                  registers as a map click, so no phantom add-point popup. */}
-              {sport === 'cycling' && nearbyCols.map(c => {
+              {/* Cols & summits near the departure (cycling). Each is a small
+                  ⛰/🗻 emoji pin — no permanent label so the map stays clean.
+                  Hover to see the name + altitude (black text) and click to add
+                  it to / remove it from the route. Marker clicks never register
+                  as a map click, so no phantom add-point popup. */}
+              {sport === 'cycling' && colIcons && nearbyCols.map(c => {
                 const sel = selectedColCodes.has(colCode(c));
+                const icon = c.kind === 'col'
+                  ? (sel ? colIcons.colSel : colIcons.col)
+                  : (sel ? colIcons.sommetSel : colIcons.sommet);
                 return (
-                  <CircleMarker
+                  <Marker
                     key={`col-${colCode(c)}`}
-                    center={[c.lat, c.lng]}
-                    radius={sel ? 7 : 5}
-                    pathOptions={{
-                      fillColor: sel ? tokens.terra : COL_COLORS[c.kind],
-                      color: '#fff', weight: 1.5, fillOpacity: 1,
-                    }}
+                    position={[c.lat, c.lng]}
+                    icon={icon}
                     eventHandlers={{ click: () => toggleCol(c) }}
                   >
-                    <Tooltip permanent direction="top" offset={[0, -7]} opacity={1}>
-                      <span style={{ display: 'block', textAlign: 'center', lineHeight: 1.25, fontFamily: "'Space Grotesk'", color: sel ? tokens.terra : tokens.ink }}>
-                        <span style={{ display: 'block', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>
-                          {sel ? '✓ ' : ''}{c.kind === 'col' ? '⛰' : '🗻'} {c.name}
+                    <Tooltip direction="top" offset={[0, -14]} opacity={1}>
+                      <span style={{ display: 'block', textAlign: 'center', lineHeight: 1.3, fontFamily: "'Space Grotesk'", color: '#111' }}>
+                        <span style={{ display: 'block', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', color: '#111' }}>
+                          {c.kind === 'col' ? '⛰' : '🗻'} {c.name}
                         </span>
                         {c.ele != null && (
-                          <span style={{ display: 'block', fontSize: 12, fontWeight: 800, color: tokens.terra }}>
+                          <span style={{ display: 'block', fontSize: 13, fontWeight: 800, color: '#111' }}>
                             {c.ele} m
                           </span>
                         )}
+                        <span style={{ display: 'block', fontSize: 10, fontWeight: 600, color: sel ? tokens.terra : '#555', marginTop: 2 }}>
+                          {sel ? (en ? '✓ click to remove' : '✓ clique pour retirer') : (en ? '+ click to add' : '+ clique pour ajouter')}
+                        </span>
                       </span>
                     </Tooltip>
-                  </CircleMarker>
+                  </Marker>
                 );
               })}
               {/* Resupply points (water / food) along the route. */}
