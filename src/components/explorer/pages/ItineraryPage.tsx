@@ -935,7 +935,9 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
         <div style={{
           order: 1,
           display: 'grid', gap: 16, alignItems: 'start',
-          gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(300px, 1fr))',
+          // Top row is now just §01 (stops) + Cols. Give §01 a fixed-ish column
+          // and let "Cols à proximité" take the rest of the width (2 per row).
+          gridTemplateColumns: isMobile ? '1fr' : 'minmax(280px, 340px) 1fr',
         }}>
           {/* Step 1: villages */}
           <div style={CARD}>
@@ -1092,121 +1094,9 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
             </div>
           )}
 
-          {/* Step 3: save + export. Compact action bar once a route is open. */}
-          {isOpen ? (
-            <div style={{ ...CARD, padding: 14 }}>
-              <input
-                type="text"
-                value={name}
-                onChange={e => setName(e.target.value)}
-                placeholder={t('itinerary.namePlaceholder')}
-                style={{
-                  width: '100%', padding: '7px 10px', marginBottom: 8,
-                  fontFamily: "'Space Grotesk'", fontSize: 13, fontWeight: 600,
-                  background: tokens.cream, color: tokens.ink,
-                  border: `1px solid ${tokens.creamBorder}`, borderRadius: 4, outline: 'none',
-                }}
-              />
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  onClick={handleSave}
-                  disabled={waypoints.length < 2}
-                  title={t('itinerary.update')}
-                  style={{
-                    flex: 1, padding: '9px 10px',
-                    fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase',
-                    background: waypoints.length < 2 ? tokens.creamBorder : tokens.terra,
-                    color: '#fff', border: 'none', borderRadius: 4,
-                    cursor: waypoints.length < 2 ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  ↻ {t('itinerary.update')}
-                </button>
-                <button
-                  onClick={handleExportGpx}
-                  disabled={!geometry || geometry.length < 2}
-                  title={t('itinerary.exportGpx')}
-                  style={{
-                    width: 44, padding: '9px 0',
-                    fontFamily: "'Space Grotesk'", fontSize: 13,
-                    background: 'transparent', color: !geometry ? tokens.creamBorder : tokens.ink,
-                    border: `1px solid ${!geometry ? tokens.creamBorder : tokens.ink}`, borderRadius: 4,
-                    cursor: !geometry ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  ⤓
-                </button>
-              </div>
-              <button
-                onClick={handleStartNavigation}
-                disabled={!geometry || geometry.length < 2}
-                style={{
-                  marginTop: 8, width: '100%', padding: '12px 12px',
-                  fontFamily: "'Space Grotesk'", fontSize: 13, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
-                  background: !geometry ? tokens.creamBorder : tokens.green,
-                  color: '#fff', border: 'none', borderRadius: 4,
-                  cursor: !geometry ? 'not-allowed' : 'pointer',
-                }}
-              >
-                ▶ {t('itinerary.startNav')}
-              </button>
-            </div>
-          ) : (
-          <div style={CARD}>
-            <Label style={{ display: 'block', marginBottom: 10 }}>{t('itinerary.step3')}</Label>
-            <input
-              type="text"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder={t('itinerary.namePlaceholder')}
-              style={{
-                width: '100%', padding: '8px 10px', marginBottom: 10,
-                fontFamily: "'Space Grotesk'", fontSize: 13,
-                background: tokens.cream, color: tokens.ink,
-                border: `1px solid ${tokens.creamBorder}`, borderRadius: 4, outline: 'none',
-              }}
-            />
-            <button
-              onClick={handleSave}
-              disabled={waypoints.length < 2}
-              style={{
-                width: '100%', padding: '10px 12px',
-                fontFamily: "'Space Grotesk'", fontSize: 12, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase',
-                background: waypoints.length < 2 ? tokens.creamBorder : tokens.terra,
-                color: '#fff', border: 'none', borderRadius: 4,
-                cursor: waypoints.length < 2 ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {activeId ? t('itinerary.update') : t('itinerary.save')}
-            </button>
-            <button
-              onClick={handleExportGpx}
-              disabled={!geometry || geometry.length < 2}
-              style={{
-                marginTop: 8, width: '100%', padding: '10px 12px',
-                fontFamily: "'Space Grotesk'", fontSize: 12, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase',
-                background: 'transparent', color: !geometry ? tokens.creamBorder : tokens.ink,
-                border: `1px solid ${!geometry ? tokens.creamBorder : tokens.ink}`, borderRadius: 4,
-                cursor: !geometry ? 'not-allowed' : 'pointer',
-              }}
-            >
-              ⤓ {t('itinerary.exportGpx')}
-            </button>
-            <button
-              onClick={handleStartNavigation}
-              disabled={!geometry || geometry.length < 2}
-              style={{
-                marginTop: 8, width: '100%', padding: '12px 12px',
-                fontFamily: "'Space Grotesk'", fontSize: 13, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
-                background: !geometry ? tokens.creamBorder : tokens.green,
-                color: '#fff', border: 'none', borderRadius: 4,
-                cursor: !geometry ? 'not-allowed' : 'pointer',
-              }}
-            >
-              ▶ {t('itinerary.startNav')}
-            </button>
-          </div>
-          )}
+          {/* Step 3 (save / export / start navigation) is rendered lower, under
+              the way-types + surfaces breakdown — see {saveExportCard}. Moving
+              it out of the top row lets "Cols à proximité" take the width. */}
 
         </div>
 
@@ -1585,6 +1475,125 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
             <div style={{ ...CARD, marginTop: 16, fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.inkLight }}>
               Analyse des chemins et surfaces…
             </div>
+          )}
+
+          {/* Step 3: save / export / start navigation — moved here, under the
+              way-types breakdown, so the top row can give its width to cols. */}
+          {isOpen ? (
+            <div style={{ ...CARD, padding: 14, marginTop: 16 }}>
+              <input
+                type="text"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder={t('itinerary.namePlaceholder')}
+                style={{
+                  width: '100%', padding: '7px 10px', marginBottom: 8,
+                  fontFamily: "'Space Grotesk'", fontSize: 13, fontWeight: 600,
+                  background: tokens.cream, color: tokens.ink,
+                  border: `1px solid ${tokens.creamBorder}`, borderRadius: 4, outline: 'none',
+                }}
+              />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={handleSave}
+                  disabled={waypoints.length < 2}
+                  title={t('itinerary.update')}
+                  style={{
+                    flex: 1, padding: '9px 10px',
+                    fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase',
+                    background: waypoints.length < 2 ? tokens.creamBorder : tokens.terra,
+                    color: '#fff', border: 'none', borderRadius: 4,
+                    cursor: waypoints.length < 2 ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  ↻ {t('itinerary.update')}
+                </button>
+                <button
+                  onClick={handleExportGpx}
+                  disabled={!geometry || geometry.length < 2}
+                  title={t('itinerary.exportGpx')}
+                  style={{
+                    width: 44, padding: '9px 0',
+                    fontFamily: "'Space Grotesk'", fontSize: 13,
+                    background: 'transparent', color: !geometry ? tokens.creamBorder : tokens.ink,
+                    border: `1px solid ${!geometry ? tokens.creamBorder : tokens.ink}`, borderRadius: 4,
+                    cursor: !geometry ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  ⤓
+                </button>
+              </div>
+              <button
+                onClick={handleStartNavigation}
+                disabled={!geometry || geometry.length < 2}
+                style={{
+                  marginTop: 8, width: '100%', padding: '12px 12px',
+                  fontFamily: "'Space Grotesk'", fontSize: 13, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
+                  background: !geometry ? tokens.creamBorder : tokens.green,
+                  color: '#fff', border: 'none', borderRadius: 4,
+                  cursor: !geometry ? 'not-allowed' : 'pointer',
+                }}
+              >
+                ▶ {t('itinerary.startNav')}
+              </button>
+            </div>
+          ) : (
+          <div style={{ ...CARD, marginTop: 16 }}>
+            <Label style={{ display: 'block', marginBottom: 10 }}>{t('itinerary.step3')}</Label>
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder={t('itinerary.namePlaceholder')}
+              style={{
+                width: '100%', padding: '8px 10px', marginBottom: 10,
+                fontFamily: "'Space Grotesk'", fontSize: 13,
+                background: tokens.cream, color: tokens.ink,
+                border: `1px solid ${tokens.creamBorder}`, borderRadius: 4, outline: 'none',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button
+                onClick={handleSave}
+                disabled={waypoints.length < 2}
+                style={{
+                  flex: '1 1 180px', padding: '10px 12px',
+                  fontFamily: "'Space Grotesk'", fontSize: 12, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase',
+                  background: waypoints.length < 2 ? tokens.creamBorder : tokens.terra,
+                  color: '#fff', border: 'none', borderRadius: 4,
+                  cursor: waypoints.length < 2 ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {activeId ? t('itinerary.update') : t('itinerary.save')}
+              </button>
+              <button
+                onClick={handleExportGpx}
+                disabled={!geometry || geometry.length < 2}
+                style={{
+                  flex: '0 1 auto', padding: '10px 16px',
+                  fontFamily: "'Space Grotesk'", fontSize: 12, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase',
+                  background: 'transparent', color: !geometry ? tokens.creamBorder : tokens.ink,
+                  border: `1px solid ${!geometry ? tokens.creamBorder : tokens.ink}`, borderRadius: 4,
+                  cursor: !geometry ? 'not-allowed' : 'pointer',
+                }}
+              >
+                ⤓ {t('itinerary.exportGpx')}
+              </button>
+              <button
+                onClick={handleStartNavigation}
+                disabled={!geometry || geometry.length < 2}
+                style={{
+                  flex: '1 1 220px', padding: '10px 12px',
+                  fontFamily: "'Space Grotesk'", fontSize: 13, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
+                  background: !geometry ? tokens.creamBorder : tokens.green,
+                  color: '#fff', border: 'none', borderRadius: 4,
+                  cursor: !geometry ? 'not-allowed' : 'pointer',
+                }}
+              >
+                ▶ {t('itinerary.startNav')}
+              </button>
+            </div>
+          </div>
           )}
 
         </div>

@@ -229,11 +229,11 @@ const HEADER_ROW: CSSProperties = {
   gap: 12, flexWrap: 'wrap', marginBottom: 14,
 };
 const GRID: CSSProperties = {
-  // 1 col per row, 3 rows visible (with a sliver of the next as a scroll hint),
-  // then scroll/swipe inside the card.
-  display: 'grid', gap: 6,
-  gridTemplateColumns: '1fr',
-  maxHeight: 156, overflowY: 'auto', overscrollBehavior: 'contain',
+  // 2 cols per row (the card now spans the freed-up width), several rows
+  // visible, then scroll/swipe inside the card.
+  display: 'grid', gap: 8,
+  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+  maxHeight: 300, overflowY: 'auto', overscrollBehavior: 'contain',
   WebkitOverflowScrolling: 'touch',
 };
 const COL_CARD: CSSProperties = {
