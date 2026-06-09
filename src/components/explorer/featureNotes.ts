@@ -71,13 +71,6 @@ export const FEATURE_NOTES: FeatureNote[] = [
           body: 'Your power records, FTP estimate and training-load (TSS) analysis + next ride now live on one dedicated page — the home feed is cleaner.' },
   },
   {
-    id: 'fireworks-2026-06', icon: '🎆', date: '2026-06-04', sport: 'all',
-    fr: { title: 'Un petit feu d\'artifice au lancement',
-          body: 'Pour le plaisir : une animation festive accueille l\'ouverture de l\'app (une fois par session).' },
-    en: { title: 'A little fireworks welcome',
-          body: 'Just for fun: a festive animation greets you when the app loads (once per session).' },
-  },
-  {
     id: 'planner-clickmap-2026-06', icon: '📍', date: '2026-06-03', sport: 'all',
     fr: { title: 'Ajoute un point en cliquant sur la carte',
           body: 'Clique n\'importe où sur la carte du planificateur : une confirmation s\'affiche, et le point exact s\'ajoute à ton itinéraire. Le parcours évite aussi de repasser deux fois au même endroit.' },

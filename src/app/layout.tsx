@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "./providers";
-import { FireworksOverlay } from "./FireworksOverlay";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
@@ -31,7 +30,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
-        <FireworksOverlay />
         <Providers>{children}</Providers>
         {/* Vercel Analytics + Speed Insights — both free for personal
             projects, surface in the Vercel dashboard within a few
