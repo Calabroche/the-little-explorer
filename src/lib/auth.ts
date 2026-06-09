@@ -254,7 +254,34 @@ export function buildAuthOptions(): AuthOptions {
         if (user) {
           token.uid = user.id;
           if (account?.provider === 'strava' && profile?.id) {
-            token.athleteId = Number(profile.id);
+            const athleteId = Number(profile.id);
+            token.athleteId = athleteId;
+            // Account unification (Option B): a Strava LOGIN should land on
+            // the account that already owns this athlete — typically one
+            // created via Google then "Connecter Strava" — instead of the
+            // throwaway `strava-<id>@strava.local` shell user the adapter
+            // mints on a first Strava sign-in. We adopt the canonical
+            // (real-email) user's id, so the web session AND the iOS bearer
+            // token (issued from session.user.id in /auth/native-done)
+            // resolve to the SAME account + itinerary library. This is safe:
+            // a Strava OAuth proves control of the athlete, and the canonical
+            // account only got that athlete_id by connecting that same Strava,
+            // so there's no cross-account takeover. Pure-Strava users with no
+            // other account simply find no canonical row and keep their shell.
+            try {
+              const { data: canonical } = await supabaseAdmin()
+                .schema('next_auth')
+                .from('users')
+                .select('id')
+                .eq('athlete_id', athleteId)
+                .not('email', 'like', 'strava-%@strava.local')
+                .order('created_at', { ascending: true })
+                .limit(1)
+                .maybeSingle();
+              if (canonical?.id) token.uid = canonical.id;
+            } catch (err) {
+              console.error('[auth] strava canonical-account lookup failed:', err);
+            }
           } else {
             // Google (or any other provider) sign-in for a user who may
             // already have Strava linked. Look up the stored athlete_id.
