@@ -368,7 +368,7 @@ export function ActivityCalendar({ activities }: { activities: Activity[] }) {
                     <Chip label="V. MAX" value={`${speedMax.toFixed(1)} km/h`}     color={tokens.blue} />
                   )}
                   {incMax != null && incMax > 0 && (
-                    <Chip label="PENTE MAX" value={`${incMax.toFixed(1)} %`}       color={tokens.terra} />
+                    <Chip label="MONTÉE MAX" value={`${incMax.toFixed(1)} %`}       color={tokens.terra} />
                   )}
                   {hrAvg != null && (
                     <Chip label="FC MOY" value={`${Math.round(hrAvg)} bpm`}         color="#D9434E" />

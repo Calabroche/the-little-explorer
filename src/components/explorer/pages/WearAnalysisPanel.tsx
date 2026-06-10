@@ -154,7 +154,7 @@ export function WearAnalysisPanel({ bikes }: { bikes: Bike[] }) {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT, fontSize: 12 }}>
               <thead>
                 <tr>
-                  {['Sortie', 'Km', 'D+', 'D−', 'Pente min', 'Pente max', 'Pente moy', 'Desc. raide', 'Freinages', 'Plaquettes'].map(h => (
+                  {['Sortie', 'Km', 'D+', 'D−', 'Montée max', 'Descente max', 'Pente moy', 'Desc. raide', 'Freinages', 'Plaquettes'].map(h => (
                     <th key={h} style={{ textAlign: 'left', padding: '10px 12px', borderBottom: `1px solid ${tokens.creamBorder}`, color: tokens.inkLight, fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
@@ -169,8 +169,8 @@ export function WearAnalysisPanel({ bikes }: { bikes: Bike[] }) {
                     <td style={cell()}>{r.km.toFixed(1)}</td>
                     <td style={cell(tokens.terra)}>{r.ascentM} m</td>
                     <td style={cell(tokens.blue)}>{r.descentM} m</td>
-                    <td style={cell(tokens.blue)}>{r.minGradePct != null ? `${r.minGradePct} %` : '—'}</td>
                     <td style={cell(tokens.terra)}>{r.maxGradePct != null ? `+${r.maxGradePct} %` : '—'}</td>
+                    <td style={cell(tokens.blue)}>{r.minGradePct != null ? `${r.minGradePct} %` : '—'}</td>
                     <td style={cell()}>{r.avgGradePct != null ? `${r.avgGradePct} %` : '—'}</td>
                     <td style={cell()}>{r.steepDescKm > 0 ? `${r.steepDescKm} km` : '—'}</td>
                     <td style={cell()}>{r.hasStreams ? r.brakeEvents : '—'}</td>
