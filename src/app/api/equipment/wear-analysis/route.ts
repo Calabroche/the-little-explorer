@@ -232,7 +232,7 @@ export async function GET(req: NextRequest) {
       .order('start_date', { ascending: false })
       .limit(120),
     db.from('bike_equipment')
-      .select('id, name, kind, installed_at, lifetime_km')
+      .select('id, name, kind, installed_at, installed_at_km, lifetime_km')
       .eq('user_id', authed.id).eq('gear_id', gearId).is('replaced_at', null),
   ]);
 
@@ -271,7 +271,18 @@ export async function GET(req: NextRequest) {
   const pieces = (equip ?? []).flatMap(e => {
     const comp = kindToComponent(e.kind as string);
     if (!comp) return [];
-    const since = rides.filter(r => !e.installed_at || r.date >= (e.installed_at as string));
+    // Rides since install, selected by ODOMETER (km target = bike total −
+    // installed_at_km), walking back from the newest ride. More faithful than
+    // the install DATE: the wear meter itself is odometer-based, and a piece
+    // declared today with "445 km already on it" must still count those rides.
+    const kmTarget = Math.max(0, totKm - Number(e.installed_at_km ?? 0));
+    const since: RideMetrics[] = [];
+    let cum = 0;
+    for (const r of rides) {           // rides are newest → oldest
+      if (cum >= kmTarget - 0.5) break;
+      since.push(r);
+      cum += r.km;
+    }
     const rawKm = since.reduce((s, r) => s + r.km, 0);
     const effKm = since.reduce((s, r) => s + r.km * r.mult[comp], 0);
     const lifetime = Number(e.lifetime_km ?? 0);
