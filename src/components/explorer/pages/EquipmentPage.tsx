@@ -173,7 +173,7 @@ export function EquipmentPage() {
         data.items.filter(it => it.gear_id && covered.has(it.kind)).map(it => it.gear_id as string),
       ));
       const results = await Promise.all(bikeIds.map(id =>
-        fetch(`/api/equipment/wear-analysis?gearId=${encodeURIComponent(id)}`)
+        fetch(`/api/equipment/wear-analysis?gearId=${encodeURIComponent(id)}`, { cache: 'no-store' })
           .then(res => (res.ok ? res.json() : null))
           .catch(() => null),
       ));

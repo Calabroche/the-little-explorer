@@ -48,7 +48,7 @@ export function WearAnalysisPanel({ bikes }: { bikes: Bike[] }) {
     if (!gearId) return;
     let cancelled = false;
     setLoading(true); setError(null);
-    fetch(`/api/equipment/wear-analysis?gearId=${encodeURIComponent(gearId)}`)
+    fetch(`/api/equipment/wear-analysis?gearId=${encodeURIComponent(gearId)}`, { cache: 'no-store' })
       .then(r => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((d: Analysis) => { if (!cancelled) setData(d); })
       .catch(e => { if (!cancelled) { setData(null); setError(String(e.message ?? e)); } })

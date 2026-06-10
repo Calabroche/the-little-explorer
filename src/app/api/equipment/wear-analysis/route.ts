@@ -329,5 +329,8 @@ export async function GET(req: NextRequest) {
     pieces,
     rides,
     narrative: buildNarrative(gear.name as string, rides, agg),
-  }, { headers: { 'Cache-Control': 'private, max-age=300' } });
+  // no-store: a 5-min browser cache here made fixes look only half-applied
+  // (stale table next to a fresh activity page). The analysis is recomputed
+  // per request — acceptable, it only runs when the tab is opened.
+  }, { headers: { 'Cache-Control': 'no-store' } });
 }
