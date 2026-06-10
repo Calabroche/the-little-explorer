@@ -75,6 +75,14 @@ interface Bike {
   totalKm:      number;
 }
 
+/** Terrain-adjusted wear for one piece, from /api/equipment/wear-analysis. */
+interface AiWear {
+  adjustedWearPct:    number | null;
+  effectiveKm:        number;
+  adjustedIntervalKm: number | null;
+  multiplier:         number;
+}
+
 /** Per-kind UI metadata: category, icon, default lifetime, and the
  *  human label we surface in the type picker. Aligned with the SQL
  *  kind enum + sensible defaults from real-world cycling wear data
@@ -142,6 +150,10 @@ export function EquipmentPage() {
   //   service   — the new carnet d'entretien (lube, bleed, tune, …)
   // Local state, resets when navigating away.
   const [tab, setTab] = useState<'pieces' | 'service' | 'analyse'>('pieces');
+  // Terrain-adjusted wear per piece id, fed by /api/equipment/wear-analysis
+  // for each bike that carries covered pieces. The cards then show the
+  // AI-adjusted wear instead of the raw odometer ratio.
+  const [aiWear, setAiWear] = useState<Record<string, AiWear>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -153,6 +165,33 @@ export function EquipmentPage() {
       setItems(data.items);
       setTotalKm(data.totalKm);
       setBikes(data.bikes ?? []);
+
+      // Enrich with the terrain analysis (one call per bike that has at
+      // least one covered piece). Best-effort: cards fall back to raw wear.
+      const covered = new Set(['brake_pads_front', 'brake_pads_rear', 'brake_rotor_front', 'brake_rotor_rear', 'chain', 'cassette', 'tire_front', 'tire_rear']);
+      const bikeIds = Array.from(new Set(
+        data.items.filter(it => it.gear_id && covered.has(it.kind)).map(it => it.gear_id as string),
+      ));
+      const results = await Promise.all(bikeIds.map(id =>
+        fetch(`/api/equipment/wear-analysis?gearId=${encodeURIComponent(id)}`)
+          .then(res => (res.ok ? res.json() : null))
+          .catch(() => null),
+      ));
+      const map: Record<string, AiWear> = {};
+      for (const res of results) {
+        if (!res?.pieces) continue;
+        const multByComp: Record<string, number> = {};
+        for (const c of res.components ?? []) multByComp[c.key] = c.multiplier;
+        for (const p of res.pieces) {
+          map[p.id] = {
+            adjustedWearPct:    p.adjustedWearPct,
+            effectiveKm:        p.effectiveKmSinceInstall,
+            adjustedIntervalKm: p.adjustedIntervalKm,
+            multiplier:         multByComp[p.component] ?? 1,
+          };
+        }
+      }
+      setAiWear(map);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -265,6 +304,7 @@ export function EquipmentPage() {
           <PiecesPanel
             loading={loading}
             items={items}
+            aiWear={aiWear}
             unboundCount={unboundCount}
             bikes={bikes}
             isMobile={isMobile}
@@ -342,11 +382,12 @@ function TabBar({ tab, onChange }: { tab: EquipTab; onChange: (t: EquipTab) => v
 }
 
 function PiecesPanel({
-  loading, items, unboundCount, bikes, isMobile,
+  loading, items, aiWear, unboundCount, bikes, isMobile,
   onAdd, onBulkAssign, onEdit, onReplaced, onDelete,
 }: {
   loading: boolean;
   items: Equipment[];
+  aiWear: Record<string, AiWear>;
   unboundCount: number;
   bikes: Bike[];
   isMobile: boolean;
@@ -388,6 +429,7 @@ function PiecesPanel({
                   <EquipmentCard
                     key={item.id}
                     item={item}
+                    ai={aiWear[item.id]}
                     onEdit={() => onEdit(item)}
                     onReplaced={() => onReplaced(item.id)}
                     onDelete={() => onDelete(item.id)}
@@ -588,17 +630,24 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
 // ── Card ────────────────────────────────────────────────────────────
 
 function EquipmentCard({
-  item, onEdit, onReplaced, onDelete,
+  item, ai, onEdit, onReplaced, onDelete,
 }: {
   item: Equipment;
+  /** Terrain-adjusted wear from the AI analysis, when this piece is covered. */
+  ai?: AiWear;
   onEdit: () => void;
   onReplaced: () => void;
   onDelete: () => void;
 }) {
   const meta = KIND_META[item.kind];
-  const pct = Math.min(100, item.wearRatio * 100);
-  const overdue = item.wearRatio > 1;
-  const warning = item.wearRatio > 0.75 && !overdue;
+  // The AI-adjusted ratio drives the bar + colours when available (it counts
+  // effective km: descents and braking wear pads faster than flat km). Raw
+  // odometer ratio is the fallback for uncovered pieces / failed analysis.
+  const aiRatio = ai?.adjustedWearPct != null ? ai.adjustedWearPct / 100 : null;
+  const ratio = aiRatio ?? item.wearRatio;
+  const pct = Math.min(100, ratio * 100);
+  const overdue = ratio > 1;
+  const warning = ratio > 0.75 && !overdue;
   const color = overdue ? '#A23838' : warning ? tokens.terra : tokens.green;
 
   return (
@@ -653,14 +702,26 @@ function EquipmentCard({
           }} />
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkMid }}>
-          <span><strong style={{ color: tokens.ink }}>{item.kmSinceInstall.toFixed(0)} km</strong> depuis la pose</span>
+          <span>
+            <strong style={{ color: tokens.ink }}>{item.kmSinceInstall.toFixed(0)} km</strong> depuis la pose
+            {aiRatio != null && ai && (
+              <span style={{ color: tokens.inkLight }}> · ≈ {ai.effectiveKm.toLocaleString('fr-FR')} km équivalents</span>
+            )}
+          </span>
           <span style={{ color, fontWeight: 700 }}>
-            {overdue ? `+${((item.wearRatio - 1) * 100).toFixed(0)} % dépassement` : `${(item.wearRatio * 100).toFixed(0)} % d'usure`}
+            {overdue ? `+${((ratio - 1) * 100).toFixed(0)} % dépassement` : `${(ratio * 100).toFixed(0)} % d'usure`}
+            {aiRatio != null ? ' (terrain)' : ''}
           </span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight }}>
           <span>posée le {new Date(item.installed_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-          <span>durée de vie {item.lifetime_km.toLocaleString('fr-FR')} km</span>
+          <span>
+            {ai?.adjustedIntervalKm != null ? (
+              <>durée de vie {item.lifetime_km.toLocaleString('fr-FR')} km → <strong style={{ color: tokens.ink }}>{ai.adjustedIntervalKm.toLocaleString('fr-FR')} km</strong> chez toi (×{ai.multiplier.toFixed(1)})</>
+            ) : (
+              <>durée de vie {item.lifetime_km.toLocaleString('fr-FR')} km</>
+            )}
+          </span>
         </div>
       </div>
 
