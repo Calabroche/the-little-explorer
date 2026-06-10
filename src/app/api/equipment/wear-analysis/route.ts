@@ -79,6 +79,20 @@ function smooth(values: number[], w: number): number[] {
   return out;
 }
 
+/** Rolling-median despike: kills single-sample altitude jumps (bridge,
+ *  tunnel, barometric recalibration) that a moving average only spreads
+ *  out — those spikes were fabricating impossible ±30 % grades. */
+function despike(values: number[], w: number): number[] {
+  if (values.length === 0) return values;
+  const out = new Array<number>(values.length);
+  for (let i = 0; i < values.length; i++) {
+    const lo = Math.max(0, i - w), hi = Math.min(values.length - 1, i + w);
+    const win = values.slice(lo, hi + 1).sort((a, b) => a - b);
+    out[i] = win[Math.floor(win.length / 2)];
+  }
+  return out;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function computeRideMetrics(row: any): RideMetrics {
   const p = row.payload ?? {};
@@ -103,11 +117,24 @@ function computeRideMetrics(row: any): RideMetrics {
   const n = Math.min(altitudeRaw.length, dist.length);
   if (n >= 60 && km > 1) {
     base.hasStreams = true;
-    const alt = smooth(altitudeRaw.slice(0, n), 4);   // kill GPS altitude jitter
+    // Despike (median) THEN smooth: a 10 m altitude jump under a bridge
+    // otherwise survives averaging and fabricates a ±25 % "grade".
+    const alt = smooth(despike(altitudeRaw.slice(0, n), 3), 4);
 
-    // Gradient over ≥40 m windows, each segment weighted by its length.
-    const WINDOW_M = 40;
+    // D+/D− via a 3 m hysteresis accumulator on the cleaned altitude —
+    // immune to residual jitter, unlike summing every tiny delta.
     let ascent = 0, descent = 0;
+    let refAlt = alt[0];
+    for (let k = 1; k < n; k++) {
+      const dA = alt[k] - refAlt;
+      if (dA >= 3)       { ascent  += dA; refAlt = alt[k]; }
+      else if (dA <= -3) { descent -= dA; refAlt = alt[k]; }
+    }
+
+    // Grades over ≥100 m windows (the standard for trustworthy min/max:
+    // anything steeper than ±25 % sustained over 100 m of road is sensor
+    // noise, not terrain — the world's steepest streets are ~30 %).
+    const WINDOW_M = 100;
     let climbM = 0, descM = 0, steepDescM = 0;
     let absSum = 0, absW = 0;
     let climbSum = 0, climbW = 0, descSum = 0, descW = 0;
@@ -118,17 +145,15 @@ function computeRideMetrics(row: any): RideMetrics {
       let j = i + 1;
       while (j < n - 1 && dist[j] - dist[i] < WINDOW_M) j++;
       const dD = dist[j] - dist[i];
-      if (dD >= 5) {
-        const dA = alt[j] - alt[i];
-        const g = (dA / dD) * 100;
-        if (g > -30 && g < 30) {            // beyond ±30 % on a road ride = noise
+      if (dD >= 60) {
+        const g = ((alt[j] - alt[i]) / dD) * 100;
+        if (g > -25 && g < 25) {
           if (g < minG) minG = g;
           if (g > maxG) maxG = g;
           absSum += Math.abs(g) * dD; absW += dD;
           if (g >= 2)  { climbM += dD; climbSum += g * dD; climbW += dD; }
           if (g <= -2) { descM  += dD; descSum  += g * dD; descW  += dD; }
           if (g <= -5) steepDescM += dD;
-          if (dA > 0) ascent += dA; else descent -= dA;
         }
       }
       i = j;
