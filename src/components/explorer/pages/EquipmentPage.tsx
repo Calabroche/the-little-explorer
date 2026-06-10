@@ -279,6 +279,7 @@ export function EquipmentPage() {
         {showAdd && (
           <AddDialog
             bikes={bikes}
+            totalKm={totalKm}
             onClose={() => setShowAdd(false)}
             onCreated={async () => { setShowAdd(false); await load(); }}
           />
@@ -696,9 +697,11 @@ function EquipmentCard({
 // ── Add dialog ─────────────────────────────────────────────────────
 
 function AddDialog({
-  bikes, onClose, onCreated,
+  bikes, totalKm, onClose, onCreated,
 }: {
   bikes: Bike[];
+  /** Global cycling total — fallback when the piece isn't bound to a bike. */
+  totalKm: number;
   onClose: () => void;
   onCreated: () => Promise<void>;
 }) {
@@ -727,6 +730,12 @@ function AddDialog({
     setSaving(true);
     setError(null);
     try {
+      // The form asks for "km déjà sur la pièce" but the API stores the
+      // BIKE's odometer at install (wear = bike total − snapshot). Convert
+      // here: a part with 445 km of use on a 445 km bike → snapshot 0.
+      const scopedTotal = gearId
+        ? (bikes.find(b => b.id === gearId)?.totalKm ?? totalKm)
+        : totalKm;
       const r = await fetch('/api/equipment', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -735,7 +744,7 @@ function AddDialog({
           kind,
           lifetime_km:     lifetime,
           installed_at:    new Date(installedAt + 'T12:00:00Z').toISOString(),
-          installed_at_km: typeof installedKm === 'number' ? installedKm : undefined,
+          installed_at_km: typeof installedKm === 'number' ? Math.max(0, scopedTotal - installedKm) : undefined,
           notes:           notes.trim() || undefined,
           gear_id:         gearId || null,
         }),
@@ -870,6 +879,7 @@ function EditDialog({
   const [lifetime, setLifetime] = useState(item.lifetime_km);
   const [notes, setNotes]       = useState(item.notes ?? '');
   const [gearId, setGearId]     = useState<string>(item.gear_id ?? '');
+  const [kmOnPart, setKmOnPart] = useState<number | ''>(Math.max(0, Math.round(item.kmSinceInstall)));
   const [saving, setSaving]     = useState(false);
   const [error, setError]       = useState<string | null>(null);
 
@@ -888,6 +898,11 @@ function EditDialog({
           // Send null explicitly when unbound so the server clears the
           // binding (vs. undefined which is "don't touch").
           gear_id:     gearId || null,
+          // The user edits "km déjà sur la pièce"; the DB stores the bike's
+          // odometer at install. Convert: snapshot = bike total − km on part.
+          installed_at_km: typeof kmOnPart === 'number'
+            ? Math.max(0, Math.round(item.totalKmToday - kmOnPart))
+            : undefined,
         }),
       });
       if (!r.ok && r.status !== 204) {
@@ -914,7 +929,7 @@ function EditDialog({
           Éditer
         </h2>
         <p style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight, margin: '0 0 20px' }}>
-          Type, date de pose et km initiaux ne sont pas éditables ici (ils changeraient le calcul d&apos;usure rétroactivement). Si tu veux les corriger : supprime + re-ajoute.
+          Le type et la date de pose ne sont pas éditables ici. Si tu veux les corriger : supprime + re-ajoute.
         </p>
 
         {error && (
@@ -945,6 +960,11 @@ function EditDialog({
         <Field label="Durée de vie estimée (km)">
           <input type="number" value={lifetime} min={100} max={50000} step={100}
             onChange={e => setLifetime(Number(e.target.value))} style={INPUT} />
+        </Field>
+
+        <Field label="Km déjà sur la pièce">
+          <input type="number" value={kmOnPart} min={0}
+            onChange={e => setKmOnPart(e.target.value === '' ? '' : Number(e.target.value))} style={INPUT} />
         </Field>
 
         <Field label="Notes (optionnel)">
