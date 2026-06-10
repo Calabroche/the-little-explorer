@@ -23,6 +23,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { tokens } from '../tokens';
 import { Label, useIsMobile } from '../ui';
 import { ServiceLogPanel } from './ServiceLogPanel';
+import { WearAnalysisPanel } from './WearAnalysisPanel';
 
 type EquipmentKind =
   | 'frame' | 'fork'
@@ -140,7 +141,7 @@ export function EquipmentPage() {
   //   pieces    — the existing wear-item tracker (chain, brakes, …)
   //   service   — the new carnet d'entretien (lube, bleed, tune, …)
   // Local state, resets when navigating away.
-  const [tab, setTab] = useState<'pieces' | 'service'>('pieces');
+  const [tab, setTab] = useState<'pieces' | 'service' | 'analyse'>('pieces');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -258,6 +259,8 @@ export function EquipmentPage() {
 
         {tab === 'service' ? (
           <ServiceLogPanel bikes={bikes} />
+        ) : tab === 'analyse' ? (
+          <WearAnalysisPanel bikes={bikes} />
         ) : (
           <PiecesPanel
             loading={loading}
@@ -298,10 +301,13 @@ export function EquipmentPage() {
 //    sibling of the Pièces tab without duplicating the loading/empty
 //    plumbing) ──────────────────────────────────────────────────────
 
-function TabBar({ tab, onChange }: { tab: 'pieces' | 'service'; onChange: (t: 'pieces' | 'service') => void }) {
-  const tabs: { id: 'pieces' | 'service'; label: string; icon: string }[] = [
+type EquipTab = 'pieces' | 'service' | 'analyse';
+
+function TabBar({ tab, onChange }: { tab: EquipTab; onChange: (t: EquipTab) => void }) {
+  const tabs: { id: EquipTab; label: string; icon: string }[] = [
     { id: 'pieces',  label: 'Pièces d’usure', icon: '⚙' },
     { id: 'service', label: 'Carnet d’entretien', icon: '✦' },
+    { id: 'analyse', label: 'Analyse d’usure IA', icon: '◬' },
   ];
   return (
     <div style={{
