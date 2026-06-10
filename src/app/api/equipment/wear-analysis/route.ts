@@ -69,17 +69,6 @@ const COMPONENT_LABEL: Record<ComponentKey, string> = {
 /** Total rider+bike mass for the braking-energy estimate (kg). */
 const MASS_KG = 75;
 
-function smooth(values: number[], w: number): number[] {
-  if (values.length === 0) return values;
-  const out = new Array<number>(values.length);
-  for (let i = 0; i < values.length; i++) {
-    let s = 0, n = 0;
-    for (let j = Math.max(0, i - w); j <= Math.min(values.length - 1, i + w); j++) { s += values[j]; n++; }
-    out[i] = s / n;
-  }
-  return out;
-}
-
 /** Rolling-median despike: kills single-sample altitude jumps (bridge,
  *  tunnel, barometric recalibration) that a moving average only spreads
  *  out — those spikes were fabricating impossible ±30 % grades. */
@@ -118,42 +107,35 @@ function computeRideMetrics(row: any): RideMetrics {
   const n = Math.min(altitudeRaw.length, dist.length);
   if (n >= 60 && km > 1) {
     base.hasStreams = true;
-    // Despike (median) THEN smooth — used for the internal terrain buckets
-    // below. The DISPLAYED numbers come from the app's references instead:
-    //   - pente min/max: shared calcInclines (same as the activity page,
-    //     calibrated to Strava ±0.2 %)
+    // Everything derives from the SAME reference basis as the activity page:
+    //   - pente min/max: shared calcInclines (calibrated to Strava ±0.2 %)
     //   - D+: Strava's official total (row.elevation_m), already in `base`
     //   - D−: D+ corrected by the net start→end drop (exact for loops)
-    const alt = smooth(despike(altitudeRaw.slice(0, n), 3), 4);
+    //   - the distribution below: same 5-sample / ≥8 m / ±30 % windowing as
+    //     calcInclines (non-overlapping), on median-despiked altitude, so
+    //     pente moy / parts montée-descente / descente raide live on the
+    //     same scale as the displayed extremes.
+    const alt = despike(altitudeRaw.slice(0, n), 3);
 
     const inc = calcInclines(altitudeRaw.slice(0, n), dist.slice(0, n));
     base.minGradePct = inc.min_incline;
     base.maxGradePct = inc.max_incline;
     base.descentM = Math.max(0, Math.round(base.ascentM + (alt[0] - alt[n - 1])));
 
-    // Grades over ≥100 m windows for the wear model's terrain distribution
-    // (steep-descent share, climb share, weighted averages). Robust to noise;
-    // not shown on the activity page so no consistency constraint.
-    const WINDOW_M = 100;
+    const WINDOW = 5, MIN_DIST = 8, CAP = 30;
     let climbM = 0, descM = 0, steepDescM = 0;
     let absSum = 0, absW = 0;
     let climbSum = 0, climbW = 0, descSum = 0, descW = 0;
 
-    let i = 0;
-    while (i < n - 1) {
-      let j = i + 1;
-      while (j < n - 1 && dist[j] - dist[i] < WINDOW_M) j++;
-      const dD = dist[j] - dist[i];
-      if (dD >= 60) {
-        const g = ((alt[j] - alt[i]) / dD) * 100;
-        if (g > -25 && g < 25) {
-          absSum += Math.abs(g) * dD; absW += dD;
-          if (g >= 2)  { climbM += dD; climbSum += g * dD; climbW += dD; }
-          if (g <= -2) { descM  += dD; descSum  += g * dD; descW  += dD; }
-          if (g <= -5) steepDescM += dD;
-        }
-      }
-      i = j;
+    for (let i = 0; i < n - WINDOW; i += WINDOW) {
+      const dD = dist[i + WINDOW] - dist[i];
+      if (dD < MIN_DIST) continue;
+      const g = ((alt[i + WINDOW] - alt[i]) / dD) * 100;
+      if (g <= -CAP || g >= CAP) continue;
+      absSum += Math.abs(g) * dD; absW += dD;
+      if (g >= 2)  { climbM += dD; climbSum += g * dD; climbW += dD; }
+      if (g <= -2) { descM  += dD; descSum  += g * dD; descW  += dD; }
+      if (g <= -5) steepDescM += dD;
     }
     base.avgGradePct = absW  > 0 ? +(absSum  / absW ).toFixed(1) : null;
     base.avgClimbPct = climbW > 0 ? +(climbSum / climbW).toFixed(1) : null;
