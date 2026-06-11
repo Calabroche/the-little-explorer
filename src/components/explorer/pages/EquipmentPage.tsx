@@ -24,6 +24,7 @@ import { tokens } from '../tokens';
 import { Label, useIsMobile } from '../ui';
 import { ServiceLogPanel } from './ServiceLogPanel';
 import { WearAnalysisPanel } from './WearAnalysisPanel';
+import { FindProModal } from './FindProModal';
 
 type EquipmentKind =
   | 'frame' | 'fork'
@@ -150,6 +151,7 @@ export function EquipmentPage() {
   //   service   — the new carnet d'entretien (lube, bleed, tune, …)
   // Local state, resets when navigating away.
   const [tab, setTab] = useState<'pieces' | 'service' | 'analyse'>('pieces');
+  const [showFindPro, setShowFindPro] = useState(false);
   // Terrain-adjusted wear per piece id, fed by /api/equipment/wear-analysis
   // for each bike that carries covered pieces. The cards then show the
   // AI-adjusted wear instead of the raw odometer ratio.
@@ -284,6 +286,19 @@ export function EquipmentPage() {
         {/* Tab toggle — Pièces (wear tracker) vs Entretien (carnet).
             Sits just under the header so the bike pills stay above
             both views (they're shared context). */}
+        {/* "Trouver un professionnel" — available from every Matériel tab. */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+          <button onClick={() => setShowFindPro(true)} style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            padding: '9px 16px', background: tokens.surface, color: tokens.terra,
+            border: `1px solid ${tokens.terra}`, borderRadius: 4, cursor: 'pointer',
+            fontFamily: "'Space Grotesk'", fontSize: 12, fontWeight: 700,
+            letterSpacing: '0.04em',
+          }}>
+            🔧 Trouver un professionnel
+          </button>
+        </div>
+
         <TabBar tab={tab} onChange={setTab} />
 
         {error && (
@@ -315,6 +330,8 @@ export function EquipmentPage() {
             onDelete={deleteItem}
           />
         )}
+
+        {showFindPro && <FindProModal onClose={() => setShowFindPro(false)} />}
 
         {showAdd && (
           <AddDialog
