@@ -96,6 +96,15 @@ async function totalCyclingKm(userId: string, gearId?: string | null): Promise<n
   return (data ?? []).reduce((s, r) => s + Number(r.distance_km ?? 0), 0);
 }
 
+// Gear hidden from the Matériel section for specific accounts only — a bike
+// that shows up on Strava but the rider doesn't actually own / track parts for.
+// Keyed by user_id + gear_id so it never touches anyone else's multi-bike setup,
+// and it ONLY applies here (the bike still works in the planner, activities…).
+const HIDDEN_EQUIPMENT_GEAR: Record<string, ReadonlySet<string>> = {
+  // Florian — "Elon musk" isn't his bike.
+  'f8f6b943-ac6a-461b-b0da-e43b3a7f31db': new Set(['b17683301']),
+};
+
 /** All bikes the user has on Strava, each with its current cumulative
  *  km. Used both for the GET payload and to look up scoped totals. */
 async function listBikesWithKm(userId: string): Promise<Bike[]> {
@@ -110,7 +119,9 @@ async function listBikesWithKm(userId: string): Promise<Bike[]> {
     return [];
   }
   // Fan-out one km query per bike in parallel.
-  const bikes = (data ?? []) as Array<{ id: string; name: string; primary_bike: boolean }>;
+  const hidden = HIDDEN_EQUIPMENT_GEAR[userId];
+  const bikes = ((data ?? []) as Array<{ id: string; name: string; primary_bike: boolean }>)
+    .filter(b => !hidden?.has(b.id));
   const totals = await Promise.all(bikes.map(b => totalCyclingKm(userId, b.id)));
   return bikes.map((b, i) => ({
     id:           b.id,
@@ -145,7 +156,12 @@ export async function GET(req: NextRequest) {
   const bikesById  = new Map(bikes.map(b => [b.id, b]));
   const totalAllKm = await totalCyclingKm(authed.id);
 
-  const rows: EquipmentRow[] = (data ?? []).map(r => {
+  // Drop parts bound to a bike hidden from Matériel for this account, so the
+  // hidden bike never resurfaces as an orphan piece.
+  const hiddenGear = HIDDEN_EQUIPMENT_GEAR[authed.id];
+  const visible = (data ?? []).filter(r => !(r.gear_id && hiddenGear?.has(r.gear_id as string)));
+
+  const rows: EquipmentRow[] = visible.map(r => {
     const installed = Number(r.installed_at_km ?? 0);
     const gearId    = (r.gear_id ?? null) as string | null;
     const bike      = gearId ? bikesById.get(gearId) : undefined;
