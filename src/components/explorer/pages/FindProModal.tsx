@@ -13,6 +13,7 @@
 import { useState, useRef, useEffect, useCallback, CSSProperties } from 'react';
 import dynamic from 'next/dynamic';
 import { tokens } from '../tokens';
+import { BIKE_BRANDS } from '@/lib/bikeBrands';
 
 const MapContainer = dynamic(() => import('react-leaflet').then(m => m.MapContainer), { ssr: false });
 const TileLayer    = dynamic(() => import('react-leaflet').then(m => m.TileLayer),    { ssr: false });
@@ -25,6 +26,7 @@ interface Shop {
   id: string; name: string; lat: number; lng: number; distKm: number;
   address: string | null; phone: string | null; website: string | null;
   hours: string | null; repairs: boolean; type: string; brandMatch: boolean; brandOnSite: boolean;
+  brands: string[];
 }
 interface Suggestion { name: string; label?: string; postal?: string; lat: number; lng: number }
 
@@ -33,6 +35,7 @@ const FONT = "'Space Grotesk'";
 
 export function FindProModal({ onClose }: { onClose: () => void }) {
   const [brand, setBrand]   = useState('Canyon');
+  const [customBrand, setCustomBrand] = useState(false);
   const [radius, setRadius] = useState(10);
   const [loc, setLoc]       = useState<Loc | null>(null);
 
@@ -113,7 +116,20 @@ export function FindProModal({ onClose }: { onClose: () => void }) {
         <div style={{ display: 'grid', gap: 12, marginBottom: 14 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <Field label="Ta marque de vélo">
-              <input value={brand} onChange={e => setBrand(e.target.value)} placeholder="Canyon" style={INPUT} />
+              <select
+                value={customBrand ? '__other__' : brand}
+                onChange={e => {
+                  if (e.target.value === '__other__') { setCustomBrand(true); setBrand(''); }
+                  else { setCustomBrand(false); setBrand(e.target.value); }
+                }}
+                style={{ ...INPUT, cursor: 'pointer', appearance: 'auto' }}
+              >
+                {BIKE_BRANDS.map(b => <option key={b} value={b}>{b}</option>)}
+                <option value="__other__">Autre marque…</option>
+              </select>
+              {customBrand && (
+                <input value={brand} onChange={e => setBrand(e.target.value)} placeholder="Ta marque" autoFocus style={{ ...INPUT, marginTop: 8 }} />
+              )}
             </Field>
             <Field label="Rayon">
               <div style={{ display: 'flex', gap: 6 }}>
@@ -230,6 +246,15 @@ export function FindProModal({ onClose }: { onClose: () => void }) {
                           {s.repairs && <Badge color={tokens.green}>🔧 Réparation</Badge>}
                           {s.type === 'shop' && <Badge color={tokens.inkMid}>Magasin vélo</Badge>}
                         </div>
+                        {s.brands.length > 0 && (
+                          <div style={{ fontFamily: FONT, fontSize: 12, color: tokens.inkMid, marginBottom: 3 }}>
+                            <span style={{ color: tokens.inkLight }}>Marques : </span>
+                            {s.brands.map((b, i) => {
+                              const hit = b.toLowerCase() === brand.toLowerCase();
+                              return <span key={b} style={{ color: hit ? SPECIAL : tokens.ink, fontWeight: hit ? 700 : 500 }}>{b}{i < s.brands.length - 1 ? ', ' : ''}</span>;
+                            })}
+                          </div>
+                        )}
                         {s.address && <div style={{ fontFamily: FONT, fontSize: 12, color: tokens.inkMid }}>{s.address}</div>}
                         {s.hours && <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.inkLight, marginTop: 2 }}>🕑 {s.hours}</div>}
                         <div style={{ display: 'flex', gap: 14, marginTop: 6, flexWrap: 'wrap' }}>

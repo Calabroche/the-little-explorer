@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthedUser } from '@/lib/api-auth';
 import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { runOverpass, elementLatLng } from '@/lib/overpass';
+import { brandsInText } from '@/lib/bikeBrands';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -29,23 +30,23 @@ interface Shop {
   repairs:  boolean;        // OSM explicitly tags repair
   type:     'shop' | 'repair' | 'sports';
   brandMatch: boolean;      // OSM tags mention the rider's brand
-  brandOnSite: boolean;     // the shop's website mentions the brand
+  brandOnSite: boolean;     // the rider's brand appears on the shop's website
+  brands:   string[];       // all known brands found (OSM tag + website scan)
 }
 
 const WEB_UA = 'Mozilla/5.0 (compatible; TheLittleExplorer/0.1; +https://the-little-explorer-app.vercel.app)';
 
-/** Fetch a shop homepage and tell whether it mentions the brand. Best-effort:
- *  many sites are slow / block bots, so we cap the time and swallow errors. */
-async function siteMentionsBrand(website: string, brand: string, timeoutMs: number): Promise<boolean> {
+/** Fetch a shop homepage and return the known bike brands it mentions.
+ *  Best-effort: many sites are slow / block bots, so we cap the time. */
+async function siteBrands(website: string, timeoutMs: number): Promise<string[]> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const res = await fetch(website, { signal: ctrl.signal, headers: { 'User-Agent': WEB_UA, 'Accept': 'text/html' }, redirect: 'follow' });
-    if (!res.ok) return false;
-    const html = (await res.text()).toLowerCase();
-    return html.includes(brand);
+    if (!res.ok) return [];
+    return brandsInText(await res.text());
   } catch {
-    return false;
+    return [];
   } finally {
     clearTimeout(timer);
   }
@@ -123,6 +124,8 @@ export async function GET(req: NextRequest) {
       || t.craft === 'bicycle'
       || /repair|réparation|atelier/.test(tagsBlob);
     const type: Shop['type'] = t.shop === 'bicycle' ? 'shop' : t.shop === 'sports' ? 'sports' : 'repair';
+    // Brands listed in OSM tags (rare, but reliable when present).
+    const osmBrands = t.brand ? t.brand.split(/[;,/]/).map(s => s.trim()).filter(Boolean) : [];
 
     shops.push({
       id: `${el.type}/${el.id}`,
@@ -138,20 +141,23 @@ export async function GET(req: NextRequest) {
       type,
       brandMatch: brand.length >= 3 && tagsBlob.includes(brand),
       brandOnSite: false,
+      brands: osmBrands,
     });
   }
   shops.sort((a, b) => a.distKm - b.distKm);
   const top = shops.slice(0, 200);
 
-  // Best-effort brand specialisation: scan the websites of the nearest shops
-  // (those with a site) and flag the ones whose homepage mentions the brand.
-  // Bounded so it can't blow the function budget: nearest 36, 4 s each, all in
-  // parallel (≈ one 4 s wave).
-  if (brand.length >= 3) {
-    const toScan = top.filter(s => s.website).slice(0, 36);
-    await Promise.all(toScan.map(async s => {
-      s.brandOnSite = await siteMentionsBrand(s.website!, brand, 4000);
-    }));
+  // Best-effort: scan the nearest shops' homepages and collect the known bike
+  // brands they mention (which brands they sell / service). Bounded so it can't
+  // blow the function budget: nearest 36, 4 s each, all in parallel.
+  const toScan = top.filter(s => s.website).slice(0, 36);
+  await Promise.all(toScan.map(async s => {
+    const found = await siteBrands(s.website!, 4000);
+    if (found.length) s.brands = Array.from(new Set([...s.brands, ...found]));
+  }));
+  // Recompute brand flags now that website brands are known.
+  for (const s of top) {
+    s.brandOnSite = brand.length >= 3 && s.brands.some(b => b.toLowerCase() === brand);
   }
 
   return NextResponse.json(
