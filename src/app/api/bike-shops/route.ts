@@ -70,13 +70,16 @@ export async function GET(req: NextRequest) {
   const dLat = radiusKm / 111;
   const dLng = radiusKm / (111 * Math.cos((lat * Math.PI) / 180));
   const box = `${(lat - dLat).toFixed(4)},${(lng - dLng).toFixed(4)},${(lat + dLat).toFixed(4)},${(lng + dLng).toFixed(4)}`;
+  // NB: tag keys with colons (service:bicycle:repair) MUST be quoted in
+  // Overpass QL, else the parser errors on the ':' (400 → empty list). And
+  // `out center` already includes tags — `out center tags` is a parse error.
   const query =
     `[out:json][timeout:25];(` +
     `nwr(${box})[shop=bicycle];` +
     `nwr(${box})[craft=bicycle];` +
-    `nwr(${box})[shop=sports][service:bicycle:repair];` +
-    `nwr(${box})[service:bicycle:repair=yes];` +
-    `);out center tags;`;
+    `nwr(${box})[shop=sports]["service:bicycle:repair"];` +
+    `nwr(${box})["service:bicycle:repair"=yes];` +
+    `);out center;`;
 
   const data = await runOverpass(query, 14_000, 28_000);
   if (!data) return NextResponse.json({ shops: [] });
