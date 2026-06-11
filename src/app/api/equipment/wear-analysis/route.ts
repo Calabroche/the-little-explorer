@@ -329,6 +329,28 @@ function buildNarrative(bikeName: string, rides: RideMetrics[], agg: Record<Comp
   return lines.join(' ');
 }
 
+/** Classify each ride by its brake-pad multiplier and return per-bucket
+ *  km + the km-weighted average ×. The blend over buckets equals the global
+ *  pad × (proof that the verdict already averages flat vs mountain rides). */
+function padDistribution(rides: RideMetrics[], totKm: number) {
+  const BUCKETS = [
+    { key: 'plat',     label: 'Plates',        hint: 'peu de descente, peu de freinage', test: (m: number) => m < 1.0 },
+    { key: 'mixte',    label: 'Vallonnées',    hint: 'terrain mixte',                     test: (m: number) => m >= 1.0 && m < 1.7 },
+    { key: 'montagne', label: 'Montagneuses',  hint: 'cols, descentes appuyées',          test: (m: number) => m >= 1.7 },
+  ];
+  return BUCKETS.map(b => {
+    const rs = rides.filter(r => b.test(r.mult.brake_pads));
+    const km = rs.reduce((s, r) => s + r.km, 0);
+    return {
+      key: b.key, label: b.label, hint: b.hint,
+      count: rs.length,
+      km: +km.toFixed(0),
+      kmShare: totKm > 0 ? +((km / totKm) * 100).toFixed(0) : 0,
+      avgMult: rs.length ? +(rs.reduce((s, r) => s + r.mult.brake_pads * r.km, 0) / km).toFixed(2) : 0,
+    };
+  }).filter(b => b.count > 0);
+}
+
 // ── Route ─────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
@@ -455,6 +477,11 @@ export async function GET(req: NextRequest) {
     components,
     pieces,
     rides,
+    // Per-ride classification by the part that's most terrain-sensitive
+    // (brake pads), with the km-weighted average × per bucket. The buckets'
+    // km-weighted blend equals the displayed pad × exactly (the wear rate is
+    // affine), which is precisely the "average over my rides" the user wants.
+    distribution: padDistribution(rides, totKm),
     narrative: buildNarrative(gear.name as string, rides, agg),
   // no-store: a 5-min browser cache here made fixes look only half-applied
   // (stale table next to a fresh activity page). The analysis is recomputed

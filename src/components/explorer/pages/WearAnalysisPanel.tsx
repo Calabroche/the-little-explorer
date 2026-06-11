@@ -35,9 +35,12 @@ interface Component {
   example: string | null;
 }
 
+interface DistBucket { key: string; label: string; hint: string; count: number; km: number; kmShare: number; avgMult: number }
+
 interface Analysis {
   gear: { id: string; name: string };
   terrain: { rideCount: number; totalKm: number; ascentPerKm: number; descentPerKm: number; steepDescKm: number; brakeEvents: number; brakeKJ: number };
+  distribution?: DistBucket[];
   components: Component[];
   pieces: { id: string; name: string; component: string; lifetimeKm: number; rawKmSinceInstall: number; effectiveKmSinceInstall: number; adjustedWearPct: number | null; rawWearPct: number | null; adjustedIntervalKm: number | null }[];
   rides: RideRow[];
@@ -124,9 +127,47 @@ export function WearAnalysisPanel({ bikes }: { bikes: Bike[] }) {
             ))}
           </div>
 
+          {/* 2b. Ride distribution — proves the verdict blends flat & mountain */}
+          {data.distribution && data.distribution.length > 0 && (() => {
+            const pads = data.components.find(c => c.key === 'brake_pads');
+            const colorFor = (k: string) => k === 'montagne' ? '#A33' : k === 'mixte' ? tokens.terra : tokens.green;
+            return (
+              <>
+                <p style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: tokens.terra, textTransform: 'uppercase', margin: '0 0 4px' }}>
+                  § RÉPARTITION DE TES SORTIES
+                </p>
+                <p style={{ fontFamily: FONT, fontSize: 11, color: tokens.inkLight, margin: '0 0 10px' }}>
+                  Chaque sortie est classée selon son usure plaquettes. La moyenne pondère plat et montagne.
+                </p>
+                <div style={{ background: tokens.surface, border: `1px solid ${tokens.creamBorder}`, borderRadius: 4, padding: '4px 14px', marginBottom: 20 }}>
+                  {data.distribution.map((b, i) => (
+                    <div key={b.key} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: i < data.distribution!.length - 1 ? `1px solid ${tokens.creamBorder}` : 'none' }}>
+                      <span style={{ width: 10, height: 10, borderRadius: 3, background: colorFor(b.key), flexShrink: 0 }} />
+                      <span style={{ minWidth: 0, flex: 1 }}>
+                        <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: tokens.ink }}>
+                          {b.count} {b.count > 1 ? 'sorties ' : 'sortie '}{b.label.toLowerCase()}
+                        </span>
+                        <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.inkLight, display: 'block' }}>
+                          {b.km} km ({b.kmShare} %) · {b.hint}
+                        </span>
+                      </span>
+                      <span style={{ fontFamily: "'Playfair Display'", fontSize: 16, fontWeight: 800, color: colorFor(b.key), flexShrink: 0 }}>×{b.avgMult.toFixed(1)}</span>
+                    </div>
+                  ))}
+                  {pads && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '12px 0', borderTop: `2px solid ${tokens.creamBorder}` }}>
+                      <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 700, color: tokens.ink }}>Moyenne pondérée (plaquettes)</span>
+                      <span style={{ fontFamily: "'Playfair Display'", fontSize: 18, fontWeight: 800, color: tokens.terra }}>×{pads.multiplier.toFixed(2)}</span>
+                    </div>
+                  )}
+                </div>
+              </>
+            );
+          })()}
+
           {/* 3. Component multipliers — click a row to expand the maths */}
           <p style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: tokens.terra, textTransform: 'uppercase', margin: '0 0 4px' }}>
-            § USURE PAR COMPOSANT (vs terrain plat)
+            § USURE PAR COMPOSANT (vs terrain mixte de référence)
           </p>
           <p style={{ fontFamily: FONT, fontSize: 11, color: tokens.inkLight, margin: '0 0 10px' }}>
             Touche un composant pour voir le détail du calcul.
