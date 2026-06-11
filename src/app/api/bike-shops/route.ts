@@ -29,6 +29,26 @@ interface Shop {
   repairs:  boolean;        // OSM explicitly tags repair
   type:     'shop' | 'repair' | 'sports';
   brandMatch: boolean;      // OSM tags mention the rider's brand
+  brandOnSite: boolean;     // the shop's website mentions the brand
+}
+
+const WEB_UA = 'Mozilla/5.0 (compatible; TheLittleExplorer/0.1; +https://the-little-explorer-app.vercel.app)';
+
+/** Fetch a shop homepage and tell whether it mentions the brand. Best-effort:
+ *  many sites are slow / block bots, so we cap the time and swallow errors. */
+async function siteMentionsBrand(website: string, brand: string, timeoutMs: number): Promise<boolean> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(website, { signal: ctrl.signal, headers: { 'User-Agent': WEB_UA, 'Accept': 'text/html' }, redirect: 'follow' });
+    if (!res.ok) return false;
+    const html = (await res.text()).toLowerCase();
+    return html.includes(brand);
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): number {
@@ -117,12 +137,25 @@ export async function GET(req: NextRequest) {
       repairs,
       type,
       brandMatch: brand.length >= 3 && tagsBlob.includes(brand),
+      brandOnSite: false,
     });
   }
   shops.sort((a, b) => a.distKm - b.distKm);
+  const top = shops.slice(0, 200);
+
+  // Best-effort brand specialisation: scan the websites of the nearest shops
+  // (those with a site) and flag the ones whose homepage mentions the brand.
+  // Bounded so it can't blow the function budget: nearest 36, 4 s each, all in
+  // parallel (≈ one 4 s wave).
+  if (brand.length >= 3) {
+    const toScan = top.filter(s => s.website).slice(0, 36);
+    await Promise.all(toScan.map(async s => {
+      s.brandOnSite = await siteMentionsBrand(s.website!, brand, 4000);
+    }));
+  }
 
   return NextResponse.json(
-    { shops: shops.slice(0, 200) },
+    { shops: top },
     { headers: { 'Cache-Control': 'private, max-age=600' } },
   );
 }

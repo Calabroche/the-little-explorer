@@ -24,7 +24,7 @@ interface Loc { lat: number; lng: number; label: string }
 interface Shop {
   id: string; name: string; lat: number; lng: number; distKm: number;
   address: string | null; phone: string | null; website: string | null;
-  hours: string | null; repairs: boolean; type: string; brandMatch: boolean;
+  hours: string | null; repairs: boolean; type: string; brandMatch: boolean; brandOnSite: boolean;
 }
 interface Suggestion { name: string; label?: string; postal?: string; lat: number; lng: number }
 
@@ -44,6 +44,14 @@ export function FindProModal({ onClose }: { onClose: () => void }) {
   const [loading, setLoading] = useState(false);
   const [error, setError]   = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const SPECIAL = '#8A4FB5';   // brand-specialist colour (distinct from terra/green)
+  const isSpecialist = (s: Shop) => s.brandMatch || s.brandOnSite;
+  const focusShop = (id: string) => {
+    setActiveId(id);
+    cardRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  };
 
   // ── Address typeahead (BAN via /api/commune-search) ──────────────────
   const debTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -162,71 +170,83 @@ export function FindProModal({ onClose }: { onClose: () => void }) {
 
         {error && <p style={{ fontFamily: FONT, fontSize: 12, color: '#A33', margin: '0 0 12px' }}>{error}</p>}
 
-        {/* Map */}
+        {/* Two columns: map (left) + shop cards (right) */}
         {loc && (
-          <div style={{ height: 320, borderRadius: 6, overflow: 'hidden', border: `1px solid ${tokens.creamBorder}`, marginBottom: 14 }}>
-            <MapContainer center={[loc.lat, loc.lng]} zoom={12} scrollWheelZoom style={{ height: '100%', width: '100%' }}>
-              <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" attribution="&copy; OpenStreetMap &copy; CARTO" />
-              {/* Center */}
-              <CircleMarker center={[loc.lat, loc.lng]} radius={7} pathOptions={{ fillColor: tokens.blue, color: '#fff', weight: 2, fillOpacity: 1 }}>
-                <Tooltip direction="top">{loc.label}</Tooltip>
-              </CircleMarker>
-              {(shops ?? []).map(s => {
-                const active = activeId === s.id;
-                return (
-                  <CircleMarker key={s.id} center={[s.lat, s.lng]} radius={active ? 9 : 6}
-                    pathOptions={{ fillColor: s.brandMatch ? tokens.green : tokens.terra, color: '#fff', weight: 1.5, fillOpacity: 1 }}
-                    eventHandlers={{ click: () => setActiveId(s.id) }}>
-                    <Tooltip direction="top">{s.name} · {s.distKm} km</Tooltip>
-                  </CircleMarker>
-                );
-              })}
-              <FitBounds positions={positions} />
-            </MapContainer>
-          </div>
-        )}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start' }}>
+            {/* Map */}
+            <div style={{ flex: '1 1 460px', minWidth: 300, height: 520, borderRadius: 6, overflow: 'hidden', border: `1px solid ${tokens.creamBorder}` }}>
+              <MapContainer center={[loc.lat, loc.lng]} zoom={12} scrollWheelZoom style={{ height: '100%', width: '100%' }}>
+                <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" attribution="&copy; OpenStreetMap &copy; CARTO" />
+                <CircleMarker center={[loc.lat, loc.lng]} radius={7} pathOptions={{ fillColor: tokens.blue, color: '#fff', weight: 2, fillOpacity: 1 }}>
+                  <Tooltip direction="top">{loc.label}</Tooltip>
+                </CircleMarker>
+                {(shops ?? []).map(s => {
+                  const active = activeId === s.id;
+                  const spec = isSpecialist(s);
+                  return (
+                    <CircleMarker key={s.id} center={[s.lat, s.lng]} radius={active ? 10 : spec ? 8 : 6}
+                      pathOptions={{ fillColor: spec ? SPECIAL : tokens.terra, color: active ? tokens.ink : '#fff', weight: active ? 2.5 : 1.5, fillOpacity: 1 }}
+                      eventHandlers={{ click: () => focusShop(s.id) }}>
+                      <Tooltip direction="top">{s.name} · {s.distKm} km{spec ? ` · ${brand}` : ''}</Tooltip>
+                    </CircleMarker>
+                  );
+                })}
+                <FitBounds positions={positions} />
+              </MapContainer>
+            </div>
 
-        {/* Results list */}
-        {shops != null && !loading && (
-          shops.length === 0 ? (
-            <p style={{ fontFamily: FONT, fontSize: 13, color: tokens.inkLight }}>Aucun magasin trouvé dans ce rayon. Élargis le rayon.</p>
-          ) : (
-            <>
-              <p style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: tokens.terra, textTransform: 'uppercase', margin: '0 0 8px' }}>
-                {shops.length} professionnel{shops.length > 1 ? 's' : ''} trouvé{shops.length > 1 ? 's' : ''}
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 300, overflowY: 'auto' }}>
-                {shops.map(s => (
-                  <div key={s.id}
-                    onMouseEnter={() => setActiveId(s.id)}
-                    style={{
-                      padding: 12, borderRadius: 6, background: tokens.surface,
-                      border: `1px solid ${activeId === s.id ? tokens.terra : tokens.creamBorder}`,
-                    }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                      <span style={{ fontFamily: FONT, fontSize: 14, fontWeight: 700, color: tokens.ink }}>{s.name}</span>
-                      <span style={{ fontFamily: FONT, fontSize: 12, color: tokens.inkMid, flexShrink: 0 }}>{s.distKm} km</span>
-                    </div>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '6px 0' }}>
-                      {s.repairs && <Badge color={tokens.green}>🔧 Réparation</Badge>}
-                      {s.brandMatch && <Badge color={tokens.green}>✓ {brand} cité</Badge>}
-                      {s.type === 'shop' && <Badge color={tokens.inkMid}>Magasin vélo</Badge>}
-                    </div>
-                    {s.address && <div style={{ fontFamily: FONT, fontSize: 12, color: tokens.inkMid }}>{s.address}</div>}
-                    {s.hours && <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.inkLight, marginTop: 2 }}>🕑 {s.hours}</div>}
-                    <div style={{ display: 'flex', gap: 14, marginTop: 6 }}>
-                      {s.phone && <a href={`tel:${s.phone}`} style={LINK}>📞 {s.phone}</a>}
-                      {s.website && <a href={s.website} target="_blank" rel="noopener noreferrer" style={LINK}>🌐 Site</a>}
-                      <a href={`https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}`} target="_blank" rel="noopener noreferrer" style={LINK}>🗺️ Itinéraire</a>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <p style={{ fontFamily: FONT, fontSize: 11, color: tokens.inkLight, lineHeight: 1.55, marginTop: 12 }}>
-                Source OpenStreetMap. La marque réparée n’y est presque jamais indiquée : <strong>appelle pour confirmer</strong> qu’ils prennent ta {brand || 'marque'}, surtout pour les marques en vente directe.
-              </p>
-            </>
-          )
+            {/* Shop cards */}
+            <div style={{ flex: '1 1 360px', minWidth: 300, maxHeight: 520, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {loading && <p style={{ fontFamily: FONT, fontSize: 13, color: tokens.inkLight }}>Recherche des magasins + scan des sites…</p>}
+              {shops != null && !loading && shops.length === 0 && (
+                <p style={{ fontFamily: FONT, fontSize: 13, color: tokens.inkLight }}>Aucun magasin trouvé dans ce rayon. Élargis le rayon.</p>
+              )}
+              {shops != null && !loading && shops.length > 0 && (
+                <>
+                  <p style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: tokens.terra, textTransform: 'uppercase', margin: '0 0 2px', position: 'sticky', top: 0, background: tokens.cream, padding: '2px 0' }}>
+                    {shops.length} professionnel{shops.length > 1 ? 's' : ''}
+                    {shops.some(isSpecialist) && <span style={{ color: SPECIAL }}> · {shops.filter(isSpecialist).length} {brand}</span>}
+                  </p>
+                  {shops.map(s => {
+                    const active = activeId === s.id;
+                    const spec = isSpecialist(s);
+                    return (
+                      <div key={s.id}
+                        ref={el => { cardRefs.current[s.id] = el; }}
+                        onMouseEnter={() => setActiveId(s.id)}
+                        style={{
+                          padding: 12, borderRadius: 6, background: active ? tokens.surface : tokens.surface,
+                          border: `1px solid ${active ? tokens.terra : spec ? SPECIAL : tokens.creamBorder}`,
+                          borderLeft: `4px solid ${spec ? SPECIAL : active ? tokens.terra : 'transparent'}`,
+                          boxShadow: active ? '0 2px 10px rgba(0,0,0,0.12)' : 'none',
+                          transition: 'border-color .15s, box-shadow .15s',
+                        }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                          <span style={{ fontFamily: FONT, fontSize: 14, fontWeight: 700, color: tokens.ink }}>{s.name}</span>
+                          <span style={{ fontFamily: FONT, fontSize: 12, color: tokens.inkMid, flexShrink: 0 }}>{s.distKm} km</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '6px 0' }}>
+                          {spec && <Badge color={SPECIAL}>⭐ Spécialiste {brand}</Badge>}
+                          {s.repairs && <Badge color={tokens.green}>🔧 Réparation</Badge>}
+                          {s.type === 'shop' && <Badge color={tokens.inkMid}>Magasin vélo</Badge>}
+                        </div>
+                        {s.address && <div style={{ fontFamily: FONT, fontSize: 12, color: tokens.inkMid }}>{s.address}</div>}
+                        {s.hours && <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.inkLight, marginTop: 2 }}>🕑 {s.hours}</div>}
+                        <div style={{ display: 'flex', gap: 14, marginTop: 6, flexWrap: 'wrap' }}>
+                          {s.phone && <a href={`tel:${s.phone}`} style={LINK}>📞 {s.phone}</a>}
+                          {s.website && <a href={s.website} target="_blank" rel="noopener noreferrer" style={LINK}>🌐 Site</a>}
+                          <a href={`https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}`} target="_blank" rel="noopener noreferrer" style={LINK}>🗺️ Itinéraire</a>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <p style={{ fontFamily: FONT, fontSize: 11, color: tokens.inkLight, lineHeight: 1.55, marginTop: 8 }}>
+                    <span style={{ color: SPECIAL, fontWeight: 700 }}>⭐ Spécialiste {brand}</span> = leur site mentionne {brand}. Sinon la marque réparée n’est presque jamais publiée : <strong>appelle pour confirmer</strong>, surtout en vente directe.
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
         )}
       </div>
     </div>
@@ -247,7 +267,7 @@ function Badge({ color, children }: { color: string; children: React.ReactNode }
 }
 
 const OVERLAY: CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 2000, padding: '32px 16px', overflowY: 'auto' };
-const SHEET: CSSProperties = { background: tokens.cream, borderRadius: 8, padding: 24, maxWidth: 560, width: '100%', boxShadow: '0 16px 50px rgba(0,0,0,0.35)' };
+const SHEET: CSSProperties = { background: tokens.cream, borderRadius: 8, padding: 24, maxWidth: 1080, width: '100%', boxShadow: '0 16px 50px rgba(0,0,0,0.35)' };
 const CLOSE: CSSProperties = { width: 30, height: 30, borderRadius: '50%', border: `1px solid ${tokens.creamBorder}`, background: tokens.surface, color: tokens.inkMid, cursor: 'pointer', fontFamily: FONT, fontSize: 14 };
 const INPUT: CSSProperties = { width: '100%', padding: '10px 12px', boxSizing: 'border-box', fontFamily: FONT, fontSize: 13, background: tokens.surface, color: tokens.ink, border: `1px solid ${tokens.creamBorder}`, borderRadius: 4, outline: 'none' };
 const DROPDOWN: CSSProperties = { position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 50, background: tokens.surface, border: `1px solid ${tokens.creamBorder}`, borderRadius: 4, boxShadow: '0 6px 20px rgba(0,0,0,0.15)', overflow: 'hidden' };
