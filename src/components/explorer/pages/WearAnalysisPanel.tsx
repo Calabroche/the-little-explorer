@@ -110,8 +110,14 @@ export function WearAnalysisPanel({ bikes }: { bikes: Bike[] }) {
             </p>
           </div>
 
-          {/* 2. Terrain chips */}
-          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 20, padding: 16, background: tokens.surface, border: `1px solid ${tokens.creamBorder}`, borderRadius: 4 }}>
+          {/* 1. Terrain summary */}
+          <p style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: tokens.terra, textTransform: 'uppercase', margin: '0 0 4px' }}>
+            § TON TERRAIN
+          </p>
+          <p style={{ fontFamily: FONT, fontSize: 11, color: tokens.inkLight, margin: '0 0 10px' }}>
+            Comment tu roules, sur l&apos;ensemble des sorties avec ce vélo.
+          </p>
+          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 22, padding: 16, background: tokens.surface, border: `1px solid ${tokens.creamBorder}`, borderRadius: 4 }}>
             {[
               { label: 'Sorties analysées', value: `${data.terrain.rideCount}` },
               { label: 'Distance totale',   value: `${data.terrain.totalKm} km` },
@@ -127,50 +133,58 @@ export function WearAnalysisPanel({ bikes }: { bikes: Bike[] }) {
             ))}
           </div>
 
-          {/* 2b. Ride distribution — proves the verdict blends flat & mountain */}
-          {data.distribution && data.distribution.length > 0 && (() => {
-            const pads = data.components.find(c => c.key === 'brake_pads');
-            const colorFor = (k: string) => k === 'montagne' ? '#A33' : k === 'mixte' ? tokens.terra : tokens.green;
-            return (
-              <>
-                <p style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: tokens.terra, textTransform: 'uppercase', margin: '0 0 4px' }}>
-                  § RÉPARTITION DE TES SORTIES
-                </p>
-                <p style={{ fontFamily: FONT, fontSize: 11, color: tokens.inkLight, margin: '0 0 10px' }}>
-                  Chaque sortie est classée selon son usure plaquettes. La moyenne pondère plat et montagne.
-                </p>
-                <div style={{ background: tokens.surface, border: `1px solid ${tokens.creamBorder}`, borderRadius: 4, padding: '4px 14px', marginBottom: 20 }}>
-                  {data.distribution.map((b, i) => (
-                    <div key={b.key} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: i < data.distribution!.length - 1 ? `1px solid ${tokens.creamBorder}` : 'none' }}>
-                      <span style={{ width: 10, height: 10, borderRadius: 3, background: colorFor(b.key), flexShrink: 0 }} />
-                      <span style={{ minWidth: 0, flex: 1 }}>
-                        <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: tokens.ink }}>
-                          {b.count} {b.count > 1 ? 'sorties ' : 'sortie '}{b.label.toLowerCase()}
-                        </span>
-                        <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.inkLight, display: 'block' }}>
-                          {b.km} km ({b.kmShare} %) · {b.hint}
-                        </span>
-                      </span>
-                      <span style={{ fontFamily: "'Playfair Display'", fontSize: 16, fontWeight: 800, color: colorFor(b.key), flexShrink: 0 }}>×{b.avgMult.toFixed(1)}</span>
-                    </div>
-                  ))}
-                  {pads && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '12px 0', borderTop: `2px solid ${tokens.creamBorder}` }}>
-                      <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 700, color: tokens.ink }}>Moyenne pondérée (plaquettes)</span>
-                      <span style={{ fontFamily: "'Playfair Display'", fontSize: 18, fontWeight: 800, color: tokens.terra }}>×{pads.multiplier.toFixed(2)}</span>
-                    </div>
-                  )}
-                </div>
-              </>
-            );
-          })()}
-
-          {/* 3. Component multipliers — click a row to expand the maths */}
+          {/* 2. Per-ride terrain table (no component column) */}
           <p style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: tokens.terra, textTransform: 'uppercase', margin: '0 0 4px' }}>
-            § USURE PAR COMPOSANT (vs terrain mixte de référence)
+            § DÉTAIL PAR SORTIE
           </p>
           <p style={{ fontFamily: FONT, fontSize: 11, color: tokens.inkLight, margin: '0 0 10px' }}>
-            Touche un composant pour voir le détail du calcul.
+            Les chiffres bruts de terrain de chaque sortie.
+          </p>
+          <div style={{ overflowX: 'auto', background: tokens.surface, border: `1px solid ${tokens.creamBorder}`, borderRadius: 4 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT, fontSize: 12 }}>
+              <thead>
+                <tr>
+                  {['Sortie', 'Km', 'D+', 'D−', 'Montée max', 'Descente max', 'Pente moy', 'Desc. raide', 'Freinages'].map(h => (
+                    <th key={h} style={{ textAlign: 'left', padding: '10px 12px', borderBottom: `1px solid ${tokens.creamBorder}`, color: tokens.inkLight, fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(showAllRides ? data.rides : data.rides.slice(0, 10)).map(r => (
+                  <tr key={r.id}>
+                    <td style={{ padding: '9px 12px', borderBottom: `1px solid ${tokens.creamBorder}`, color: tokens.ink, maxWidth: 220 }}>
+                      <div style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.title}</div>
+                      <div style={{ color: tokens.inkLight, fontSize: 10 }}>{new Date(r.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                    </td>
+                    <td style={cell()}>{r.km.toFixed(1)}</td>
+                    <td style={cell(tokens.terra)}>{r.ascentM} m</td>
+                    <td style={cell(tokens.blue)}>{r.descentM} m</td>
+                    <td style={cell(tokens.terra)}>{r.maxGradePct != null ? `+${r.maxGradePct} %` : '—'}</td>
+                    <td style={cell(tokens.blue)}>{r.minGradePct != null ? `${r.minGradePct} %` : '—'}</td>
+                    <td style={cell()}>{r.avgGradePct != null ? `${r.avgGradePct} %` : '—'}</td>
+                    <td style={cell()}>{r.steepDescKm > 0 ? `${r.steepDescKm} km` : '—'}</td>
+                    <td style={cell()}>{r.hasStreams ? r.brakeEvents : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {data.rides.length > 10 && (
+            <button onClick={() => setShowAllRides(v => !v)} style={{
+              marginTop: 10, marginBottom: 24, padding: '7px 14px', background: 'transparent',
+              border: `1px solid ${tokens.creamBorder}`, borderRadius: 3, cursor: 'pointer',
+              fontFamily: FONT, fontSize: 11, fontWeight: 600, color: tokens.inkMid,
+            }}>
+              {showAllRides ? 'Réduire' : `Voir les ${data.rides.length} sorties`}
+            </button>
+          )}
+
+          {/* 3. Component wear — the interpretation */}
+          <p style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: tokens.terra, textTransform: 'uppercase', margin: '24px 0 4px' }}>
+            § IMPACT SUR L&apos;USURE (par composant)
+          </p>
+          <p style={{ fontFamily: FONT, fontSize: 11, color: tokens.inkLight, margin: '0 0 10px' }}>
+            Combien ton terrain accélère l&apos;usure de chaque pièce. Touche pour voir le calcul et l&apos;état de la pièce.
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
             {data.components.map(c => {
@@ -231,6 +245,32 @@ export function WearAnalysisPanel({ bikes }: { bikes: Bike[] }) {
                         </p>
                       )}
 
+                      {/* Pad-wear ride distribution lives here — it classifies
+                          rides precisely by their pad multiplier. */}
+                      {c.key === 'brake_pads' && data.distribution && data.distribution.length > 0 && (
+                        <div style={{ marginTop: 14 }}>
+                          <p style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: tokens.ink, margin: '0 0 2px' }}>Répartition de tes sorties</p>
+                          <p style={{ fontFamily: FONT, fontSize: 11, color: tokens.inkLight, margin: '0 0 8px' }}>
+                            Le ×{c.multiplier.toFixed(2)} est déjà la moyenne pondérée par km de ces catégories.
+                          </p>
+                          <div style={{ background: tokens.creamDark, borderRadius: 4, padding: '4px 12px' }}>
+                            {data.distribution.map((b, i) => {
+                              const col = b.key === 'montagne' ? '#A33' : b.key === 'mixte' ? tokens.terra : tokens.green;
+                              return (
+                                <div key={b.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: i < data.distribution!.length - 1 ? `1px solid ${tokens.creamBorder}` : 'none' }}>
+                                  <span style={{ width: 9, height: 9, borderRadius: 3, background: col, flexShrink: 0 }} />
+                                  <span style={{ flex: 1, minWidth: 0 }}>
+                                    <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: tokens.ink }}>{b.count} {b.count > 1 ? 'sorties' : 'sortie'} {b.label.toLowerCase()}</span>
+                                    <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.inkLight, display: 'block' }}>{b.km} km · {b.kmShare}%</span>
+                                  </span>
+                                  <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: col, flexShrink: 0 }}>×{b.avgMult.toFixed(1)}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
                       {piece && (
                         <p style={{ fontFamily: FONT, fontSize: 12, color: tokens.inkMid, lineHeight: 1.6, margin: '12px 0 0' }}>
                           {piece.name} : <strong style={{ color: tokens.ink }}>{piece.rawKmSinceInstall} km</strong> roulés ={' '}
@@ -246,55 +286,11 @@ export function WearAnalysisPanel({ bikes }: { bikes: Bike[] }) {
             })}
           </div>
 
-          {/* 4. Per-ride table */}
-          <p style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: tokens.terra, textTransform: 'uppercase', margin: '0 0 10px' }}>
-            § DÉTAIL PAR SORTIE
-          </p>
-          <div style={{ overflowX: 'auto', background: tokens.surface, border: `1px solid ${tokens.creamBorder}`, borderRadius: 4 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT, fontSize: 12 }}>
-              <thead>
-                <tr>
-                  {['Sortie', 'Km', 'D+', 'D−', 'Montée max', 'Descente max', 'Pente moy', 'Desc. raide', 'Freinages', 'Plaquettes'].map(h => (
-                    <th key={h} style={{ textAlign: 'left', padding: '10px 12px', borderBottom: `1px solid ${tokens.creamBorder}`, color: tokens.inkLight, fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(showAllRides ? data.rides : data.rides.slice(0, 10)).map(r => (
-                  <tr key={r.id}>
-                    <td style={{ padding: '9px 12px', borderBottom: `1px solid ${tokens.creamBorder}`, color: tokens.ink, maxWidth: 220 }}>
-                      <div style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.title}</div>
-                      <div style={{ color: tokens.inkLight, fontSize: 10 }}>{new Date(r.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
-                    </td>
-                    <td style={cell()}>{r.km.toFixed(1)}</td>
-                    <td style={cell(tokens.terra)}>{r.ascentM} m</td>
-                    <td style={cell(tokens.blue)}>{r.descentM} m</td>
-                    <td style={cell(tokens.terra)}>{r.maxGradePct != null ? `+${r.maxGradePct} %` : '—'}</td>
-                    <td style={cell(tokens.blue)}>{r.minGradePct != null ? `${r.minGradePct} %` : '—'}</td>
-                    <td style={cell()}>{r.avgGradePct != null ? `${r.avgGradePct} %` : '—'}</td>
-                    <td style={cell()}>{r.steepDescKm > 0 ? `${r.steepDescKm} km` : '—'}</td>
-                    <td style={cell()}>{r.hasStreams ? r.brakeEvents : '—'}</td>
-                    <td style={cell(r.mult.brake_pads >= 1.8 ? '#A33' : tokens.ink)}>×{r.mult.brake_pads.toFixed(1)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {data.rides.length > 10 && (
-            <button onClick={() => setShowAllRides(v => !v)} style={{
-              marginTop: 10, padding: '7px 14px', background: 'transparent',
-              border: `1px solid ${tokens.creamBorder}`, borderRadius: 3, cursor: 'pointer',
-              fontFamily: FONT, fontSize: 11, fontWeight: 600, color: tokens.inkMid,
-            }}>
-              {showAllRides ? 'Réduire' : `Voir les ${data.rides.length} sorties`}
-            </button>
-          )}
-
-          <p style={{ fontFamily: FONT, fontSize: 11, color: tokens.inkLight, lineHeight: 1.6, marginTop: 16, maxWidth: 720 }}>
-            Méthode : pente lissée sur des fenêtres de 40 m depuis le GPS, freinages détectés par décélérations
-            soutenues dans le flux de vitesse, et énergie dissipée estimée en chaleur dans les freins. Les
-            multiplicateurs comparent ton terrain à une sortie plate de référence. C&apos;est une estimation pour
-            anticiper, pas un capteur d&apos;usure : vérifie visuellement avant de remplacer.
+          <p style={{ fontFamily: FONT, fontSize: 11, color: tokens.inkLight, lineHeight: 1.6, marginTop: 20, maxWidth: 720 }}>
+            Méthode : pentes calculées comme sur la page d&apos;activité (calé sur Strava), freinages détectés
+            depuis le flux de vitesse. Pour les freins, le multiplicateur compare ton terrain à un terrain
+            vallonné moyen ; la chaîne et les pneus partent d&apos;une base de 1 (ils s&apos;usent avec la distance).
+            C&apos;est une estimation pour anticiper, pas un capteur d&apos;usure : vérifie visuellement avant de remplacer.
           </p>
         </>
       )}
