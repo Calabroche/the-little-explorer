@@ -10,18 +10,23 @@ export const BIKE_BRANDS: string[] = [
   'Van Rysel', 'Moustache', 'Riese & Müller',
 ];
 
-function norm(s: string): string {
-  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+function deaccent(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
 
-/** Brands (display names) whose name appears as a word in `text`. Accent- and
- *  case-insensitive, word-boundary matched so "look" doesn't hit "looking".
- *  Best-effort: a mention isn't proof of an official dealership. */
+/** Brands whose name appears as a PROPER NOUN (capitalised or all-caps) word in
+ *  `text`. The capitalisation requirement is what makes this usable: many brand
+ *  names are common words (Focus, Giant, Look, Scott…), so we only count them
+ *  when written like a name — "Focus"/"FOCUS" yes, "focus sur" no. Accent- and
+ *  whitespace-insensitive, word-boundary matched. Best-effort: a mention isn't
+ *  proof of an official dealership. */
 export function brandsInText(text: string): string[] {
-  const t = norm(text);
+  const T = deaccent(text);
   return BIKE_BRANDS.filter(b => {
-    const pat = norm(b).replace(/&/g, ' ').replace(/[^a-z0-9 ]/g, '').trim().replace(/\s+/g, '\\s+');
-    if (!pat) return false;
-    return new RegExp(`(^|[^a-z0-9])${pat}([^a-z0-9]|$)`).test(t);
+    const base = deaccent(b).replace(/&/g, ' ').replace(/[^A-Za-z0-9 ]/g, '').trim();
+    if (!base) return false;
+    const cap = base.replace(/\s+/g, '\\s+');                 // display caps (Van Rysel)
+    const up  = base.toUpperCase().replace(/\s+/g, '\\s+');   // all-caps (logos / headings)
+    return new RegExp(`(^|[^A-Za-z0-9])(${cap}|${up})([^A-Za-z0-9]|$)`).test(T);
   });
 }

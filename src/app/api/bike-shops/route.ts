@@ -44,7 +44,13 @@ async function siteBrands(website: string, timeoutMs: number): Promise<string[]>
   try {
     const res = await fetch(website, { signal: ctrl.signal, headers: { 'User-Agent': WEB_UA, 'Accept': 'text/html' }, redirect: 'follow' });
     if (!res.ok) return [];
-    return brandsInText(await res.text());
+    // Strip <script>/<style> (CSS/JS use "focus", "look"… as keywords → false
+    // brand hits) and tags, so we only scan the visible text.
+    const text = (await res.text())
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ');
+    return brandsInText(text);
   } catch {
     return [];
   } finally {
