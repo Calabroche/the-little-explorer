@@ -36,37 +36,82 @@ interface Shop {
 
 const WEB_UA = 'Mozilla/5.0 (compatible; TheLittleExplorer/0.1; +https://the-little-explorer-app.vercel.app)';
 
-/** Fetch a shop homepage and return the known bike brands it mentions.
- *  Best-effort: many sites are slow / block bots, so we cap the time. */
-async function siteBrands(website: string, timeoutMs: number): Promise<string[]> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-  try {
-    const res = await fetch(website, { signal: ctrl.signal, headers: { 'User-Agent': WEB_UA, 'Accept': 'text/html' }, redirect: 'follow' });
-    if (!res.ok) return [];
-    // Drop <script>/<style> first: CSS/JS use "focus", "look"… as keywords, a
-    // big source of false brand hits. Then scan three signals:
-    //  - the visible body text,
-    //  - image alt attributes,
-    //  - image file names (brand logos are often shown as images, e.g.
-    //    alt="Canyon" / src=".../Canyon-h.jpg", so the name never appears in
-    //    the body text — many shop sites are like this).
-    // brandsInText still requires proper-noun capitalisation, so lowercase
-    // noise from any of these signals is ignored.
-    const html = (await res.text())
-      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-      .replace(/<style[\s\S]*?<\/style>/gi, ' ');
-    const alts = Array.from(html.matchAll(/\balt\s*=\s*["']([^"']+)["']/gi)).map(m => m[1]);
-    const imgs = Array.from(html.matchAll(/\bsrc\s*=\s*["']([^"']+\.(?:jpe?g|png|webp|svg|gif))["']/gi))
-      .map(m => { try { return decodeURIComponent(m[1]); } catch { return m[1]; } })
-      .map(u => (u.split(/[/\\]/).pop() || '').replace(/[-_]+/g, ' '));
-    const visible = html.replace(/<[^>]+>/g, ' ');
-    return brandsInText([visible, alts.join(' '), imgs.join(' ')].join(' \n '));
-  } catch {
-    return [];
-  } finally {
-    clearTimeout(timer);
+/** Pull brand signals from one HTML document. We drop <script>/<style> (CSS/JS
+ *  use "focus", "look"… as keywords → false hits) and scan three signals:
+ *   - visible body text,
+ *   - image alt attributes,
+ *   - image file names (brand logos are often shown as images, e.g.
+ *     alt="Canyon" / src=".../Canyon-h.jpg", so the name never appears in the
+ *     body text — many shop sites are like this).
+ *  brandsInText still requires proper-noun capitalisation, so lowercase noise
+ *  from any of these signals is ignored. */
+function brandsInHtml(rawHtml: string): string[] {
+  const html = rawHtml
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ');
+  const alts = Array.from(html.matchAll(/\balt\s*=\s*["']([^"']+)["']/gi)).map(m => m[1]);
+  const imgs = Array.from(html.matchAll(/\bsrc\s*=\s*["']([^"']+\.(?:jpe?g|png|webp|svg|gif))["']/gi))
+    .map(m => { try { return decodeURIComponent(m[1]); } catch { return m[1]; } })
+    .map(u => (u.split(/[/\\]/).pop() || '').replace(/[-_]+/g, ' '));
+  const visible = html.replace(/<[^>]+>/g, ' ');
+  return brandsInText([visible, alts.join(' '), imgs.join(' ')].join(' \n '));
+}
+
+/** On a homepage, find the most likely "our brands / our bikes" page so we can
+ *  scan it too (shops list their brands there, not always on the homepage).
+ *  Returns an absolute, same-origin HTML URL, or null. */
+function brandsPageUrl(html: string, baseUrl: string): string | null {
+  let origin: string;
+  try { origin = new URL(baseUrl).origin; } catch { return null; }
+  const re = /<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  const KW = /(marque|nos[\s-]*v[ée]lo|catalogue|boutique|nos[\s-]*produit|\bbrand|magasin)/i;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) {
+    const href = m[1];
+    const label = m[2].replace(/<[^>]+>/g, ' ');
+    if (!KW.test(href) && !KW.test(label)) continue;
+    try {
+      const u = new URL(href, baseUrl);
+      if (u.origin !== origin) continue;                                  // same site only
+      if (/\.(jpe?g|png|webp|gif|svg|pdf|zip|mp4)$/i.test(u.pathname)) continue;
+      return u.toString();
+    } catch { /* skip malformed href */ }
   }
+  return null;
+}
+
+/** Fetch a shop site and return the known bike brands it mentions. Scans the
+ *  homepage, then (best-effort) one linked "brands / our bikes" sub-page.
+ *  `timeoutMs` is a shared budget across both fetches so it can't blow the
+ *  function deadline. */
+async function siteBrands(website: string, timeoutMs: number): Promise<string[]> {
+  const deadline = Date.now() + timeoutMs;
+  const getHtml = async (url: string): Promise<string | null> => {
+    const left = deadline - Date.now();
+    if (left <= 250) return null;                                         // no time for a fetch
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), left);
+    try {
+      const res = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': WEB_UA, 'Accept': 'text/html' }, redirect: 'follow' });
+      if (!res.ok) return null;
+      return await res.text();
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  const home = await getHtml(website);
+  if (!home) return [];
+  const brands = new Set(brandsInHtml(home));
+
+  const sub = brandsPageUrl(home, website);
+  if (sub && sub !== website) {
+    const page = await getHtml(sub);
+    if (page) brandsInHtml(page).forEach(b => brands.add(b));
+  }
+  return Array.from(brands);
 }
 
 function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): number {
@@ -164,12 +209,13 @@ export async function GET(req: NextRequest) {
   shops.sort((a, b) => a.distKm - b.distKm);
   const top = shops.slice(0, 200);
 
-  // Best-effort: scan the nearest shops' homepages and collect the known bike
-  // brands they mention (which brands they sell / service). Bounded so it can't
-  // blow the function budget: nearest 36, 4 s each, all in parallel.
+  // Best-effort: scan the nearest shops' sites (homepage + one linked "brands"
+  // page) and collect the known bike brands they mention (which brands they
+  // sell / service). Bounded so it can't blow the function budget: nearest 36,
+  // a 7 s shared budget per shop for the two pages, all in parallel.
   const toScan = top.filter(s => s.website).slice(0, 36);
   await Promise.all(toScan.map(async s => {
-    const found = await siteBrands(s.website!, 4000);
+    const found = await siteBrands(s.website!, 7000);
     if (found.length) s.brands = Array.from(new Set([...s.brands, ...found]));
   }));
   // Recompute brand flags now that website brands are known.
