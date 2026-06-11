@@ -14,7 +14,7 @@ import { runOverpass, elementLatLng } from '@/lib/overpass';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
-export const maxDuration = 40;
+export const maxDuration = 60;
 
 interface Shop {
   id:       string;
@@ -62,18 +62,23 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'invalid_coordinates' }, { status: 400 });
   }
   const radiusKm = Math.max(1, Math.min(25, Number(url.searchParams.get('radiusKm')) || 10));
-  const r = Math.round(radiusKm * 1000);
 
-  // node/way/relation = nwr; `out center tags` gives ways/relations a centroid.
+  // Use a BOUNDING BOX (index-based, fast) instead of `around` (a distance per
+  // node — slow and the cause of function timeouts). Over-fetch the square,
+  // then filter to the circle in code. node/way/relation = nwr; `out center`
+  // gives ways/relations a centroid.
+  const dLat = radiusKm / 111;
+  const dLng = radiusKm / (111 * Math.cos((lat * Math.PI) / 180));
+  const box = `${(lat - dLat).toFixed(4)},${(lng - dLng).toFixed(4)},${(lat + dLat).toFixed(4)},${(lng + dLng).toFixed(4)}`;
   const query =
     `[out:json][timeout:25];(` +
-    `nwr(around:${r},${lat},${lng})[shop=bicycle];` +
-    `nwr(around:${r},${lat},${lng})[craft=bicycle];` +
-    `nwr(around:${r},${lat},${lng})[shop=sports][service:bicycle:repair];` +
-    `nwr(around:${r},${lat},${lng})[service:bicycle:repair=yes];` +
+    `nwr(${box})[shop=bicycle];` +
+    `nwr(${box})[craft=bicycle];` +
+    `nwr(${box})[shop=sports][service:bicycle:repair];` +
+    `nwr(${box})[service:bicycle:repair=yes];` +
     `);out center tags;`;
 
-  const data = await runOverpass(query, 14_000, 30_000);
+  const data = await runOverpass(query, 14_000, 28_000);
   if (!data) return NextResponse.json({ shops: [] });
 
   const seen = new Set<string>();
@@ -84,6 +89,8 @@ export async function GET(req: NextRequest) {
     if (!pos) continue;
     const name = t.name || t.brand || t.operator;
     if (!name) continue;                                  // skip unnamed
+    const dist = haversineKm(lat, lng, pos.lat, pos.lng);
+    if (dist > radiusKm) continue;                        // square → circle
     const key = `${name.toLowerCase()}|${pos.lat.toFixed(3)},${pos.lng.toFixed(3)}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -99,7 +106,7 @@ export async function GET(req: NextRequest) {
       name,
       lat: pos.lat,
       lng: pos.lng,
-      distKm: +haversineKm(lat, lng, pos.lat, pos.lng).toFixed(1),
+      distKm: +dist.toFixed(1),
       address: buildAddress(t),
       phone:   t.phone || t['contact:phone'] || null,
       website: t.website || t['contact:website'] || null,
