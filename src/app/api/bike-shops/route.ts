@@ -44,13 +44,24 @@ async function siteBrands(website: string, timeoutMs: number): Promise<string[]>
   try {
     const res = await fetch(website, { signal: ctrl.signal, headers: { 'User-Agent': WEB_UA, 'Accept': 'text/html' }, redirect: 'follow' });
     if (!res.ok) return [];
-    // Strip <script>/<style> (CSS/JS use "focus", "look"… as keywords → false
-    // brand hits) and tags, so we only scan the visible text.
-    const text = (await res.text())
+    // Drop <script>/<style> first: CSS/JS use "focus", "look"… as keywords, a
+    // big source of false brand hits. Then scan three signals:
+    //  - the visible body text,
+    //  - image alt attributes,
+    //  - image file names (brand logos are often shown as images, e.g.
+    //    alt="Canyon" / src=".../Canyon-h.jpg", so the name never appears in
+    //    the body text — many shop sites are like this).
+    // brandsInText still requires proper-noun capitalisation, so lowercase
+    // noise from any of these signals is ignored.
+    const html = (await res.text())
       .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-      .replace(/<[^>]+>/g, ' ');
-    return brandsInText(text);
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ');
+    const alts = Array.from(html.matchAll(/\balt\s*=\s*["']([^"']+)["']/gi)).map(m => m[1]);
+    const imgs = Array.from(html.matchAll(/\bsrc\s*=\s*["']([^"']+\.(?:jpe?g|png|webp|svg|gif))["']/gi))
+      .map(m => { try { return decodeURIComponent(m[1]); } catch { return m[1]; } })
+      .map(u => (u.split(/[/\\]/).pop() || '').replace(/[-_]+/g, ' '));
+    const visible = html.replace(/<[^>]+>/g, ' ');
+    return brandsInText([visible, alts.join(' '), imgs.join(' ')].join(' \n '));
   } catch {
     return [];
   } finally {
