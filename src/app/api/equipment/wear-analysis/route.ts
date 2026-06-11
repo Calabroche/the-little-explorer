@@ -69,6 +69,96 @@ const COMPONENT_LABEL: Record<ComponentKey, string> = {
 /** Total rider+bike mass for the braking-energy estimate (kg). */
 const MASS_KG = 75;
 
+// ── Wear model: ONE source of truth ───────────────────────────────────
+// Every component's multiplier = 1 (flat reference) + Σ(input × coefficient),
+// capped. The same definition computes the per-ride multiplier, the displayed
+// aggregate multiplier AND the term-by-term breakdown shown when the user taps
+// a component — so the number and its explanation can never diverge.
+type WearInput = 'descPerKm' | 'climbPerKm' | 'steepShare' | 'brakePerKm';
+
+interface WearVals { descPerKm: number; climbPerKm: number; steepShare: number; brakePerKm: number }
+
+interface MultTerm {
+  input: WearInput;
+  coef:  number;
+  label: string;
+  /** Human label of the input value, e.g. "15.3 m descendus / km". */
+  fmt: (v: number) => string;
+}
+
+const MULT_DEFS: Record<ComponentKey, { cap: number; why: string; terms: MultTerm[] }> = {
+  brake_pads: {
+    cap: 5,
+    why: "En descente, presque toute l'altitude perdue finit en chaleur dans les plaquettes (le reste part dans l'air). Plus tu descends et plus tu freines fort, plus elles s'usent vite.",
+    terms: [
+      { input: 'descPerKm',  coef: 1 / 12, label: 'Dénivelé descendu', fmt: v => `${v.toFixed(1)} m descendus / km` },
+      { input: 'steepShare',  coef: 1.2,    label: 'Descente raide',    fmt: v => `${(v * 100).toFixed(1)} % du parcours sous −5 %` },
+      { input: 'brakePerKm',  coef: 0.25,   label: 'Freinages appuyés', fmt: v => `${v.toFixed(2)} freinage / km` },
+    ],
+  },
+  brake_rotors: {
+    cap: 3.5,
+    why: "Les disques chauffent avec les plaquettes mais s'usent bien plus lentement (métal contre garniture). La descente reste le principal facteur.",
+    terms: [
+      { input: 'descPerKm', coef: 1 / 25, label: 'Dénivelé descendu', fmt: v => `${v.toFixed(1)} m descendus / km` },
+      { input: 'steepShare', coef: 0.6,    label: 'Descente raide',    fmt: v => `${(v * 100).toFixed(1)} % du parcours sous −5 %` },
+    ],
+  },
+  chain: {
+    cap: 2.5,
+    why: "En montée, le fort couple sur la transmission étire la chaîne plus vite qu'à plat. C'est le D+ qui compte, pas la descente.",
+    terms: [
+      { input: 'climbPerKm', coef: 1 / 30, label: 'Dénivelé grimpé', fmt: v => `${v.toFixed(1)} m grimpés / km` },
+    ],
+  },
+  cassette: {
+    cap: 2.2,
+    why: "La cassette suit la chaîne : même cause (le couple en montée), usure un peu plus lente.",
+    terms: [
+      { input: 'climbPerKm', coef: 1 / 35, label: 'Dénivelé grimpé', fmt: v => `${v.toFixed(1)} m grimpés / km` },
+    ],
+  },
+  tire_rear: {
+    cap: 2.5,
+    why: "Le pneu arrière (motricité) s'use avec le couple en montée, et un peu avec les freinages et descentes raides.",
+    terms: [
+      { input: 'climbPerKm', coef: 1 / 50, label: 'Dénivelé grimpé',  fmt: v => `${v.toFixed(1)} m grimpés / km` },
+      { input: 'steepShare',  coef: 0.4,    label: 'Descente raide',   fmt: v => `${(v * 100).toFixed(1)} % du parcours sous −5 %` },
+      { input: 'brakePerKm',  coef: 0.12,   label: 'Freinages',        fmt: v => `${v.toFixed(2)} freinage / km` },
+    ],
+  },
+  tire_front: {
+    cap: 2,
+    why: "Le pneu avant s'use surtout dans les descentes appuyées (transfert de charge vers l'avant au freinage).",
+    terms: [
+      { input: 'descPerKm', coef: 1 / 50, label: 'Dénivelé descendu', fmt: v => `${v.toFixed(1)} m descendus / km` },
+      { input: 'steepShare', coef: 0.3,    label: 'Descente raide',    fmt: v => `${(v * 100).toFixed(1)} % du parcours sous −5 %` },
+    ],
+  },
+};
+
+function multiplierFor(comp: ComponentKey, v: WearVals): number {
+  const def = MULT_DEFS[comp];
+  const raw = 1 + def.terms.reduce((s, t) => s + v[t.input] * t.coef, 0);
+  return Math.min(def.cap, Math.max(1, raw));
+}
+
+/** Term-by-term breakdown of the multiplier — fed to the expandable card. */
+function breakdownFor(comp: ComponentKey, v: WearVals) {
+  const def = MULT_DEFS[comp];
+  const terms = [
+    { label: 'Base (terrain plat)', detail: 'référence : 1 km de plat = 1 km d\'usure', contrib: +1 },
+    ...def.terms.map(t => ({
+      label: t.label,
+      detail: `${t.fmt(v[t.input])} × ${t.coef >= 1 ? t.coef.toLocaleString('fr-FR') : `÷ ${Math.round(1 / t.coef)}`}`.replace('× ÷', '÷'),
+      contrib: +(v[t.input] * t.coef).toFixed(2),
+    })),
+  ];
+  const rawTotal = terms.reduce((s, t) => s + t.contrib, 0);
+  const total = multiplierFor(comp, v);
+  return { terms, total: +total.toFixed(2), capped: rawTotal > def.cap, why: def.why };
+}
+
 /** Rolling-median despike: kills single-sample altitude jumps (bridge,
  *  tunnel, barometric recalibration) that a moving average only spreads
  *  out — those spikes were fabricating impossible ±30 % grades. */
@@ -170,25 +260,25 @@ function computeRideMetrics(row: any): RideMetrics {
     }
   }
 
-  // ── Wear multipliers (1.0 = flat reference) ────────────────────────
-  // d / h = descent / ascent meters per km; steep = share of the ride in
-  // steep descent; bpk = brake events per km. Coefficients calibrated so a
-  // flat ride ≈ 1×, rolling terrain ≈ 1.3-1.6×, a true col day ≈ 2.5-4×.
-  const d     = km > 0 ? base.descentM / km : 0;
-  const h     = km > 0 ? base.ascentM  / km : 0;
-  const steep = km > 0 ? base.steepDescKm / km : 0;
-  const bpk   = km > 0 ? base.brakeEvents / km : 0;
-  const cap = (x: number, hi: number) => +Math.min(hi, Math.max(1, x)).toFixed(2);
-
-  base.mult = {
-    brake_pads:   cap(1 + d / 12 + steep * 1.2 + bpk * 0.25, 5),
-    brake_rotors: cap(1 + d / 25 + steep * 0.6,              3.5),
-    chain:        cap(1 + h / 30,                            2.5),
-    cassette:     cap(1 + h / 35,                            2.2),
-    tire_rear:    cap(1 + h / 50 + steep * 0.4 + bpk * 0.12, 2.5),
-    tire_front:   cap(1 + d / 50 + steep * 0.3,              2),
-  };
+  // Per-ride multipliers from the shared model (same coefficients as the
+  // aggregate + breakdown, so the per-ride column and the verdict agree).
+  const vals = wearValsFrom(base);
+  base.mult = {} as Record<ComponentKey, number>;
+  (Object.keys(COMPONENT_LABEL) as ComponentKey[]).forEach(c => {
+    base.mult[c] = +multiplierFor(c, vals).toFixed(2);
+  });
   return base;
+}
+
+/** Terrain inputs (per-km / share) for one ride or an aggregate. */
+function wearValsFrom(m: { km: number; descentM: number; ascentM: number; steepDescKm: number; brakeEvents: number }): WearVals {
+  const km = m.km > 0 ? m.km : 1;
+  return {
+    descPerKm:  m.descentM / km,
+    climbPerKm: m.ascentM  / km,
+    steepShare: m.steepDescKm / km,
+    brakePerKm: m.brakeEvents / km,
+  };
 }
 
 // ── Narrative (French, plain sentences) ───────────────────────────────
@@ -243,17 +333,39 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ gear, rides: [], components: [], pieces: [], narrative: `Aucune sortie trouvée avec ${gear.name}.` });
   }
 
-  // Aggregate multiplier per component, weighted by ride distance.
+  // Aggregate terrain over the bike's history → one set of inputs that drives
+  // the displayed multiplier AND its breakdown (so they match exactly).
   const totKm = rides.reduce((s, r) => s + r.km, 0);
+  const aggVals = wearValsFrom({
+    km: totKm,
+    descentM:    rides.reduce((s, r) => s + r.descentM, 0),
+    ascentM:     rides.reduce((s, r) => s + r.ascentM, 0),
+    steepDescKm: rides.reduce((s, r) => s + r.steepDescKm, 0),
+    brakeEvents: rides.reduce((s, r) => s + r.brakeEvents, 0),
+  });
   const agg = {} as Record<ComponentKey, number>;
   (Object.keys(COMPONENT_LABEL) as ComponentKey[]).forEach(c => {
-    agg[c] = +(rides.reduce((s, r) => s + r.mult[c] * r.km, 0) / totKm).toFixed(2);
+    agg[c] = +multiplierFor(c, aggVals).toFixed(2);
   });
+
+  // Concrete worked example for the brake pads (the component people ask
+  // about most): a representative 45→20 km/h brake, the heat it dumps, and
+  // how the bike's descent + braking add up to the multiplier.
+  const totDescentM = Math.round(aggVals.descPerKm * totKm);
+  const totBrakes   = Math.round(aggVals.brakePerKm * totKm);
+  const oneBrakeKJ  = +(0.5 * MASS_KG * ((45 / 3.6) ** 2 - (20 / 3.6) ** 2) / 1000).toFixed(1);
+  const padExample =
+    `Un freinage type de 45 à 20 km/h dissipe ~${oneBrakeKJ.toLocaleString('fr-FR')} kJ de chaleur dans tes freins `
+    + `(½ × ${MASS_KG} kg × (12,5² − 5,6²)). Sur ${rides.length} sorties tu as descendu ${totDescentM.toLocaleString('fr-FR')} m `
+    + `de dénivelé et donné ${totBrakes} freinages appuyés. Tes plaquettes ont donc encaissé l'équivalent d'environ `
+    + `${Math.round(totKm * agg.brake_pads).toLocaleString('fr-FR')} km de plat pour ${Math.round(totKm).toLocaleString('fr-FR')} km réellement roulés, soit ×${agg.brake_pads.toFixed(1)}.`;
 
   const components = (Object.keys(COMPONENT_LABEL) as ComponentKey[]).map(c => ({
     key: c,
     label: COMPONENT_LABEL[c],
     multiplier: agg[c],
+    breakdown: breakdownFor(c, aggVals),
+    example: c === 'brake_pads' ? padExample : null,
   }));
 
   // Re-score the pieces actually installed on this bike: effective km =
@@ -283,10 +395,14 @@ export async function GET(req: NextRequest) {
       cum += r.km;
     }
     const rawKm = since.reduce((s, r) => s + r.km, 0);
-    const effKm = since.reduce((s, r) => s + r.km * r.mult[comp], 0);
+    // Effective km = raw km × the bike's terrain multiplier for this part.
+    // Keeps the piece exactly consistent with the displayed × and breakdown:
+    // adjustedWear = rawWear × multiplier, no hidden per-ride re-weighting.
+    const effKm = rawKm * agg[comp];
     const lifetime = Number(e.lifetime_km ?? 0);
     return [{
       id: e.id, name: e.name, kind: e.kind, component: comp,
+      multiplier: agg[comp],
       lifetimeKm: lifetime,
       rawKmSinceInstall: +rawKm.toFixed(0),
       effectiveKmSinceInstall: +effKm.toFixed(0),

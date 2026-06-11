@@ -26,10 +26,19 @@ interface RideRow {
   mult: Record<string, number>;
 }
 
+interface BreakdownTerm { label: string; detail: string; contrib: number }
+interface Breakdown { terms: BreakdownTerm[]; total: number; capped: boolean; why: string }
+
+interface Component {
+  key: string; label: string; multiplier: number;
+  breakdown: Breakdown;
+  example: string | null;
+}
+
 interface Analysis {
   gear: { id: string; name: string };
   terrain: { rideCount: number; totalKm: number; ascentPerKm: number; descentPerKm: number; steepDescKm: number; brakeEvents: number; brakeKJ: number };
-  components: { key: string; label: string; multiplier: number }[];
+  components: Component[];
   pieces: { id: string; name: string; component: string; lifetimeKm: number; rawKmSinceInstall: number; effectiveKmSinceInstall: number; adjustedWearPct: number | null; rawWearPct: number | null; adjustedIntervalKm: number | null }[];
   rides: RideRow[];
   narrative: string;
@@ -43,6 +52,7 @@ export function WearAnalysisPanel({ bikes }: { bikes: Bike[] }) {
   const [loading, setLoading] = useState(false);
   const [error, setError]   = useState<string | null>(null);
   const [showAllRides, setShowAllRides] = useState(false);
+  const [openComp, setOpenComp] = useState<string | null>('brake_pads');
 
   useEffect(() => {
     if (!gearId) return;
@@ -114,31 +124,80 @@ export function WearAnalysisPanel({ bikes }: { bikes: Bike[] }) {
             ))}
           </div>
 
-          {/* 3. Component multipliers */}
-          <p style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: tokens.terra, textTransform: 'uppercase', margin: '0 0 10px' }}>
+          {/* 3. Component multipliers — click a row to expand the maths */}
+          <p style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: tokens.terra, textTransform: 'uppercase', margin: '0 0 4px' }}>
             § USURE PAR COMPOSANT (vs terrain plat)
           </p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 12, marginBottom: 20 }}>
+          <p style={{ fontFamily: FONT, fontSize: 11, color: tokens.inkLight, margin: '0 0 10px' }}>
+            Touche un composant pour voir le détail du calcul.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
             {data.components.map(c => {
               const piece = data.pieces.find(p => p.component === c.key);
               const hot = c.multiplier >= 1.8, warm = c.multiplier >= 1.25;
+              const open = openComp === c.key;
+              const mColor = hot ? '#A33' : warm ? tokens.terra : tokens.green;
               return (
-                <div key={c.key} style={{ padding: 14, background: tokens.surface, border: `1px solid ${hot ? '#D88' : tokens.creamBorder}`, borderRadius: 4 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                    <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 600, color: tokens.ink }}>{c.label}</span>
-                    <span style={{ fontFamily: "'Playfair Display'", fontSize: 20, fontWeight: 800, color: hot ? '#A33' : warm ? tokens.terra : tokens.green }}>
+                <div key={c.key} style={{ background: tokens.surface, border: `1px solid ${open ? tokens.terra : (hot ? '#D88' : tokens.creamBorder)}`, borderRadius: 4, overflow: 'hidden' }}>
+                  <button
+                    onClick={() => setOpenComp(open ? null : c.key)}
+                    style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: 14, background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 0 }}>
+                      <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.inkLight }}>{open ? '▾' : '▸'}</span>
+                      <span style={{ fontFamily: FONT, fontSize: 14, fontWeight: 600, color: tokens.ink }}>{c.label}</span>
+                      {piece?.adjustedWearPct != null && (
+                        <span style={{ fontFamily: FONT, fontSize: 11, color: piece.adjustedWearPct >= 90 ? '#A33' : tokens.inkLight }}>
+                          {piece.adjustedWearPct}% usure
+                        </span>
+                      )}
+                    </span>
+                    <span style={{ fontFamily: "'Playfair Display'", fontSize: 20, fontWeight: 800, color: mColor, flexShrink: 0 }}>
                       ×{c.multiplier.toFixed(2)}
                     </span>
-                  </div>
-                  {piece?.adjustedIntervalKm != null && (
-                    <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.inkMid, marginTop: 6, lineHeight: 1.5 }}>
-                      Intervalle {piece.lifetimeKm} km → <strong style={{ color: tokens.ink }}>{piece.adjustedIntervalKm} km</strong> chez toi
-                    </div>
-                  )}
-                  {piece && piece.adjustedWearPct != null && (
-                    <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.inkMid, marginTop: 3 }}>
-                      {piece.name} : <strong style={{ color: piece.adjustedWearPct >= 90 ? '#A33' : tokens.ink }}>{piece.adjustedWearPct} %</strong> d&apos;usure ajustée
-                      <span style={{ color: tokens.inkLight }}> (brut : {piece.rawWearPct} %)</span>
+                  </button>
+
+                  {open && (
+                    <div style={{ padding: '0 16px 16px', borderTop: `1px solid ${tokens.creamBorder}` }}>
+                      <p style={{ fontFamily: FONT, fontSize: 12, color: tokens.inkMid, lineHeight: 1.6, margin: '12px 0 14px' }}>
+                        {c.breakdown.why}
+                      </p>
+
+                      {/* Term-by-term maths */}
+                      <div style={{ background: tokens.creamDark, borderRadius: 4, padding: '4px 12px' }}>
+                        {c.breakdown.terms.map((t, i) => (
+                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, padding: '8px 0', borderBottom: i < c.breakdown.terms.length - 1 ? `1px solid ${tokens.creamBorder}` : 'none' }}>
+                            <span style={{ minWidth: 0 }}>
+                              <span style={{ fontFamily: FONT, fontSize: 13, color: tokens.ink, fontWeight: 600 }}>{t.label}</span>
+                              <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.inkLight, display: 'block' }}>{t.detail}</span>
+                            </span>
+                            <span style={{ fontFamily: 'monospace', fontSize: 14, color: i === 0 ? tokens.inkMid : tokens.terra, fontWeight: 700, flexShrink: 0 }}>
+                              {i === 0 ? t.contrib.toFixed(2) : `+${t.contrib.toFixed(2)}`}
+                            </span>
+                          </div>
+                        ))}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '10px 0', borderTop: `2px solid ${tokens.creamBorder}`, marginTop: 2 }}>
+                          <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 700, color: tokens.ink }}>
+                            Multiplicateur{c.breakdown.capped ? ' (plafonné)' : ''}
+                          </span>
+                          <span style={{ fontFamily: "'Playfair Display'", fontSize: 18, fontWeight: 800, color: mColor }}>×{c.breakdown.total.toFixed(2)}</span>
+                        </div>
+                      </div>
+
+                      {c.example && (
+                        <p style={{ fontFamily: FONT, fontSize: 12, color: tokens.inkMid, lineHeight: 1.6, margin: '14px 0 0', padding: 12, background: tokens.cream, borderRadius: 4, borderLeft: `3px solid ${tokens.terra}` }}>
+                          <strong style={{ color: tokens.ink }}>Concret : </strong>{c.example}
+                        </p>
+                      )}
+
+                      {piece && (
+                        <p style={{ fontFamily: FONT, fontSize: 12, color: tokens.inkMid, lineHeight: 1.6, margin: '12px 0 0' }}>
+                          {piece.name} : <strong style={{ color: tokens.ink }}>{piece.rawKmSinceInstall} km</strong> roulés ={' '}
+                          <strong style={{ color: tokens.ink }}>{piece.effectiveKmSinceInstall} km</strong> équivalents →{' '}
+                          <strong style={{ color: (piece.adjustedWearPct ?? 0) >= 90 ? '#A33' : tokens.ink }}>{piece.adjustedWearPct}% d&apos;usure</strong>
+                          {piece.adjustedIntervalKm != null && <> · à remplacer vers <strong style={{ color: tokens.ink }}>{piece.adjustedIntervalKm} km</strong> (au lieu de {piece.lifetimeKm})</>}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
