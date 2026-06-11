@@ -70,10 +70,19 @@ const COMPONENT_LABEL: Record<ComponentKey, string> = {
 const MASS_KG = 75;
 
 // ── Wear model: ONE source of truth ───────────────────────────────────
-// Every component's multiplier = 1 (flat reference) + Σ(input × coefficient),
-// capped. The same definition computes the per-ride multiplier, the displayed
-// aggregate multiplier AND the term-by-term breakdown shown when the user taps
-// a component — so the number and its explanation can never diverge.
+// Each component has a wear RATE = flatBase + Σ(input × coefficient).
+//
+//   • Brake parts ('ratio'): on flat with no braking, pads barely wear, so
+//     flatBase is small. The displayed × compares your wear rate to a
+//     REFERENCE mixed terrain (what a manufacturer's "1000 km" assumes).
+//     Result: flat ≈ 0.4× (pads last much longer than rated), mixed = 1×,
+//     mountains > 1×.
+//   • Distance parts ('additive', chain/cassette/tires): they wear with the
+//     km ridden whatever the terrain, so flatBase = 1 and climbing/descent
+//     only ADD on top. flat = 1×, never below.
+//
+// The same definition computes per-ride ×, aggregate × and the breakdown, so
+// the number and its explanation can never diverge.
 type WearInput = 'descPerKm' | 'climbPerKm' | 'steepShare' | 'brakePerKm';
 
 interface WearVals { descPerKm: number; climbPerKm: number; steepShare: number; brakePerKm: number }
@@ -82,81 +91,99 @@ interface MultTerm {
   input: WearInput;
   coef:  number;
   label: string;
-  /** Human label of the input value, e.g. "15.3 m descendus / km". */
   fmt: (v: number) => string;
 }
 
-const MULT_DEFS: Record<ComponentKey, { cap: number; why: string; terms: MultTerm[] }> = {
+// What a generic manufacturer interval assumes: moderate rolling terrain.
+const REF_TERRAIN: WearVals = { descPerKm: 7, climbPerKm: 7, steepShare: 0.02, brakePerKm: 0.05 };
+
+const MULT_DEFS: Record<ComponentKey, { mode: 'ratio' | 'additive'; flatBase: number; floor: number; cap: number; why: string; terms: MultTerm[] }> = {
   brake_pads: {
-    cap: 5,
-    why: "En descente, presque toute l'altitude perdue finit en chaleur dans les plaquettes (le reste part dans l'air). Plus tu descends et plus tu freines fort, plus elles s'usent vite.",
+    mode: 'ratio', flatBase: 0.35, floor: 0.3, cap: 5,
+    why: "Les plaquettes ne s'usent quasiment qu'en freinant, donc surtout en descente. Sur du plat sans freiner, elles durent bien plus longtemps que l'intervalle constructeur (qui suppose un terrain mixte). Le × compare ton terrain à ce terrain mixte de référence.",
     terms: [
-      { input: 'descPerKm',  coef: 1 / 12, label: 'Dénivelé descendu', fmt: v => `${v.toFixed(1)} m descendus / km` },
-      { input: 'steepShare',  coef: 1.2,    label: 'Descente raide',    fmt: v => `${(v * 100).toFixed(1)} % du parcours sous −5 %` },
-      { input: 'brakePerKm',  coef: 0.25,   label: 'Freinages appuyés', fmt: v => `${v.toFixed(2)} freinage / km` },
+      { input: 'descPerKm',  coef: 0.07, label: 'Dénivelé descendu', fmt: v => `${v.toFixed(1)} m descendus / km` },
+      { input: 'steepShare', coef: 1.0,  label: 'Descente raide',    fmt: v => `${(v * 100).toFixed(1)} % du parcours sous −5 %` },
+      { input: 'brakePerKm', coef: 0.4,  label: 'Freinages appuyés', fmt: v => `${v.toFixed(2)} freinage / km` },
     ],
   },
   brake_rotors: {
-    cap: 3.5,
-    why: "Les disques chauffent avec les plaquettes mais s'usent bien plus lentement (métal contre garniture). La descente reste le principal facteur.",
+    mode: 'ratio', flatBase: 0.5, floor: 0.5, cap: 3,
+    why: "Les disques chauffent avec les plaquettes mais s'usent très lentement (métal). Comme elles, c'est la descente qui compte, comparée à un terrain mixte de référence.",
     terms: [
-      { input: 'descPerKm', coef: 1 / 25, label: 'Dénivelé descendu', fmt: v => `${v.toFixed(1)} m descendus / km` },
-      { input: 'steepShare', coef: 0.6,    label: 'Descente raide',    fmt: v => `${(v * 100).toFixed(1)} % du parcours sous −5 %` },
+      { input: 'descPerKm', coef: 0.03, label: 'Dénivelé descendu', fmt: v => `${v.toFixed(1)} m descendus / km` },
+      { input: 'steepShare', coef: 0.5,  label: 'Descente raide',    fmt: v => `${(v * 100).toFixed(1)} % du parcours sous −5 %` },
     ],
   },
   chain: {
-    cap: 2.5,
-    why: "En montée, le fort couple sur la transmission étire la chaîne plus vite qu'à plat. C'est le D+ qui compte, pas la descente.",
+    mode: 'additive', flatBase: 1, floor: 1, cap: 2.5,
+    why: "La chaîne s'use à chaque coup de pédale, donc avec la distance quoi qu'il arrive (base 1). En montée, le fort couple l'étire en plus, d'où le supplément.",
     terms: [
       { input: 'climbPerKm', coef: 1 / 30, label: 'Dénivelé grimpé', fmt: v => `${v.toFixed(1)} m grimpés / km` },
     ],
   },
   cassette: {
-    cap: 2.2,
-    why: "La cassette suit la chaîne : même cause (le couple en montée), usure un peu plus lente.",
+    mode: 'additive', flatBase: 1, floor: 1, cap: 2.2,
+    why: "Comme la chaîne : usure avec la distance (base 1), accélérée par le couple en montée.",
     terms: [
       { input: 'climbPerKm', coef: 1 / 35, label: 'Dénivelé grimpé', fmt: v => `${v.toFixed(1)} m grimpés / km` },
     ],
   },
   tire_rear: {
-    cap: 2.5,
-    why: "Le pneu arrière (motricité) s'use avec le couple en montée, et un peu avec les freinages et descentes raides.",
+    mode: 'additive', flatBase: 1, floor: 1, cap: 2.5,
+    why: "Le pneu arrière s'use avec la distance (base 1), un peu plus avec le couple en montée et les freinages.",
     terms: [
-      { input: 'climbPerKm', coef: 1 / 50, label: 'Dénivelé grimpé',  fmt: v => `${v.toFixed(1)} m grimpés / km` },
-      { input: 'steepShare',  coef: 0.4,    label: 'Descente raide',   fmt: v => `${(v * 100).toFixed(1)} % du parcours sous −5 %` },
-      { input: 'brakePerKm',  coef: 0.12,   label: 'Freinages',        fmt: v => `${v.toFixed(2)} freinage / km` },
+      { input: 'climbPerKm', coef: 1 / 50, label: 'Dénivelé grimpé', fmt: v => `${v.toFixed(1)} m grimpés / km` },
+      { input: 'steepShare',  coef: 0.4,    label: 'Descente raide',  fmt: v => `${(v * 100).toFixed(1)} % du parcours sous −5 %` },
+      { input: 'brakePerKm',  coef: 0.12,   label: 'Freinages',       fmt: v => `${v.toFixed(2)} freinage / km` },
     ],
   },
   tire_front: {
-    cap: 2,
-    why: "Le pneu avant s'use surtout dans les descentes appuyées (transfert de charge vers l'avant au freinage).",
+    mode: 'additive', flatBase: 1, floor: 1, cap: 2,
+    why: "Le pneu avant s'use avec la distance (base 1), un peu plus dans les descentes appuyées (charge vers l'avant).",
     terms: [
-      { input: 'descPerKm', coef: 1 / 50, label: 'Dénivelé descendu', fmt: v => `${v.toFixed(1)} m descendus / km` },
+      { input: 'descPerKm', coef: 1 / 60, label: 'Dénivelé descendu', fmt: v => `${v.toFixed(1)} m descendus / km` },
       { input: 'steepShare', coef: 0.3,    label: 'Descente raide',    fmt: v => `${(v * 100).toFixed(1)} % du parcours sous −5 %` },
     ],
   },
 };
 
-function multiplierFor(comp: ComponentKey, v: WearVals): number {
+function wearRate(comp: ComponentKey, v: WearVals): number {
   const def = MULT_DEFS[comp];
-  const raw = 1 + def.terms.reduce((s, t) => s + v[t.input] * t.coef, 0);
-  return Math.min(def.cap, Math.max(1, raw));
+  return def.flatBase + def.terms.reduce((s, t) => s + v[t.input] * t.coef, 0);
 }
 
-/** Term-by-term breakdown of the multiplier — fed to the expandable card. */
+function multiplierFor(comp: ComponentKey, v: WearVals): number {
+  const def = MULT_DEFS[comp];
+  const raw = def.mode === 'ratio' ? wearRate(comp, v) / wearRate(comp, REF_TERRAIN) : wearRate(comp, v);
+  return Math.min(def.cap, Math.max(def.floor, raw));
+}
+
+/** Term-by-term breakdown of the multiplier — fed to the expandable card.
+ *  For 'ratio' parts every contribution is divided by the reference rate, so
+ *  the rows still sum to the displayed × and the base row shows < 1. */
 function breakdownFor(comp: ComponentKey, v: WearVals) {
   const def = MULT_DEFS[comp];
+  const norm = def.mode === 'ratio' ? wearRate(comp, REF_TERRAIN) : 1;
   const terms = [
-    { label: 'Base (terrain plat)', detail: 'référence : 1 km de plat = 1 km d\'usure', contrib: +1 },
+    {
+      label: 'Base',
+      detail: def.mode === 'ratio'
+        ? "à plat sans freiner, l'usure est faible (< 1)"
+        : "la pièce s'use avec la distance",
+      contrib: +(def.flatBase / norm).toFixed(2),
+    },
     ...def.terms.map(t => ({
       label: t.label,
-      detail: `${t.fmt(v[t.input])} × ${t.coef >= 1 ? t.coef.toLocaleString('fr-FR') : `÷ ${Math.round(1 / t.coef)}`}`.replace('× ÷', '÷'),
-      contrib: +(v[t.input] * t.coef).toFixed(2),
+      detail: def.mode === 'ratio'
+        ? `${t.fmt(v[t.input])} · réf. mixte ${t.fmt(REF_TERRAIN[t.input])}`
+        : t.fmt(v[t.input]),
+      contrib: +((v[t.input] * t.coef) / norm).toFixed(2),
     })),
   ];
-  const rawTotal = terms.reduce((s, t) => s + t.contrib, 0);
   const total = multiplierFor(comp, v);
-  return { terms, total: +total.toFixed(2), capped: rawTotal > def.cap, why: def.why };
+  const rawTotal = terms.reduce((s, t) => s + t.contrib, 0);
+  return { terms, total: +total.toFixed(2), capped: rawTotal > def.cap + 0.01, why: def.why };
 }
 
 /** Rolling-median despike: kills single-sample altitude jumps (bridge,
@@ -294,9 +321,10 @@ function buildNarrative(bikeName: string, rides: RideMetrics[], agg: Record<Comp
   lines.push(`Sur ${rides.length} sorties avec ${bikeName} (${Math.round(totKm)} km), ton terrain est ${profile} : ${hPerKm.toFixed(0)} m de D+ par km en moyenne.`);
   if (steepKm > 1) lines.push(`Tu as passé ${steepKm.toFixed(0)} km en descente raide (pente sous −5 %), avec ${brakes} freinages appuyés détectés. C'est là que les plaquettes chauffent vraiment.`);
   const padMult = agg.brake_pads;
-  if (padMult >= 1.8) lines.push(`Conséquence : tes plaquettes s'usent environ ${padMult.toFixed(1)} fois plus vite que sur du plat. Un intervalle constructeur de 1000 km correspond chez toi à ${(1000 / padMult).toFixed(0)} km réels.`);
-  else if (padMult >= 1.25) lines.push(`Tes plaquettes s'usent environ ${padMult.toFixed(1)} fois plus vite que la référence sur plat. Pense à vérifier un peu avant l'intervalle constructeur.`);
-  else lines.push(`Ton profil de sorties use les plaquettes normalement. L'intervalle constructeur reste une bonne référence.`);
+  if (padMult >= 1.5) lines.push(`Conséquence : tes plaquettes s'usent environ ${padMult.toFixed(1)} fois plus vite qu'en terrain mixte (la référence des intervalles constructeur). Les 1000 km annoncés correspondent chez toi à ${(1000 / padMult).toFixed(0)} km réels.`);
+  else if (padMult >= 1.1) lines.push(`Tes plaquettes s'usent environ ${padMult.toFixed(1)} fois plus vite qu'en terrain mixte de référence. Vérifie-les un peu avant l'intervalle constructeur.`);
+  else if (padMult <= 0.85) lines.push(`Bonne nouvelle pour les plaquettes : ton terrain les sollicite peu (×${padMult.toFixed(1)} vs terrain mixte), elles tiendront plus longtemps que les 1000 km annoncés.`);
+  else lines.push(`Tes plaquettes s'usent à un rythme proche de l'intervalle constructeur (×${padMult.toFixed(1)}).`);
   if (agg.chain >= 1.3) lines.push(`Le D+ sollicite aussi la transmission : compte une usure de chaîne ${agg.chain.toFixed(1)} fois plus rapide (le couple en montée étire la chaîne).`);
   return lines.join(' ');
 }
@@ -357,8 +385,9 @@ export async function GET(req: NextRequest) {
   const padExample =
     `Un freinage type de 45 à 20 km/h dissipe ~${oneBrakeKJ.toLocaleString('fr-FR')} kJ de chaleur dans tes freins `
     + `(½ × ${MASS_KG} kg × (12,5² − 5,6²)). Sur ${rides.length} sorties tu as descendu ${totDescentM.toLocaleString('fr-FR')} m `
-    + `de dénivelé et donné ${totBrakes} freinages appuyés. Tes plaquettes ont donc encaissé l'équivalent d'environ `
-    + `${Math.round(totKm * agg.brake_pads).toLocaleString('fr-FR')} km de plat pour ${Math.round(totKm).toLocaleString('fr-FR')} km réellement roulés, soit ×${agg.brake_pads.toFixed(1)}.`;
+    + `de dénivelé et donné ${totBrakes} freinages appuyés, bien plus qu'un rouleur de terrain mixte. `
+    + `Tes plaquettes encaissent donc ${agg.brake_pads.toFixed(1)}× la charge d'un parcours de référence : ${Math.round(totKm).toLocaleString('fr-FR')} km roulés `
+    + `= ${Math.round(totKm * agg.brake_pads).toLocaleString('fr-FR')} km d'usure équivalente. Sur du plat pur, où tu ne freinerais presque pas, le même jeu durerait largement plus que les 1000 km annoncés.`;
 
   const components = (Object.keys(COMPONENT_LABEL) as ComponentKey[]).map(c => ({
     key: c,
