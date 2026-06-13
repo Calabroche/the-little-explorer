@@ -221,10 +221,41 @@ export async function GET(req: NextRequest) {
     .order('occurred_at', { ascending: false })
     .limit(200);
 
+  // Some events have no user_id — notably strava_webhook_received, which
+  // Strava POSTs before we know which account it belongs to. They DO carry the
+  // athlete id in properties.owner_id, so resolve owner_id → Strava account →
+  // user_id and fold those events under the real person instead of "Anonyme".
+  const ownerOf = (r: { properties: unknown }): string | null => {
+    const owner = (r.properties as { owner_id?: number | string } | null)?.owner_id;
+    return owner != null ? String(owner) : null;
+  };
+  const recentOwnerIds = Array.from(new Set(
+    (recentRows ?? [])
+      .filter(r => !r.user_id)
+      .map(ownerOf)
+      .filter((v): v is string => !!v),
+  ));
+  const userIdByOwner = new Map<string, string>();
+  if (recentOwnerIds.length > 0) {
+    const { data: acctRows } = await db.schema('next_auth')
+      .from('accounts')
+      .select('userId, providerAccountId')
+      .eq('provider', 'strava')
+      .in('providerAccountId', recentOwnerIds);
+    for (const a of (acctRows ?? [])) {
+      userIdByOwner.set(a.providerAccountId as string, a.userId as string);
+    }
+  }
+
+  // Effective user for a row: its own user_id, else the one we resolved from
+  // the Strava owner_id.
+  const effectiveUid = (r: { user_id: string | null; properties: unknown }): string | null =>
+    (r.user_id as string | null) ?? userIdByOwner.get(ownerOf(r) ?? '') ?? null;
+
   // Resolve user_id → display name so the tail shows people, not UUIDs.
   const recentUserIds = Array.from(new Set(
     (recentRows ?? [])
-      .map(r => r.user_id as string | null)
+      .map(r => effectiveUid(r as { user_id: string | null; properties: unknown }))
       .filter((v): v is string => !!v),
   ));
   const nameById = new Map<string, string>();
@@ -241,7 +272,7 @@ export async function GET(req: NextRequest) {
   }
 
   const recent = (recentRows ?? []).map(r => {
-    const uid = r.user_id as string | null;
+    const uid = effectiveUid(r as { user_id: string | null; properties: unknown });
     return {
       type:        r.event_type as string,
       user_id:     uid,
