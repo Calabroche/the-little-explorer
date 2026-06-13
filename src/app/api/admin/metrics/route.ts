@@ -116,12 +116,49 @@ export async function GET(req: NextRequest) {
     .not('user_id', 'is', null)
     .order('occurred_at', { ascending: true });
 
+  // Events with no user_id but a Strava owner_id (webhooks) belong to a real
+  // person too — resolve owner_id → Strava account → user_id so their activity
+  // (e.g. an upload that came in through the Strava webhook) counts toward DAU
+  // and the per-user breakdown instead of being dropped as "Anonyme".
+  const { data: ownerRaw } = await db.schema('next_auth')
+    .from('events')
+    .select('occurred_at, properties')
+    .is('user_id', null)
+    .gte('occurred_at', now30d)
+    .order('occurred_at', { ascending: true });
+  const ownerIdFromProps = (props: unknown): string | null => {
+    const o = (props as { owner_id?: number | string } | null)?.owner_id;
+    return o != null ? String(o) : null;
+  };
+  const ownerIds30d = Array.from(new Set(
+    (ownerRaw ?? []).map(r => ownerIdFromProps(r.properties)).filter((v): v is string => !!v),
+  ));
+  const uidByOwner30d = new Map<string, string>();
+  if (ownerIds30d.length > 0) {
+    const { data: acct } = await db.schema('next_auth')
+      .from('accounts')
+      .select('userId, providerAccountId')
+      .eq('provider', 'strava')
+      .in('providerAccountId', ownerIds30d);
+    for (const a of (acct ?? [])) {
+      uidByOwner30d.set(a.providerAccountId as string, a.userId as string);
+    }
+  }
+  // Real-user rows + webhook rows we could attribute to a user.
+  const dauRows: { user_id: string; occurred_at: string }[] = [
+    ...((dauRaw ?? []) as { user_id: string; occurred_at: string }[]),
+    ...(ownerRaw ?? []).flatMap(r => {
+      const uid = uidByOwner30d.get(ownerOf(r.properties) ?? '');
+      return uid ? [{ user_id: uid, occurred_at: r.occurred_at as string }] : [];
+    }),
+  ];
+
   const dauMap = new Map<string, Set<string>>(); // day → set<user_id>
-  for (const row of dauRaw ?? []) {
-    const day = (row.occurred_at as string).slice(0, 10);
+  for (const row of dauRows) {
+    const day = row.occurred_at.slice(0, 10);
     let set = dauMap.get(day);
     if (!set) { set = new Set(); dauMap.set(day, set); }
-    set.add(row.user_id as string);
+    set.add(row.user_id);
   }
   // Build a contiguous 30-day series so the chart doesn't skip days.
   const dauDays: string[] = [];
@@ -135,9 +172,9 @@ export async function GET(req: NextRequest) {
   // Per-user-per-day activity over the same window. Keeps *who* was active
   // each day so daily engagement isn't lost as the chart's count collapses it.
   const perUser = new Map<string, Map<string, number>>(); // user_id → (day → count)
-  for (const row of dauRaw ?? []) {
-    const uid = row.user_id as string;
-    const day = (row.occurred_at as string).slice(0, 10);
+  for (const row of dauRows) {
+    const uid = row.user_id;
+    const day = row.occurred_at.slice(0, 10);
     let m = perUser.get(uid);
     if (!m) { m = new Map(); perUser.set(uid, m); }
     m.set(day, (m.get(day) ?? 0) + 1);
