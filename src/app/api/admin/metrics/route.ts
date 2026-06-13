@@ -148,7 +148,7 @@ export async function GET(req: NextRequest) {
   const dauRows: { user_id: string; occurred_at: string }[] = [
     ...((dauRaw ?? []) as { user_id: string; occurred_at: string }[]),
     ...(ownerRaw ?? []).flatMap(r => {
-      const uid = uidByOwner30d.get(ownerOf(r.properties) ?? '');
+      const uid = uidByOwner30d.get(ownerIdFromProps(r.properties) ?? '');
       return uid ? [{ user_id: uid, occurred_at: r.occurred_at as string }] : [];
     }),
   ];
