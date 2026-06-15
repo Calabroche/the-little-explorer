@@ -16,14 +16,15 @@ on:
         default: ''
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  # ── New multi-user path: reads athletes from next_auth.accounts and
-  # writes activities + streams to public.activities. Used by anyone
-  # who connected Strava through the production app's OAuth flow.
-  # Independent of the legacy florian/helena matrix below; both jobs
-  # can run side-by-side until the legacy path is retired.
+  # Reads athletes from next_auth.accounts and writes activities + streams to
+  # public.activities. Covers everyone who connected Strava through the
+  # production app's OAuth flow. This is the only sync path: the old per-user
+  # JSON matrix (florian/helena, env-var refresh tokens) was retired once the
+  # OAuth flow took over — its refresh tokens had gone stale and it synced
+  # nobody. If a legacy user is missing here, reconnect Strava in the app.
   sync-supabase:
     runs-on: ubuntu-latest
     steps:
@@ -43,86 +44,3 @@ jobs:
             exit 0
           fi
           node scripts/sync-strava-supabase.mjs
-
-  # ── Legacy per-user-JSON path. Kept around until Florian + Helena
-  # have linked Strava via the production OAuth flow (which creates
-  # rows in next_auth.accounts that sync-supabase reads). At that
-  # point this whole job can be deleted and the env-var refresh
-  # tokens removed from GitHub Secrets.
-  sync:
-    runs-on: ubuntu-latest
-    strategy:
-      # Sync each user in series so the eventual `git push` doesn't race.
-      max-parallel: 1
-      matrix:
-        user: [florian, helena]
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          # The matrix runs sequentially so each iteration must pull the
-          # latest commits from the previous user's push.
-          fetch-depth: 0
-
-      - name: Pull latest (sequential matrix)
-        run: git pull --ff-only origin master
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Sync ${{ matrix.user }}
-        env:
-          STRAVA_CLIENT_ID:             ${{ secrets.STRAVA_CLIENT_ID }}
-          STRAVA_CLIENT_SECRET:         ${{ secrets.STRAVA_CLIENT_SECRET }}
-          STRAVA_REFRESH_TOKEN_FLORIAN: ${{ secrets.STRAVA_REFRESH_TOKEN_FLORIAN }}
-          STRAVA_REFRESH_TOKEN_HELENA:  ${{ secrets.STRAVA_REFRESH_TOKEN_HELENA }}
-        run: |
-          # Skip silently if this user's refresh token isn't configured yet.
-          tok_var="STRAVA_REFRESH_TOKEN_${{ matrix.user }}"
-          tok_var_upper=$(echo "$tok_var" | tr '[:lower:]' '[:upper:]')
-          if [[ -z "${!tok_var_upper}" ]]; then
-            echo "No refresh token for ${{ matrix.user }} — skipping."
-            exit 0
-          fi
-          node scripts/sync-strava.mjs --user=${{ matrix.user }}
-
-      - name: Commit & push if changes
-        run: |
-          if [[ -n "$(git status --porcelain data/users)" ]]; then
-            git config user.name  'strava-sync[bot]'
-            git config user.email 'strava-sync@users.noreply.github.com'
-            git add data/users
-            git commit -m "chore: auto-sync ${{ matrix.user }} activities"
-            git push
-          else
-            echo "No new activities for ${{ matrix.user }}."
-          fi
-
-      # ── Persist rotated refresh_token ────────────────────────────────
-      # Strava rotates refresh tokens on every /oauth/token call. The
-      # sync script captures the rotated one in /tmp; here we push it
-      # back into the per-user secret so the next run (cron or webhook)
-      # never falls back to a stale RT that Strava might silently
-      # downgrade to read-only scope.
-      - name: Rotate refresh_token secret if Strava issued a new one
-        if: always()  # also persist if a later step failed; we still got a fresh RT
-        env:
-          GH_TOKEN: ${{ secrets.STRAVA_TOKEN_PAT }}
-          USER:     ${{ matrix.user }}
-        run: |
-          ROT_FILE="/tmp/strava-rotated-rt-${USER}.txt"
-          if [[ ! -f "$ROT_FILE" ]]; then
-            echo "No rotated RT for $USER — keeping existing secret."
-            exit 0
-          fi
-          if [[ -z "$GH_TOKEN" ]]; then
-            echo "::warning::STRAVA_TOKEN_PAT secret missing — cannot persist rotated RT."
-            exit 0
-          fi
-          USER_UPPER=$(echo "$USER" | tr '[:lower:]' '[:upper:]')
-          # gh CLI is preinstalled on ubuntu-latest runners
-          cat "$ROT_FILE" | gh secret set "STRAVA_REFRESH_TOKEN_${USER_UPPER}" \
-            --repo "${{ github.repository }}"
-          echo "✓ rotated refresh_token persisted to STRAVA_REFRESH_TOKEN_${USER_UPPER}"
-          rm -f "$ROT_FILE"
