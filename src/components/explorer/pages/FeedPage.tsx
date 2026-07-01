@@ -637,21 +637,27 @@ export function FeedPage({ activities, stats, sport, onSelect }: Props) {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (!sessionAthleteId) return;
-    // Once-per-load guard so navigating sport tabs doesn't refire
-    // the sync chain mid-page.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if ((window as any).__tleAutoSyncFired) return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (window as any).__tleAutoSyncFired = true;
+    // Guard MUST survive a reload. We call window.location.reload()
+    // below, and a window-scoped flag (the old `__tleAutoSyncFired`) is
+    // wiped by that reload — so the chain re-fired on every load. Since
+    // one of the triggers is "some activities still miss GPS", and
+    // indoor sessions (yoga, weights, home-trainer) can NEVER get a
+    // GPS track, that condition stayed true forever and produced an
+    // infinite "sync → reload → sync → reload" loop for any user with
+    // a single GPS-less activity. sessionStorage persists across
+    // reloads within the tab, so the pipeline runs at most once per
+    // session. Setting it up-front (before any early return) means even
+    // the no-op path can't re-arm the loop.
+    try {
+      if (sessionStorage.getItem('tle_autosync_done') === '1') return;
+      sessionStorage.setItem('tle_autosync_done', '1');
+    } catch { /* private mode: the progress gate below still stops the loop */ }
 
-    // Three triggers to fire the auto-chain:
+    // Two triggers to fire the auto-chain:
     //   (a) freshly-linked Strava with zero activities → /sync
     //       hasn't been run yet at all, kick the whole pipeline.
-    //   (b) we have summaries but a non-trivial number of rows are
-    //       missing GPS — typical post-bulk-import state.
-    // The endpoint loops idempotently and skips already-marked
-    // rows via the _streams_fetched_at sentinel, so even if (a)
-    // and (b) both fire, the net cost is one full sweep.
+    //   (b) we have summaries but some rows are missing GPS — typical
+    //       post-bulk-import state (real outdoor rides awaiting streams).
     const noActivitiesYet  = activities.length === 0;
     const missingMaps      = activities.filter(a => !a.gps || a.gps.length < 2).length;
     const someMissing      = missingMaps > 0;
@@ -660,9 +666,15 @@ export function FeedPage({ activities, stats, sport, onSelect }: Props) {
 
     void (async () => {
       try {
+        // Only reload if the pipeline actually fetched something new.
+        // Reloading merely because some activities can never have GPS
+        // (indoor) is exactly what caused the loop.
+        let progressed = false;
         if (noActivitiesYet) {
           const r = await fetch('/api/strava/sync', { method: 'POST' });
           if (!r.ok) return;
+          const j = await r.json().catch(() => ({})) as { count?: number };
+          if ((j.count ?? 0) > 0) progressed = true;
         }
         // Loop streams backfill until done — bounded by the
         // endpoint's BATCH_SIZE (10/call), 50-iter outer cap so a
@@ -672,12 +684,14 @@ export function FeedPage({ activities, stats, sport, onSelect }: Props) {
           const rr = await fetch('/api/strava/backfill-streams', { method: 'POST' });
           if (!rr.ok) break;
           const d = await rr.json() as { processed?: number; remaining?: number; done?: boolean };
+          if ((d.processed ?? 0) > 0) progressed = true;
           if (d.done || ((d.processed ?? 0) === 0 && (d.remaining ?? 0) === 0)) break;
         }
         // Reload so the cards rerender against the freshly-synced
-        // payloads. Without this the user would have to manually
-        // refresh to see their just-loaded maps.
-        window.location.reload();
+        // payloads — but ONLY when we actually pulled new data, so a
+        // user whose remaining activities are all GPS-less doesn't
+        // reload in a loop.
+        if (progressed) window.location.reload();
       } catch { /* silent — manual RE-SYNCER STRAVA button still works */ }
     })();
   }, [sessionAthleteId, activities]);
