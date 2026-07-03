@@ -1449,7 +1449,7 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
             {mapFull && (distanceKm != null || elevSeries.length > 1 || eleLoading) && (
               <div style={{
                 position: 'absolute', left: 12, right: 12, bottom: 12, zIndex: 1300,
-                display: 'flex', flexDirection: 'row', gap: 12, alignItems: 'stretch',
+                display: 'flex', flexDirection: 'row', gap: 12, alignItems: 'flex-end',
                 pointerEvents: 'none',
               }}>
                 {distanceKm != null && (() => {
