@@ -1515,14 +1515,9 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
             )}
           </div>
 
-          {/* Route summary + elevation profile, side by side below the map
-              (map / trace / infos), mirroring the fullscreen layout. Stacks
-              vertically on mobile. */}
-          <div style={{
-            marginTop: 16,
-            display: 'flex', flexDirection: isMobile ? 'column' : 'row',
-            gap: 16, alignItems: 'flex-start',
-          }}>
+          {/* Route summary — distance, time, D+/D−, difficulty + average
+              speed. Mirrors the iOS detail view's stats bar. Sits between the
+              map and the elevation profile. */}
           {distanceKm != null && (() => {
             const osrmSpeed = durationS && durationS > 0 ? distanceKm / (durationS / 3600) : null;
             // Effective cruising speed: the user's override if set, otherwise
@@ -1536,9 +1531,8 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
             const diff = routeDifficulty(distanceKm, ascent);
             return (
               <div style={{
-                ...CARD, marginTop: 0,
-                flex: isMobile ? '1 1 auto' : '1 1 300px', maxWidth: isMobile ? undefined : 460,
-                display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap',
+                ...CARD, marginTop: 16,
+                display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap',
               }}>
                 {[
                   { label: t('itinerary.statDistance'), value: `${fmtNum(distanceKm, 1, lang)}`, unit: 'km',  color: tokens.ink },
@@ -1609,21 +1603,18 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
             );
           })()}
 
-          {/* Elevation profile — to the right of the stats on desktop, below
-              them on mobile. Hovering places a synced marker on the route. */}
+          {/* Elevation chart sits directly under the map so you can read both
+              at once — and hovering it places a synced marker on the route
+              above. */}
           {(eleLoading || elevSeries.length > 1) && (
-            <div style={{ flex: isMobile ? 'unset' : '2 1 340px', minWidth: 0, width: isMobile ? '100%' : undefined }}>
-              <ElevationChart
-                data={elevSeries}
-                totalAscent={ascent}
-                totalDescent={descent}
-                loading={eleLoading && elevSeries.length === 0}
-                onHover={setHoverEleIdx}
-                flush
-              />
-            </div>
+            <ElevationChart
+              data={elevSeries}
+              totalAscent={ascent}
+              totalDescent={descent}
+              loading={eleLoading && elevSeries.length === 0}
+              onHover={setHoverEleIdx}
+            />
           )}
-          </div>
 
           {/* Way types + surfaces — below the elevation profile, side by side
               (Types de chemins | Surfaces). */}

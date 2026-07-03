@@ -19,9 +19,6 @@ interface Props {
   // Tighter paddings + shorter plot. Used by the fullscreen map overlay
   // where the chart sits beside the stats card and must stay low-profile.
   compact?:    boolean;
-  // Drop the default top margin (used when the chart is a flex-row column
-  // beside the stats card, where the row wrapper owns the spacing).
-  flush?:      boolean;
 }
 
 // Pre-compute, for each sample, the local grade (between this point and
@@ -102,7 +99,7 @@ function HoverTooltip({ active, payload }: { active?: boolean; payload?: Tooltip
   );
 }
 
-export function ElevationChart({ data, totalAscent, totalDescent, loading, onHover, compact, flush }: Props) {
+export function ElevationChart({ data, totalAscent, totalDescent, loading, onHover, compact }: Props) {
   if (loading) {
     return (
       <div style={{ padding: '32px 24px', textAlign: 'center', fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
@@ -128,7 +125,7 @@ export function ElevationChart({ data, totalAscent, totalDescent, loading, onHov
   const padded   = Math.max(20, Math.round((maxEle - minEle) * 0.15));
 
   return (
-    <div style={{ background: tokens.surface, border: `1px solid ${tokens.creamBorder}`, borderRadius: 4, padding: compact ? 12 : 20, marginTop: (compact || flush) ? 0 : 16 }}>
+    <div style={{ background: tokens.surface, border: `1px solid ${tokens.creamBorder}`, borderRadius: 4, padding: compact ? 12 : 20, marginTop: compact ? 0 : 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: compact ? 6 : 12 }}>
         <Label>PROFIL D&apos;ALTITUDE</Label>
         <div style={{ display: 'flex', gap: 16, marginLeft: 'auto' }}>
