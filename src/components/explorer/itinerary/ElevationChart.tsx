@@ -16,6 +16,9 @@ interface Props {
   // index (or null on leave). Lets the parent show a synced marker on
   // the map at the matching geometry point.
   onHover?:    (sampleIdx: number | null) => void;
+  // Tighter paddings + shorter plot. Used by the fullscreen map overlay
+  // where the chart sits beside the stats card and must stay low-profile.
+  compact?:    boolean;
 }
 
 // Pre-compute, for each sample, the local grade (between this point and
@@ -96,7 +99,7 @@ function HoverTooltip({ active, payload }: { active?: boolean; payload?: Tooltip
   );
 }
 
-export function ElevationChart({ data, totalAscent, totalDescent, loading, onHover }: Props) {
+export function ElevationChart({ data, totalAscent, totalDescent, loading, onHover, compact }: Props) {
   if (loading) {
     return (
       <div style={{ padding: '32px 24px', textAlign: 'center', fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
@@ -122,8 +125,8 @@ export function ElevationChart({ data, totalAscent, totalDescent, loading, onHov
   const padded   = Math.max(20, Math.round((maxEle - minEle) * 0.15));
 
   return (
-    <div style={{ background: tokens.surface, border: `1px solid ${tokens.creamBorder}`, borderRadius: 4, padding: 20, marginTop: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 12 }}>
+    <div style={{ background: tokens.surface, border: `1px solid ${tokens.creamBorder}`, borderRadius: 4, padding: compact ? 12 : 20, marginTop: compact ? 0 : 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: compact ? 6 : 12 }}>
         <Label>PROFIL D&apos;ALTITUDE</Label>
         <div style={{ display: 'flex', gap: 16, marginLeft: 'auto' }}>
           <div>
@@ -141,7 +144,7 @@ export function ElevationChart({ data, totalAscent, totalDescent, loading, onHov
         </div>
       </div>
 
-      <ResponsiveContainer width="100%" height={140}>
+      <ResponsiveContainer width="100%" height={compact ? 104 : 140}>
         <AreaChart
           data={enriched}
           margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
@@ -192,7 +195,7 @@ export function ElevationChart({ data, totalAscent, totalDescent, loading, onHov
         </AreaChart>
       </ResponsiveContainer>
 
-      <div style={{ marginTop: 8, display: 'flex', gap: 14, flexWrap: 'wrap', fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight, letterSpacing: '0.05em' }}>
+      <div style={{ marginTop: compact ? 5 : 8, display: 'flex', gap: 14, flexWrap: 'wrap', fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight, letterSpacing: '0.05em' }}>
         {GRADE_LEGEND.map(g => (
           <span key={g.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
             <span style={{ display: 'inline-block', width: 12, height: 8, background: g.color, borderRadius: 2 }} />

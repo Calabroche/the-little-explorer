@@ -1449,7 +1449,7 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
             {mapFull && (distanceKm != null || elevSeries.length > 1 || eleLoading) && (
               <div style={{
                 position: 'absolute', left: 12, right: 12, bottom: 12, zIndex: 1300,
-                display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start',
+                display: 'flex', flexDirection: 'row', gap: 12, alignItems: 'stretch',
                 pointerEvents: 'none',
               }}>
                 {distanceKm != null && (() => {
@@ -1466,9 +1466,9 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
                   ];
                   return (
                     <div style={{
-                      pointerEvents: 'auto',
+                      pointerEvents: 'auto', flexShrink: 0,
                       display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap',
-                      maxWidth: 'min(92vw, 560px)',
+                      maxWidth: 'min(60vw, 520px)',
                       padding: '12px 16px', borderRadius: 12,
                       background: 'rgba(255,255,255,0.94)', backdropFilter: 'blur(6px)',
                       boxShadow: '0 4px 18px rgba(0,0,0,0.22)',
@@ -1500,13 +1500,14 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
                 })()}
 
                 {(eleLoading || elevSeries.length > 1) && (
-                  <div style={{ pointerEvents: 'auto', alignSelf: 'stretch', borderRadius: 4, boxShadow: '0 4px 18px rgba(0,0,0,0.22)' }}>
+                  <div style={{ pointerEvents: 'auto', flex: 1, minWidth: 0, borderRadius: 4, boxShadow: '0 4px 18px rgba(0,0,0,0.22)' }}>
                     <ElevationChart
                       data={elevSeries}
                       totalAscent={ascent}
                       totalDescent={descent}
                       loading={eleLoading && elevSeries.length === 0}
                       onHover={setHoverEleIdx}
+                      compact
                     />
                   </div>
                 )}
