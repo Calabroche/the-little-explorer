@@ -1438,6 +1438,57 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
                 <span aria-hidden>＋</span> {t('itinerary.mapHint')}
               </div>
             )}
+
+            {/* Fullscreen-only route summary — same figures as the stats bar
+                under the map (which is hidden behind the fullscreen overlay),
+                shown as a glass card in the bottom-left so the rider keeps an
+                eye on distance / time / D+ / D− / difficulty while drawing. */}
+            {mapFull && distanceKm != null && (() => {
+              const osrmSpeed  = durationS && durationS > 0 ? distanceKm / (durationS / 3600) : null;
+              const estSeconds = speedOverride != null
+                ? (distanceKm / Math.max(1, speedOverride)) * 3600
+                : (durationS ?? (osrmSpeed ? (distanceKm / osrmSpeed) * 3600 : null));
+              const diff = routeDifficulty(distanceKm, ascent);
+              const items = [
+                { label: t('itinerary.statDistance'), value: fmtNum(distanceKm, 1, lang), unit: 'km', color: tokens.ink },
+                { label: t('itinerary.statTime'),     value: estSeconds != null ? formatDuration(estSeconds) : '—', unit: '', color: tokens.ink },
+                { label: t('itinerary.statAscent'),   value: ascent.toLocaleString(),  unit: 'm', color: tokens.terra },
+                { label: t('itinerary.statDescent'),  value: descent.toLocaleString(), unit: 'm', color: tokens.blue },
+              ];
+              return (
+                <div style={{
+                  position: 'absolute', left: 12, bottom: 56, zIndex: 1300,
+                  display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap',
+                  maxWidth: 'min(92vw, 560px)',
+                  padding: '12px 16px', borderRadius: 12,
+                  background: 'rgba(255,255,255,0.94)', backdropFilter: 'blur(6px)',
+                  boxShadow: '0 4px 18px rgba(0,0,0,0.22)',
+                }}>
+                  {items.map(s => (
+                    <div key={s.label} style={{ minWidth: 0 }}>
+                      <div style={{ fontFamily: "'Playfair Display'", fontSize: 19, fontWeight: 800, color: s.color, lineHeight: 1.1 }}>
+                        {s.value}{s.unit && <span style={{ fontSize: 11, fontWeight: 600, marginLeft: 3, color: tokens.inkLight }}>{s.unit}</span>}
+                      </div>
+                      <div style={{ fontFamily: "'Space Grotesk'", fontSize: 9, color: tokens.inkLight, letterSpacing: '0.05em', marginTop: 2 }}>
+                        {s.label}
+                      </div>
+                    </div>
+                  ))}
+                  <div style={{ minWidth: 0 }}>
+                    <span style={{
+                      display: 'inline-block', padding: '4px 11px', borderRadius: 13,
+                      background: diff.bg, color: diff.fg,
+                      fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 700, letterSpacing: '0.03em',
+                    }}>
+                      {t(`itinerary.${diff.key}`)}
+                    </span>
+                    <div style={{ fontFamily: "'Space Grotesk'", fontSize: 9, color: tokens.inkLight, letterSpacing: '0.05em', marginTop: 3 }}>
+                      {t('itinerary.statDifficulty')}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Route summary — distance, time, D+/D−, difficulty + average
