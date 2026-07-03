@@ -11,7 +11,13 @@ import { enforceRateLimit, enforceBodySize, RATE_LIMITS } from '@/lib/rate-limit
 // (`routed-bike`) is what selects the cycling profile.
 //
 // POST body fields:
-//   waypoints (required): [[lat,lng], ...]   — at least 2, max 25
+//   waypoints (required): [[lat,lng], ...]   — at least 2. OSRM caps a
+//                                               single request at 25
+//                                               coordinates, so longer
+//                                               routes are split into
+//                                               overlapping 25-point
+//                                               chunks and stitched back
+//                                               together (see below).
 //   steps     (optional): boolean             — when true, OSRM returns
 //                                               turn-by-turn maneuvers
 //                                               (used by the navigation
@@ -19,6 +25,17 @@ import { enforceRateLimit, enforceBodySize, RATE_LIMITS } from '@/lib/rate-limit
 //                                               to keep responses small)
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+// Chunked routes fan out to several sequential OSRM calls, so give the
+// function more headroom than the 10s Vercel default.
+export const maxDuration = 30;
+
+// OSRM's public endpoint rejects more than 25 coordinates per request. We
+// route in chunks of CHUNK waypoints that overlap by one point (each
+// chunk's last stop is the next chunk's first), then concatenate the
+// geometry / distance / duration / steps. MAX_WP is a sane abuse guard,
+// not an OSRM limit — a hand-drawn route never needs hundreds of points.
+const CHUNK = 25;
+const MAX_WP = 300;
 
 interface OsrmManeuver {
   type:            string;
@@ -65,9 +82,9 @@ export interface NavStep {
 export async function POST(req: NextRequest) {
   const limited = enforceRateLimit(req, RATE_LIMITS.routeBike, 'route-bike');
   if (limited) return limited;
-  // Body cap = 10 KB. 25 waypoints × ~25 bytes = 625 B; even
-  // with steps:true and verbose payloads, 10 KB is way overhead.
-  const tooBig = enforceBodySize(req, 10_000);
+  // Body cap = 16 KB. 300 waypoints × ~22 bytes ≈ 6.6 KB; 16 KB leaves
+  // ample headroom for JSON overhead and the steps flag.
+  const tooBig = enforceBodySize(req, 16_000);
   if (tooBig) return tooBig;
 
   let body: { waypoints?: [number, number][]; steps?: boolean; profile?: string };
@@ -83,7 +100,7 @@ export async function POST(req: NextRequest) {
   if (!Array.isArray(wp) || wp.length < 2) {
     return NextResponse.json({ error: 'need_at_least_2_waypoints' }, { status: 400 });
   }
-  if (wp.length > 25) {
+  if (wp.length > MAX_WP) {
     return NextResponse.json({ error: 'too_many_waypoints' }, { status: 400 });
   }
   for (const [lat, lng] of wp) {
@@ -92,47 +109,73 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const coords = wp.map(([lat, lng]) => `${lng.toFixed(6)},${lat.toFixed(6)}`).join(';');
-  const url = `https://routing.openstreetmap.de/${osrmHost}/route/v1/driving/${coords}`
-    + `?overview=full&geometries=geojson&alternatives=false`
-    + `&steps=${steps ? 'true' : 'false'}`;
+  // Split into overlapping chunks of at most CHUNK points. Each chunk shares
+  // its last waypoint with the next chunk's first, so the stitched geometry
+  // is continuous. `i += CHUNK - 1` advances by the non-overlapping amount.
+  const chunks: [number, number][][] = [];
+  for (let i = 0; i < wp.length - 1; i += CHUNK - 1) {
+    chunks.push(wp.slice(i, i + CHUNK));
+  }
 
   try {
-    const upstream = await fetch(url, { headers: { 'Accept': 'application/json' } });
-    if (!upstream.ok) {
-      return NextResponse.json({ error: `osrm ${upstream.status}` }, { status: 502 });
-    }
-    const data = await upstream.json() as OsrmResponse;
-    if (data.code !== 'Ok' || !data.routes?.length) {
-      return NextResponse.json({ error: data.message || data.code || 'no_route' }, { status: 502 });
-    }
-    const r = data.routes[0];
-    const geometry = r.geometry.coordinates.map(([lng, lat]) => [lat, lng] as [number, number]);
+    const geometry: [number, number][] = [];
+    let distance = 0;
+    let duration = 0;
+    const outSteps: NavStep[] | undefined = steps ? [] : undefined;
 
-    // Flatten leg → step, keep only what the client needs.
-    let outSteps: NavStep[] | undefined;
-    if (steps && r.legs) {
-      outSteps = [];
-      for (const leg of r.legs) {
-        if (!leg.steps) continue;
-        for (const s of leg.steps) {
-          const [lng, lat] = s.maneuver.location;
-          outSteps.push({
-            start:    [lat, lng],
-            type:     s.maneuver.type,
-            modifier: s.maneuver.modifier ?? '',
-            exit:     s.maneuver.exit ?? null,
-            name:     s.name ?? '',
-            distance: s.distance,
-            duration: s.duration,
-          });
+    for (let ci = 0; ci < chunks.length; ci++) {
+      const chunk = chunks[ci];
+      if (chunk.length < 2) continue; // trailing lone overlap point — nothing to route
+
+      const coords = chunk.map(([lat, lng]) => `${lng.toFixed(6)},${lat.toFixed(6)}`).join(';');
+      const url = `https://routing.openstreetmap.de/${osrmHost}/route/v1/driving/${coords}`
+        + `?overview=full&geometries=geojson&alternatives=false`
+        + `&steps=${steps ? 'true' : 'false'}`;
+
+      const upstream = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      if (!upstream.ok) {
+        return NextResponse.json({ error: `osrm ${upstream.status}` }, { status: 502 });
+      }
+      const data = await upstream.json() as OsrmResponse;
+      if (data.code !== 'Ok' || !data.routes?.length) {
+        return NextResponse.json({ error: data.message || data.code || 'no_route' }, { status: 502 });
+      }
+      const r = data.routes[0];
+      distance += r.distance;
+      duration += r.duration;
+
+      const geo = r.geometry.coordinates.map(([lng, lat]) => [lat, lng] as [number, number]);
+      // Drop the first vertex of every chunk after the first: it repeats the
+      // previous chunk's last vertex (the shared overlap waypoint).
+      geometry.push(...(ci === 0 ? geo : geo.slice(1)));
+
+      // Flatten leg → step, keep only what the client needs.
+      if (outSteps && r.legs) {
+        for (const leg of r.legs) {
+          if (!leg.steps) continue;
+          for (const s of leg.steps) {
+            const [lng, lat] = s.maneuver.location;
+            outSteps.push({
+              start:    [lat, lng],
+              type:     s.maneuver.type,
+              modifier: s.maneuver.modifier ?? '',
+              exit:     s.maneuver.exit ?? null,
+              name:     s.name ?? '',
+              distance: s.distance,
+              duration: s.duration,
+            });
+          }
         }
       }
     }
 
+    if (geometry.length < 2) {
+      return NextResponse.json({ error: 'no_route' }, { status: 502 });
+    }
+
     return NextResponse.json({
-      distance_m: r.distance,
-      duration_s: r.duration,
+      distance_m: distance,
+      duration_s: duration,
       geometry,
       ...(outSteps ? { steps: outSteps } : {}),
     });

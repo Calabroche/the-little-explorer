@@ -267,6 +267,31 @@ function effectiveWaypoints(wp: Waypoint[], loop: boolean): Waypoint[] {
   return [...wp, wp[0]];
 }
 
+// Where to slot a newly-dropped point so it lands in the right order instead
+// of at the very end. We pick the consecutive segment whose detour cost —
+// dist(A,P) + dist(P,B) − dist(A,B) — is smallest, i.e. the segment the point
+// is closest to, and insert right after that segment's start. With <2 stops
+// there's no segment yet, so we append. On a loop we also consider the
+// implicit closing leg (last → first). Straight-line distances are enough
+// here: it just decides ordering, OSRM still draws the real roads.
+function bestInsertIndex(wp: Waypoint[], lat: number, lng: number, loop: boolean): number {
+  if (wp.length < 2) return wp.length;
+  const P: [number, number] = [lat, lng];
+  let best = wp.length;          // default: append
+  let bestCost = Infinity;
+  const segCount = loop ? wp.length : wp.length - 1;
+  for (let i = 0; i < segCount; i++) {
+    const a = wp[i];
+    const b = wp[(i + 1) % wp.length];
+    const detour =
+      haversineM([a.lat, a.lng], P) +
+      haversineM(P, [b.lat, b.lng]) -
+      haversineM([a.lat, a.lng], [b.lat, b.lng]);
+    if (detour < bestCost) { bestCost = detour; best = i + 1; }
+  }
+  return best;
+}
+
 // ── Auto-extend: insert a detour village to hit the target distance ────────
 
 async function findDetour(
@@ -345,6 +370,11 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
   // Lets the user collapse the (potentially long) stops list to free up
   // vertical space while keeping the search + everything below in reach.
   const [stopsCollapsed, setStopsCollapsed] = useState(false);
+  // Fullscreen map — lets the rider draw comfortably, then collapse back to
+  // the normal layout (where the save / export / navigate actions live).
+  const [mapFull, setMapFull] = useState(false);
+  // Drag-and-drop reordering of the stops list (index being dragged).
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
   // User-chosen cruising speed (km/h). When set it overrides the routing
   // engine's average and drives the estimated time (time = distance / speed).
   // null → fall back to the OSRM-derived duration.
@@ -441,11 +471,19 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
     const idx = colWaypointIndex(col);
     if (idx >= 0) { setWaypoints(prev => prev.filter((_, i) => i !== idx)); return; }
     const code = colCode(col);
-    setWaypoints(prev => prev.some(p => p.code === code) ? prev : [...prev, {
-      name: col.name, code, lat: col.lat, lng: col.lng,
-      label: col.ele != null ? `${col.name} · ${col.ele} m` : col.name,
-      kind: 'locality' as const,
-    }]);
+    setWaypoints(prev => {
+      if (prev.some(p => p.code === code)) return prev;
+      const w: Waypoint = {
+        name: col.name, code, lat: col.lat, lng: col.lng,
+        label: col.ele != null ? `${col.name} · ${col.ele} m` : col.name,
+        kind: 'locality' as const,
+      };
+      // A col near the route should slot into it, not tack onto the end.
+      const at = bestInsertIndex(prev, col.lat, col.lng, loop);
+      const next = [...prev];
+      next.splice(at, 0, w);
+      return next;
+    });
   };
 
   // Nearby cols (cycling only) — fetched once here, then shown BOTH as always-on
@@ -514,7 +552,14 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
                ? `${clickInfo.name}, ${clickInfo.city}` : clickInfo?.name,
       kind:  'locality',
     };
-    setWaypoints(prev => [...prev, w]);
+    // Slot the point between its two nearest neighbours rather than at the
+    // end, so dropping a stop mid-route doesn't force a manual reorder.
+    setWaypoints(prev => {
+      const at = bestInsertIndex(prev, lat, lng, loop);
+      const next = [...prev];
+      next.splice(at, 0, w);
+      return next;
+    });
     setClickPoint(null);
     setClickInfo(null);
   };
@@ -523,6 +568,15 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
     const j = idx + dir;
     if (j < 0 || j >= next.length) return prev;
     [next[idx], next[j]] = [next[j], next[idx]];
+    return next;
+  });
+  // Move a stop from one position to another (drag-and-drop). Unlike
+  // moveWaypoint (single-step swap) this relocates across the whole list.
+  const reorderWaypoint = (from: number, to: number) => setWaypoints(prev => {
+    if (from === to || from < 0 || to < 0 || from >= prev.length || to >= prev.length) return prev;
+    const next = [...prev];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
     return next;
   });
   const clearAll = () => {
@@ -897,6 +951,13 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
     height: isMobile ? 420 : 'clamp(320px, calc(100vh - 400px), 600px)',
   };
   const mapInnerHeight: number | string = '100%';
+  // Fullscreen map: cover the whole viewport so the rider can draw comfortably.
+  // MapAutoResize (ResizeObserver) invalidates Leaflet's canvas on the size
+  // change, so tiles fill in without a manual pan. Collapse back to save.
+  const mapFullStyle: CSSProperties = {
+    ...CARD, padding: 0, overflow: 'hidden', position: 'fixed',
+    inset: 0, height: '100dvh', width: '100vw', zIndex: 4000, borderRadius: 0,
+  };
 
   const canExtend = distanceKm != null && targetKm - distanceKm >= 3 && !extending && !routing;
   // A route is "open" once it's been saved/loaded (activeId set). The
@@ -976,10 +1037,27 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
             {waypoints.length > 0 && !stopsCollapsed && (
               <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {waypoints.map((w, i) => (
-                  <div key={`${w.code}-${i}`} style={{
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    padding: '8px 10px', background: tokens.creamDark, borderRadius: 3,
-                  }}>
+                  <div
+                    key={`${w.code}-${i}`}
+                    draggable
+                    onDragStart={e => { setDragIdx(i); e.dataTransfer.effectAllowed = 'move'; }}
+                    onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+                    onDrop={e => { e.preventDefault(); if (dragIdx != null) reorderWaypoint(dragIdx, i); setDragIdx(null); }}
+                    onDragEnd={() => setDragIdx(null)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '8px 10px', background: tokens.creamDark, borderRadius: 3,
+                      cursor: 'grab',
+                      opacity: dragIdx === i ? 0.4 : 1,
+                      boxShadow: dragIdx != null && dragIdx !== i ? `inset 0 0 0 1px ${tokens.terra}55` : 'none',
+                    }}
+                  >
+                    {/* Drag handle — signals the row is draggable. The whole
+                        row is draggable, this is just the visual affordance. */}
+                    <span title={en ? 'Drag to reorder' : 'Glisser pour réordonner'} style={{
+                      color: tokens.inkLight, fontSize: 13, lineHeight: 1,
+                      cursor: 'grab', flexShrink: 0, userSelect: 'none',
+                    }}>⠿</span>
                     <span style={{
                       width: 22, height: 22, borderRadius: '50%',
                       background: tokens.terra, color: '#fff',
@@ -1102,7 +1180,7 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
 
         {/* ─── MAP + elevation profile (rendered below the builder via order) ─ */}
         <div style={{ order: 2, display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0 }}>
-          <div style={mapCardStyle}>
+          <div style={mapFull ? mapFullStyle : mapCardStyle}>
             <MapContainer
               center={mapCenter}
               zoom={waypoints.length > 0 ? 12 : 11}
@@ -1122,14 +1200,19 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
                 <CircleMarker
                   key={`${w.code}-${i}`}
                   center={[w.lat, w.lng]}
-                  radius={5}
-                  pathOptions={{ fillColor: tokens.terra, color: '#fff', weight: 1.5, fillOpacity: 1 }}
+                  radius={7}
+                  pathOptions={{ fillColor: tokens.terra, color: '#fff', weight: 1.5, fillOpacity: 1, className: 'tle-wp-dot' }}
+                  eventHandlers={{ click: () => removeWaypoint(i) }}
                 >
                   {/* Name only on hover — keeps the map minimalist (just dots)
-                      instead of plastering every stop's label across it. */}
+                      instead of plastering every stop's label across it. Click
+                      a dot to drop that stop from the route. */}
                   <Tooltip direction="top" offset={[0, -6]}>
                     <span style={{ fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 600 }}>
                       {i + 1}. {w.name}
+                      <span style={{ display: 'block', fontSize: 10, fontWeight: 500, color: tokens.inkLight }}>
+                        {en ? 'click to remove' : 'clique pour retirer'}
+                      </span>
                     </span>
                   </Tooltip>
                 </CircleMarker>
@@ -1219,6 +1302,26 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
             {/* Zoom-% pill — same control as the activity map (top-left,
                 beside Leaflet's +/-). */}
             <ZoomPercentPill value={zoomPercent} onChange={setZoomPercent} />
+
+            {/* Fullscreen toggle — enlarge the map to draw the route
+                comfortably, then collapse back (the save / export /
+                navigate actions live under the map, in normal layout).
+                Sits top-right, just under the PLAN/SAT basemap toggle. */}
+            <button
+              onClick={() => setMapFull(v => !v)}
+              title={mapFull ? (en ? 'Exit fullscreen' : 'Réduire la carte') : (en ? 'Fullscreen map' : 'Agrandir la carte')}
+              style={{
+                position: 'absolute', top: 56, right: 12, zIndex: 1200,
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '7px 11px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                background: mapFull ? tokens.terra : 'rgba(255,255,255,0.92)',
+                color: mapFull ? '#fff' : tokens.ink,
+                fontFamily: "'Space Grotesk'", fontSize: 12, fontWeight: 600,
+                boxShadow: '0 2px 8px rgba(0,0,0,0.15)', backdropFilter: 'blur(4px)',
+              }}
+            >
+              {mapFull ? `⤡ ${en ? 'Reduce' : 'Réduire'}` : `⤢ ${en ? 'Enlarge' : 'Agrandir'}`}
+            </button>
 
             {/* Resupply toggle — shows water/food points along the route.
                 Sits below the zoom +/- control (also top-left) so the two
