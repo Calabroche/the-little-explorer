@@ -311,18 +311,16 @@ export function ActivityRouteMap({
 
   return (
     <div style={mapFull
-      ? { position: 'fixed', inset: 0, zIndex: 4000, background: tokens.cream }
+      ? { position: 'fixed', inset: 0, width: '100vw', height: '100dvh', zIndex: 4000, background: tokens.cream, overflow: 'hidden' }
       : { position: 'relative' }
     }>
       <MapContainer
         center={center}
         zoom={12}
-        // 600px — taller so all 5 climbs fit in the right-hand column
-        // without scrolling, and the trailing whitespace under the
-        // map card collapses. Charts below stay visible on a 1080p
-        // screen because the chart grid is below the fold by design.
-        // Fullscreen fills the whole viewport.
-        style={{ height: mapFull ? '100dvh' : 600, width: '100%', borderRadius: mapFull ? 0 : 4 }}
+        // 600px normally — taller so all 5 climbs fit in the right-hand
+        // column without scrolling. Fullscreen fills its parent (which is
+        // the whole viewport), same pattern as the planner map.
+        style={{ height: mapFull ? '100%' : 600, width: '100%', borderRadius: mapFull ? 0 : 4 }}
         scrollWheelZoom={mapFull}
         zoomSnap={1}
       >

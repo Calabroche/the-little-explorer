@@ -47,8 +47,12 @@ export function FullscreenRefit({
 }) {
   const map = useMap();
   useEffect(() => {
+    // The container just changed size. Recompute Leaflet's cached size now
+    // (the new CSS is already committed to the DOM) AND again after a short
+    // delay in case the browser reflow lands a frame later, then re-fit.
+    map.invalidateSize({ animate: false });
     const t = setTimeout(() => {
-      map.invalidateSize();
+      map.invalidateSize({ animate: false });
       if (!positions || positions.length === 0) return;
       const offset = (zoomPercent - 100) / 25;
       if (positions.length === 1) {
