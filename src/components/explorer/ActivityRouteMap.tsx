@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { MapContainer, Polyline, Popup, useMap } from 'react-leaflet';
 import type { LeafletMouseEvent } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -309,7 +310,7 @@ export function ActivityRouteMap({
   const gradient = computeGradient(altitude, distance_m, len);
   const center   = positions[Math.floor(positions.length / 2)];
 
-  return (
+  const mapCard = (
     <div style={mapFull
       ? { position: 'fixed', inset: 0, width: '100vw', height: '100dvh', zIndex: 4000, background: tokens.cream, overflow: 'hidden' }
       : { position: 'relative' }
@@ -318,8 +319,8 @@ export function ActivityRouteMap({
         center={center}
         zoom={12}
         // 600px normally — taller so all 5 climbs fit in the right-hand
-        // column without scrolling. Fullscreen fills its parent (which is
-        // the whole viewport), same pattern as the planner map.
+        // column without scrolling. Fullscreen fills its parent (the whole
+        // viewport once portalled to <body>).
         style={{ height: mapFull ? '100%' : 600, width: '100%', borderRadius: mapFull ? 0 : 4 }}
         scrollWheelZoom={mapFull}
         zoomSnap={1}
@@ -355,6 +356,14 @@ export function ActivityRouteMap({
       </button>
     </div>
   );
+
+  // When fullscreen, portal the map to <body> so `position: fixed` escapes
+  // any transformed / overflow-clipped ancestor — that ancestor was pinning
+  // the fullscreen map to the top ~2/3 of the screen (cream showing below).
+  // Inline in the normal (non-fullscreen) layout.
+  return mapFull && typeof document !== 'undefined'
+    ? createPortal(mapCard, document.body)
+    : mapCard;
 }
 
 // ── Zoom % selector ──────────────────────────────────────────────────────
