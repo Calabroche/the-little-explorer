@@ -34,6 +34,7 @@ export type EventType =
   | 'rate_limited'            // any route triggered a 429 from the rate-limit middleware
   | 'plan_generated'          // user clicked "Génère le plan" (client-side beacon, future)
   | 'ride_recorded'           // iOS Track recorder saved a ride (client-side beacon, future)
+  | 'healthkit_activity_ingested' // POST /api/activities/ingest — a workout came in via Apple Health (Strava-independent)
   // Session / engagement — broader than the lifecycle stuff above so
   // the live tail isn't permanently empty on a slow day. Each is
   // debounced server-side to once-per-user-per-hour (see /api/me/track)
