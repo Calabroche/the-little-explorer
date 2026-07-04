@@ -164,6 +164,31 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ ok: true, id, sport: row.sport });
 }
 
+// DELETE /api/activities/ingest  { id }
+// Remove one of the authed user's activities by id (used to drop a
+// HealthKit-ingested ride, or clean up). Scoped to user_id so a user can
+// only delete their own rows.
+export async function DELETE(req: NextRequest) {
+  const authed = await getAuthedUser(req);
+  if (!authed?.id) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+
+  let body: { id?: number };
+  try { body = await req.json(); } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }); }
+  const id = Number(body.id);
+  if (!Number.isFinite(id)) return NextResponse.json({ error: 'invalid_id' }, { status: 400 });
+
+  const { error } = await supabaseAdmin()
+    .from('activities')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', authed.id);
+  if (error) {
+    console.error('[ingest] delete failed:', error.message);
+    return NextResponse.json({ error: 'db_delete_failed', detail: error.message }, { status: 500 });
+  }
+  return NextResponse.json({ ok: true, id });
+}
+
 function defaultName(type: string): string {
   const s = type.toLowerCase();
   if (s.includes('ride')) return 'Sortie vélo';
