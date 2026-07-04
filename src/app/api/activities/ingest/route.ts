@@ -127,8 +127,10 @@ export async function POST(req: NextRequest) {
     avg_speed_kmh: avgSpeed,
     max_speed_kmh: maxSpeed,
     avg_hr:        body.avg_hr ?? null,
-    max_hr:        body.max_hr ?? null,
-    calories:      body.calories ?? null,
+    max_hr:        body.max_hr != null ? Math.round(body.max_hr) : null,
+    // iOS decodes calories/max_hr as Int — keep them integer to avoid
+    // breaking the feed decode with HealthKit's fractional kcal.
+    calories:      body.calories != null ? Math.round(body.calories) : null,
     source:        'healthkit',
     gps, altitude, time_s, distance_m: distanceArr, heartrate, speed_kmh,
   };

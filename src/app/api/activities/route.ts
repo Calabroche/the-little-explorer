@@ -352,7 +352,10 @@ function transform(
     max_incline, min_incline,
     avg_hr:      raw.avg_hr          as number | null,
     max_hr:      hrMax,
-    calories:    raw.calories        as number | null,
+    // Round: HealthKit-ingested activities carry a fractional kcal value,
+    // and the iOS client decodes `calories` as an Int — a float there fails
+    // the whole feed decode. Rounding here keeps every source integer-safe.
+    calories:    raw.calories == null ? null : Math.round(Number(raw.calories)),
     speed_kmh, altitude, heartrate,
     time_s:      raw.time_s          as number[],
     distance_m,
