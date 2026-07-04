@@ -23,6 +23,7 @@ const MapClickHandler = dynamic(() => import('../itinerary/MapClickHandler').the
 const ClickPopupTracker = dynamic(() => import('../itinerary/MapClickHandler').then(m => m.ClickPopupTracker), { ssr: false });
 const MapAutoResize = dynamic(() => import('../itinerary/MapClickHandler').then(m => m.MapAutoResize), { ssr: false });
 const FitBounds    = dynamic(() => import('../itinerary/FitBounds').then(m => m.FitBounds), { ssr: false });
+const FullscreenRefit = dynamic(() => import('../itinerary/FitBounds').then(m => m.FullscreenRefit), { ssr: false });
 const BasemapTiles = dynamic(() => import('../MapBasemap').then(m => m.BasemapTiles), { ssr: false });
 import { useBasemap, BasemapToggle } from '../MapBasemap';
 import { useZoomPercent, ZoomPercentPill } from '../MapZoomControl';
@@ -1297,6 +1298,7 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
               )}
               <ClickPopupTracker point={clickPoint} onMove={setClickPixel} />
               <FitBounds positions={polylinePositions ?? waypoints.map(w => [w.lat, w.lng] as [number, number])} zoomPercent={zoomPercent} />
+              <FullscreenRefit active={mapFull} positions={polylinePositions ?? waypoints.map(w => [w.lat, w.lng] as [number, number])} zoomPercent={zoomPercent} />
             </MapContainer>
             <BasemapToggle basemap={basemap} onChange={setBasemap} />
             {/* Zoom-% pill — same control as the activity map (top-left,

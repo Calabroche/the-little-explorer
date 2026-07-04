@@ -31,3 +31,40 @@ export function FitBounds({ positions, zoomPercent = 100 }: { positions: [number
   }, [positions, map, zoomPercent]);
   return null;
 }
+
+// Re-frame the route whenever the map is toggled fullscreen (or back). The
+// container's size changes with the CSS, so we let it settle, invalidate
+// Leaflet's cached dimensions, then re-fit the trace so it fills the new
+// viewport instead of staying at the old zoom/centre.
+export function FullscreenRefit({
+  active,
+  positions,
+  zoomPercent = 100,
+}: {
+  active: boolean;
+  positions: [number, number][] | null;
+  zoomPercent?: number;
+}) {
+  const map = useMap();
+  useEffect(() => {
+    const t = setTimeout(() => {
+      map.invalidateSize();
+      if (!positions || positions.length === 0) return;
+      const offset = (zoomPercent - 100) / 25;
+      if (positions.length === 1) {
+        map.setView(positions[0], 13 + offset, { animate: false });
+        return;
+      }
+      const lats = positions.map(p => p[0]);
+      const lngs = positions.map(p => p[1]);
+      map.fitBounds(
+        [[Math.min(...lats), Math.min(...lngs)], [Math.max(...lats), Math.max(...lngs)]],
+        { padding: [40, 40], animate: false },
+      );
+      if (offset !== 0) map.setZoom(map.getZoom() + offset, { animate: false });
+    }, 140);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
+  return null;
+}

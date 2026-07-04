@@ -6,6 +6,7 @@ import type { LeafletMouseEvent } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Activity, tokens } from './tokens';
 import { useBasemap, BasemapTiles, BasemapToggle } from './MapBasemap';
+import { FullscreenRefit } from './itinerary/FitBounds';
 
 function useDarkMode() {
   const [dark, setDark] = useState(false);
@@ -244,14 +245,14 @@ function RouteWithHover({ activity, positions, gradient, highlightSegment }: {
           autoClose={false}
           closeOnClick={false}
         >
-          <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontSize: 12, minWidth: 170, lineHeight: 1.9, background: tokens.surface, color: tokens.ink, padding: 8, borderRadius: 4 }}>
-            <div style={{ fontWeight: 700, marginBottom: 4, fontSize: 11, letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: info.speed != null ? `hsl(${Math.round(Math.min(1, (info.speed / 50)) * 120)}, 90%, 45%)` : tokens.terra }} />
-              {info.dist} km · pente {info.gradient > 0 ? '+' : ''}{info.gradient}%
+          <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontSize: 14, minWidth: 195, lineHeight: 1.85, background: tokens.surface, color: tokens.ink, padding: '10px 13px', borderRadius: 4 }}>
+            <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 15, letterSpacing: '0.03em', display: 'flex', alignItems: 'center', gap: 7 }}>
+              <span style={{ display: 'inline-block', width: 11, height: 11, borderRadius: '50%', background: info.speed != null ? `hsl(${Math.round(Math.min(1, (info.speed / 50)) * 120)}, 90%, 45%)` : tokens.terra }} />
+              {info.dist} km
             </div>
+            <div>Pente : <strong>{info.gradient > 0 ? '+' : ''}{info.gradient} %</strong></div>
             {info.hr != null && <div>FC : <strong>{info.hr} bpm</strong></div>}
             <div>Vitesse : <strong>{info.speed} km/h</strong></div>
-            <div>Puissance : <strong>{info.power} W</strong></div>
             {info.altitude != null && <div>Altitude : <strong>{info.altitude} m</strong></div>}
           </div>
         </Popup>
@@ -299,6 +300,8 @@ export function ActivityRouteMap({
   // auto-fitted view. Persists in localStorage so the choice carries
   // across activities + reloads.
   const [zoomPercent, setZoomPercent] = useZoomPercent();
+  // Fullscreen map — blow the route map up to the whole viewport.
+  const [mapFull, setMapFull] = useState(false);
 
   if (!gps || gps.length < 2) return null;
 
@@ -307,7 +310,10 @@ export function ActivityRouteMap({
   const center   = positions[Math.floor(positions.length / 2)];
 
   return (
-    <div style={{ position: 'relative' }}>
+    <div style={mapFull
+      ? { position: 'fixed', inset: 0, zIndex: 4000, background: tokens.cream }
+      : { position: 'relative' }
+    }>
       <MapContainer
         center={center}
         zoom={12}
@@ -315,8 +321,9 @@ export function ActivityRouteMap({
         // without scrolling, and the trailing whitespace under the
         // map card collapses. Charts below stay visible on a 1080p
         // screen because the chart grid is below the fold by design.
-        style={{ height: 600, width: '100%', borderRadius: 4 }}
-        scrollWheelZoom={false}
+        // Fullscreen fills the whole viewport.
+        style={{ height: mapFull ? '100dvh' : 600, width: '100%', borderRadius: mapFull ? 0 : 4 }}
+        scrollWheelZoom={mapFull}
         zoomSnap={1}
       >
         <BasemapTiles basemap={basemap} darkMode={dark} />
@@ -327,9 +334,27 @@ export function ActivityRouteMap({
           highlightSegment={highlightSegment ?? null}
         />
         <FitBounds positions={positions} focus={focusCoords} zoomPercent={zoomPercent} />
+        <FullscreenRefit active={mapFull} positions={positions} zoomPercent={zoomPercent} />
       </MapContainer>
       <BasemapToggle basemap={basemap} onChange={setBasemap} />
       <ZoomPercentPill value={zoomPercent} onChange={setZoomPercent} />
+      {/* Fullscreen toggle — enlarge the route map to the whole screen,
+          then collapse back. Sits top-right under the PLAN/SAT toggle. */}
+      <button
+        onClick={() => setMapFull(v => !v)}
+        title={mapFull ? 'Réduire la carte' : 'Agrandir la carte'}
+        style={{
+          position: 'absolute', top: 56, right: 12, zIndex: 1200,
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '7px 11px', borderRadius: 8, border: 'none', cursor: 'pointer',
+          background: mapFull ? tokens.terra : 'rgba(255,255,255,0.92)',
+          color: mapFull ? '#fff' : tokens.ink,
+          fontFamily: "'Space Grotesk'", fontSize: 12, fontWeight: 600,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.15)', backdropFilter: 'blur(4px)',
+        }}
+      >
+        {mapFull ? '⤡ Réduire' : '⤢ Agrandir'}
+      </button>
     </div>
   );
 }
