@@ -474,6 +474,29 @@ export async function GET(req: NextRequest) {
 
   raws.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
+  // Dedup: the SAME ride can arrive from BOTH Strava and Apple Health (an
+  // Apple Watch ride syncs to Strava AND lands in HealthKit). Two rows are
+  // the same ride when they start within ~3 min and their distance matches
+  // within ~1 km / 6 %. Keep the Strava row (richer metadata: power, gear),
+  // drop the HealthKit twin. HealthKit rows are minted with id > 4e15.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const isHK = (r: any): boolean => r?.source === 'healthkit' || Number(r?.id) > 4e15;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const deduped: any[] = [];
+  for (const r of raws) {
+    const rStart = new Date(r.date).getTime();
+    const rKm = Number(r.distance_km) || 0;
+    const twin = deduped.findIndex(k => {
+      if (Math.abs(new Date(k.date).getTime() - rStart) > 3 * 60 * 1000) return false;
+      const kKm = Number(k.distance_km) || 0;
+      return Math.abs(kKm - rKm) <= Math.max(1, rKm * 0.06);
+    });
+    if (twin === -1) { deduped.push(r); continue; }
+    // Same ride already kept — swap in the Strava row if the twin is HealthKit.
+    if (isHK(deduped[twin]) && !isHK(r)) deduped[twin] = r;
+  }
+  raws = deduped;
+
   // Pass 1: power streams + bestEfforts per activity, using the user's mass.
   const enriched = raws.map(raw => ({ raw, ...computeStreamsAndBests(raw, profile.mass) }));
 

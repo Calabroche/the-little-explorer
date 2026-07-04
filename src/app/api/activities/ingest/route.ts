@@ -115,6 +115,25 @@ export async function POST(req: NextRequest) {
     : (durationS > 0 ? +((distanceM / durationS) * 3.6).toFixed(2) : 0);
   const maxSpeed = speed_kmh.length ? +Math.max(...speed_kmh).toFixed(2) : avgSpeed;
 
+  // Dedup vs Strava: if a non-HealthKit activity for the same ride already
+  // exists (same start ±3 min, matching distance), don't store a twin — the
+  // Strava row carries richer data. HealthKit ids are minted above 4e15.
+  const km = distanceM / 1000;
+  const startMs = Date.parse(start);
+  const { data: near } = await supabaseAdmin()
+    .from('activities')
+    .select('id, distance_km')
+    .eq('user_id', userId)
+    .gte('start_date', new Date(startMs - 180_000).toISOString())
+    .lte('start_date', new Date(startMs + 180_000).toISOString());
+  const twin = (near ?? []).find(a =>
+    Number(a.id) < 4e15 &&
+    Math.abs((Number(a.distance_km) || 0) - km) <= Math.max(1, km * 0.06),
+  );
+  if (twin) {
+    return NextResponse.json({ ok: true, deduped: true, matched: twin.id });
+  }
+
   // Same `payload` shape the Strava sync writes so the read path is identical.
   const payload = {
     id,
