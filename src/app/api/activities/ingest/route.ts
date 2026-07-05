@@ -110,12 +110,12 @@ export async function POST(req: NextRequest) {
   const heartrate   = Array.isArray(body.heartrate)   ? body.heartrate   : [];
   const speed_kmh   = Array.isArray(body.speed_kmh)   ? body.speed_kmh   : [];
 
-  // Route-less workouts (indoor sessions, strength training, home-trainer…)
-  // have no GPS and 0 distance — pure noise in a route-focused feed, and they
-  // land under the wrong sport bucket. Skip them (200 so the iOS client marks
-  // the workout handled and never retries it).
-  if (gps.length < 2) {
-    return NextResponse.json({ ok: true, skipped: 'no_route' });
+  // Skip pure-noise workouts: no GPS route AND negligible distance (indoor
+  // strength sessions, stretching…). We KEEP route-less rides that still have
+  // real distance (e.g. a home-trainer ride) — those are legit activities,
+  // just without a map. 200 so the iOS client marks the workout handled.
+  if (gps.length < 2 && distanceM < 1000) {
+    return NextResponse.json({ ok: true, skipped: 'no_route_no_distance' });
   }
 
   const avgSpeed = speed_kmh.length
