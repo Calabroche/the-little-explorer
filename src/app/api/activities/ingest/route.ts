@@ -110,6 +110,14 @@ export async function POST(req: NextRequest) {
   const heartrate   = Array.isArray(body.heartrate)   ? body.heartrate   : [];
   const speed_kmh   = Array.isArray(body.speed_kmh)   ? body.speed_kmh   : [];
 
+  // Route-less workouts (indoor sessions, strength training, home-trainer…)
+  // have no GPS and 0 distance — pure noise in a route-focused feed, and they
+  // land under the wrong sport bucket. Skip them (200 so the iOS client marks
+  // the workout handled and never retries it).
+  if (gps.length < 2) {
+    return NextResponse.json({ ok: true, skipped: 'no_route' });
+  }
+
   const avgSpeed = speed_kmh.length
     ? +(speed_kmh.reduce((a, b) => a + b, 0) / speed_kmh.length).toFixed(2)
     : (durationS > 0 ? +((distanceM / durationS) * 3.6).toFixed(2) : 0);
