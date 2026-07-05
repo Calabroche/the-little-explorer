@@ -240,21 +240,27 @@ function RouteWithHover({ activity, positions, gradient, highlightSegment }: {
       />
       {info && (
         <Popup
+          className="tle-hover-popup"
           position={[info.latlng.lat, info.latlng.lng]}
-          offset={[0, -10]}
+          offset={[0, -8]}
           closeButton={false}
           autoClose={false}
           closeOnClick={false}
         >
-          <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontSize: 14, minWidth: 195, lineHeight: 1.85, background: tokens.surface, color: tokens.ink, padding: '10px 13px', borderRadius: 4 }}>
-            <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 15, letterSpacing: '0.03em', display: 'flex', alignItems: 'center', gap: 7 }}>
-              <span style={{ display: 'inline-block', width: 11, height: 11, borderRadius: '50%', background: info.speed != null ? `hsl(${Math.round(Math.min(1, (info.speed / 50)) * 120)}, 90%, 45%)` : tokens.terra }} />
+          <div style={{
+            fontFamily: 'Space Grotesk, sans-serif', fontSize: 12.5, lineHeight: 1.5,
+            background: tokens.surface, color: tokens.ink, whiteSpace: 'nowrap',
+            padding: '8px 11px', borderRadius: 8, border: `1px solid ${tokens.creamBorder}`,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.16)',
+          }}>
+            <div style={{ fontWeight: 700, marginBottom: 4, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: '50%', flexShrink: 0, background: info.speed != null ? `hsl(${Math.round(Math.min(1, (info.speed / 50)) * 120)}, 90%, 45%)` : tokens.terra }} />
               {info.dist} km
             </div>
-            <div>Pente : <strong>{info.gradient > 0 ? '+' : ''}{info.gradient} %</strong></div>
-            {info.hr != null && <div>FC : <strong>{info.hr} bpm</strong></div>}
-            <div>Vitesse : <strong>{info.speed} km/h</strong></div>
-            {info.altitude != null && <div>Altitude : <strong>{info.altitude} m</strong></div>}
+            <div>Pente <strong>{info.gradient > 0 ? '+' : ''}{info.gradient} %</strong></div>
+            {info.hr != null && <div>FC <strong>{info.hr} bpm</strong></div>}
+            <div>Vitesse <strong>{info.speed} km/h</strong></div>
+            {info.altitude != null && <div>Altitude <strong>{info.altitude} m</strong></div>}
           </div>
         </Popup>
       )}

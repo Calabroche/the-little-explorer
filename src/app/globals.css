@@ -68,3 +68,21 @@ body {
   -moz-appearance: textfield;
   appearance: textfield;
 }
+
+/* Activity route-map hover popup — strip Leaflet's default white wrapper and
+   its big margins so the inner card is the ONLY bubble (no double-box / dead
+   white space). The inner div carries the background, padding + shadow. */
+.tle-hover-popup .leaflet-popup-content-wrapper {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 8px;
+}
+.tle-hover-popup .leaflet-popup-content {
+  margin: 0;
+  width: auto !important;
+}
+.tle-hover-popup .leaflet-popup-tip {
+  background: var(--surface);
+  box-shadow: none;
+}
