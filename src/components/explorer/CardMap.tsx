@@ -382,17 +382,17 @@ export function CardMap({
           one CSS transform = silky smooth. */}
       {hover && tooltipStyle && (
         <div style={tooltipStyle}>
-          <div style={{ fontWeight: 700, fontSize: 10, letterSpacing: '0.06em', marginBottom: 3, display: 'flex', alignItems: 'center', gap: 5 }}>
+          <div style={{ fontWeight: 700, fontSize: 11, marginBottom: 3, display: 'flex', alignItems: 'center', gap: 5 }}>
             <span style={{
-              display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
+              display: 'inline-block', width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
               background: `hsl(${Math.round(Math.min(1, (hover.speed / 50)) * 120)}, 90%, 45%)`,
             }} />
-            {hover.dist} km · pente {hover.gradient > 0 ? '+' : ''}{hover.gradient}%
+            {hover.dist} km
           </div>
-          {hover.hr != null && <div>FC : <strong>{hover.hr} bpm</strong></div>}
-          <div>Vitesse : <strong>{hover.speed} km/h</strong></div>
-          <div>Puissance : <strong>{hover.power} W</strong></div>
-          {hover.altitude != null && <div>Altitude : <strong>{hover.altitude} m</strong></div>}
+          <div>Pente <strong>{hover.gradient > 0 ? '+' : ''}{hover.gradient} %</strong></div>
+          {hover.hr != null && <div>FC <strong>{hover.hr} bpm</strong></div>}
+          <div>Vitesse <strong>{hover.speed} km/h</strong></div>
+          {hover.altitude != null && <div>Altitude <strong>{hover.altitude} m</strong></div>}
         </div>
       )}
     </div>
