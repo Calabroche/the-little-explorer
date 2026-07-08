@@ -559,3 +559,20 @@ create index if not exists activity_comments_user_idx
   on public.activity_comments (user_id);
 grant all on table public.activity_comments to postgres;
 grant all on table public.activity_comments to service_role;
+
+-- ── Push notifications: APNs device tokens ─────────────────────────────────
+-- One row per (device) APNs token the user registered. We push to every token
+-- a user has when someone likes / comments / follows them. `token` is unique so
+-- a re-registration upserts. Cleared on delete-account cascade.
+create table if not exists next_auth.device_tokens (
+  id           uuid primary key default uuid_generate_v4(),
+  user_id      uuid not null references next_auth.users(id) on delete cascade,
+  token        text not null,
+  platform     text not null default 'ios',
+  created_at   timestamptz not null default now(),
+  last_seen_at timestamptz not null default now(),
+  constraint device_tokens_token_unique unique (token)
+);
+create index if not exists device_tokens_user_idx on next_auth.device_tokens (user_id);
+grant all on table next_auth.device_tokens to postgres;
+grant all on table next_auth.device_tokens to service_role;

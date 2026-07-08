@@ -10,6 +10,8 @@ import { getAuthedUser } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/db';
 import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { logEvent } from '@/lib/events';
+import { loadAuthors } from '@/lib/social';
+import { sendPushToUser } from '@/lib/push';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -38,6 +40,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   void logEvent({ type: 'user_followed', userId: authed.id, properties: { following_id: targetId } }, req);
+
+  void (async () => {
+    const name = (await loadAuthors([authed.id])).get(authed.id)?.name ?? 'Quelqu’un';
+    await sendPushToUser(targetId, { title: 'Nouvel abonné 🎉', body: `${name} s’est abonné à toi`, data: { user_id: authed.id } });
+  })();
   return NextResponse.json({ ok: true, following: true });
 }
 

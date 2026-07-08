@@ -12,6 +12,7 @@ import { getAuthedUser } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/db';
 import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { viewerCanSeeActivity, loadAuthors } from '@/lib/social';
+import { sendPushToUser } from '@/lib/push';
 import { logEvent } from '@/lib/events';
 
 export const dynamic = 'force-dynamic';
@@ -78,6 +79,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   void logEvent({ type: 'activity_commented', userId: authed.id, properties: { activity_id: id, author_id: access.authorId } }, req);
+
+  if (access.authorId && access.authorId !== authed.id) {
+    const authorId = access.authorId;
+    const preview = body.length > 60 ? body.slice(0, 57) + '…' : body;
+    void (async () => {
+      const name = (await loadAuthors([authed.id])).get(authed.id)?.name ?? 'Quelqu’un';
+      await sendPushToUser(authorId, { title: `${name} a commenté 💬`, body: preview, data: { activity_id: id } });
+    })();
+  }
   return NextResponse.json({
     ok: true,
     comment: {

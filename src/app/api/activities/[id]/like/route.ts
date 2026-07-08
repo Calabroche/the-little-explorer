@@ -10,7 +10,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthedUser } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/db';
 import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
-import { viewerCanSeeActivity } from '@/lib/social';
+import { viewerCanSeeActivity, loadAuthors } from '@/lib/social';
+import { sendPushToUser } from '@/lib/push';
 import { logEvent } from '@/lib/events';
 
 export const dynamic = 'force-dynamic';
@@ -37,6 +38,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   void logEvent({ type: 'activity_liked', userId: authed.id, properties: { activity_id: id, author_id: access.authorId } }, req);
+
+  // Notify the author (not yourself).
+  if (access.authorId && access.authorId !== authed.id) {
+    const authorId = access.authorId;
+    void (async () => {
+      const name = (await loadAuthors([authed.id])).get(authed.id)?.name ?? 'Quelqu’un';
+      await sendPushToUser(authorId, { title: 'Nouveau kudo 👊', body: `${name} a aimé ta sortie`, data: { activity_id: id } });
+    })();
+  }
   return NextResponse.json({ ok: true, liked: true });
 }
 
