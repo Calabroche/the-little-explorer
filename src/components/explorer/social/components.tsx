@@ -377,7 +377,7 @@ export function SocialActivityCard({ item, onOpenProfile, onOpenActivity }: {
   };
 
   return (
-    <div style={{ background: tokens.surface, border: `1px solid ${tokens.creamBorder}`, borderRadius: 8, padding: 16, marginBottom: 14 }}>
+    <div style={{ background: tokens.surface, border: `1px solid ${tokens.creamBorder}`, borderRadius: 14, padding: 18, marginBottom: 16, boxShadow: '0 1px 2px rgba(60,40,20,0.04), 0 10px 30px rgba(60,40,20,0.05)' }}>
       {/* Author header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
         <button onClick={() => onOpenProfile?.(item.author.id)} style={{ background: 'none', border: 'none', padding: 0, cursor: onOpenProfile ? 'pointer' : 'default' }}>
