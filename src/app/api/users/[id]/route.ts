@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthedUser } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/db';
 import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
-import { loadFollowCounts, loadSocialCounts, canView, type Visibility } from '@/lib/social';
+import { loadFollowCounts, loadSocialCounts, canView, dedupActivities, type Visibility } from '@/lib/social';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -66,9 +66,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   if (aErr) { console.error('[profile] activities failed:', aErr.message); return NextResponse.json({ error: 'db_error' }, { status: 500 }); }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const visible = ((acts ?? []) as any[]).filter(a =>
+  const visible = dedupActivities(((acts ?? []) as any[]).filter(a =>
     canView(viewerId, targetId, (a.visibility as Visibility) ?? 'followers', following),
-  );
+  ));
 
   const social = await loadSocialCounts(visible.map(a => Number(a.id)), viewerId);
   const activities = visible.map(a => {

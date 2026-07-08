@@ -18,7 +18,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthedUser } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/db';
 import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
-import { loadFollowing, loadSocialCounts, loadAuthors, type Visibility } from '@/lib/social';
+import { loadFollowing, loadSocialCounts, loadAuthors, dedupActivities, type Visibility } from '@/lib/social';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -66,9 +66,11 @@ export async function GET(req: NextRequest) {
   // (we already restricted to people the viewer follows, so 'followers' and
   // 'public' are both visible here).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rows = ((data ?? []) as any[]).filter(r =>
+  const visibleRows = ((data ?? []) as any[]).filter(r =>
     r.user_id === viewerId || (r.visibility as Visibility) !== 'private',
   );
+  // Collapse Strava/HealthKit duplicates of the same ride.
+  const rows = dedupActivities(visibleRows);
 
   const ids = rows.map(r => Number(r.id));
   const [counts, authors] = await Promise.all([

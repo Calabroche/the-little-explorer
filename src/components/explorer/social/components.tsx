@@ -276,6 +276,10 @@ export function SocialActivityCard({ item, onOpenProfile, onOpenActivity }: {
   const [visibility, setVis] = useState<Visibility>(item.visibility);
   const [sharing, setSharing] = useState(false);
   const [likeBusy, setLikeBusy] = useState(false);
+  // Only your OWN activities open the in-app detail today (that page resolves
+  // your own rides). Others' full detail needs a dedicated endpoint — until
+  // then their cards aren't click-through, to avoid a broken detail view.
+  const openable = !!onOpenActivity && item.is_mine;
 
   const toggleLike = async () => {
     if (likeBusy) return;
@@ -314,17 +318,17 @@ export function SocialActivityCard({ item, onOpenProfile, onOpenActivity }: {
       </div>
 
       {item.title && (
-        <button onClick={() => onOpenActivity?.(item)} style={{
+        <button onClick={() => openable && onOpenActivity?.(item)} style={{
           background: 'none', border: 'none', padding: 0, textAlign: 'left', display: 'block',
           fontFamily: "'Playfair Display', serif", fontSize: 18, fontWeight: 800, color: tokens.ink,
-          marginBottom: 8, cursor: onOpenActivity ? 'pointer' : 'default',
+          marginBottom: 8, cursor: openable ? 'pointer' : 'default',
         }}>{item.title}</button>
       )}
 
       {item.gps.length >= 2 && (
         <div
-          onClick={() => onOpenActivity?.(item)}
-          style={{ borderRadius: 6, overflow: 'hidden', marginBottom: 10, cursor: onOpenActivity ? 'pointer' : 'default' }}
+          onClick={() => openable && onOpenActivity?.(item)}
+          style={{ borderRadius: 6, overflow: 'hidden', marginBottom: 10, cursor: openable ? 'pointer' : 'default' }}
         >
           <CardMap gps={item.gps.map(p => ({ lat: p[0], lng: p[1] }))} color={tokens.terra} height={180} />
         </div>

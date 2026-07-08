@@ -138,6 +138,31 @@ export interface Author {
   image: string | null;
 }
 
+/**
+ * Collapse Strava/HealthKit duplicates: the SAME ride can land from both
+ * sources (an Apple Watch ride syncs to Strava AND to Apple Health). Two rows
+ * from the same author are the same ride when they start within ~3 min and
+ * their distance matches within ~1 km / 6 %. Keep the LOWER id — Strava ids are
+ * ~1e10, HealthKit ids are minted > 4e15, so the lower id is the Strava row
+ * (richer: power, gear). Mirrors the dedup in /api/activities.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function dedupActivities<T extends { id: any; user_id: string; start_date: string; distance_km: any }>(rows: T[]): T[] {
+  const kept: T[] = [];
+  for (const r of rows) {
+    const rStart = Date.parse(r.start_date);
+    const rKm = Number(r.distance_km) || 0;
+    const twin = kept.findIndex(k =>
+      k.user_id === r.user_id &&
+      Math.abs(Date.parse(k.start_date) - rStart) <= 3 * 60 * 1000 &&
+      Math.abs((Number(k.distance_km) || 0) - rKm) <= Math.max(1, rKm * 0.06),
+    );
+    if (twin === -1) { kept.push(r); continue; }
+    if (Number(r.id) < Number(kept[twin].id)) kept[twin] = r; // prefer Strava (lower id)
+  }
+  return kept;
+}
+
 /** Resolve author identity for a set of user ids in one query. */
 export async function loadAuthors(userIds: string[]): Promise<Map<string, Author>> {
   const out = new Map<string, Author>();
