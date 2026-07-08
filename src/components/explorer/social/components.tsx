@@ -9,9 +9,22 @@
  *   SocialActivityCard — the feed/profile card composing all of the above
  */
 import { useEffect, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { tokens } from '../tokens';
 import type { FeedItem, Comment, Visibility, UserSearchResult } from './types';
 import * as api from './api';
+
+// Reuse the real Leaflet mini-map (tiles + trace) the normal feed uses.
+// Client-only (Leaflet touches window) so import it with ssr:false.
+const CardMap = dynamic(() => import('../CardMap').then(m => m.CardMap), { ssr: false });
+
+/** Deep-link path to the full activity detail page (same scheme as the feed). */
+export function activityHref(item: { title: string | null; id: number }): string {
+  const slug = (item.title || 'sortie')
+    .toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'sortie';
+  return `/activites/${slug}-${item.id}`;
+}
 
 const VIS_LABEL: Record<Visibility, string> = { public: 'Public', followers: 'Abonnés', private: 'Moi' };
 
@@ -253,8 +266,8 @@ export function ShareActivity({ item, onClose }: { item: FeedItem; onClose: () =
 }
 
 // ── The card ───────────────────────────────────────────────────────────────
-export function SocialActivityCard({ item, onOpenProfile }: {
-  item: FeedItem; onOpenProfile?: (userId: string) => void;
+export function SocialActivityCard({ item, onOpenProfile, onOpenActivity }: {
+  item: FeedItem; onOpenProfile?: (userId: string) => void; onOpenActivity?: (item: FeedItem) => void;
 }) {
   const [liked, setLiked] = useState(item.liked_by_me);
   const [likeCount, setLikeCount] = useState(item.like_count);
@@ -300,11 +313,20 @@ export function SocialActivityCard({ item, onOpenProfile }: {
         )}
       </div>
 
-      {item.title && <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 18, fontWeight: 800, color: tokens.ink, marginBottom: 8 }}>{item.title}</div>}
+      {item.title && (
+        <button onClick={() => onOpenActivity?.(item)} style={{
+          background: 'none', border: 'none', padding: 0, textAlign: 'left', display: 'block',
+          fontFamily: "'Playfair Display', serif", fontSize: 18, fontWeight: 800, color: tokens.ink,
+          marginBottom: 8, cursor: onOpenActivity ? 'pointer' : 'default',
+        }}>{item.title}</button>
+      )}
 
       {item.gps.length >= 2 && (
-        <div style={{ background: tokens.cream, borderRadius: 6, padding: 6, marginBottom: 10 }}>
-          <TraceSvg gps={item.gps} width={520} height={160} />
+        <div
+          onClick={() => onOpenActivity?.(item)}
+          style={{ borderRadius: 6, overflow: 'hidden', marginBottom: 10, cursor: onOpenActivity ? 'pointer' : 'default' }}
+        >
+          <CardMap gps={item.gps.map(p => ({ lat: p[0], lng: p[1] }))} color={tokens.terra} height={180} />
         </div>
       )}
 

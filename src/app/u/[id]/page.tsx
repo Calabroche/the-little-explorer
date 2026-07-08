@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { tokens } from '@/components/explorer/tokens';
 import { fetchProfile } from '@/components/explorer/social/api';
-import { Avatar, FollowButton, SocialActivityCard } from '@/components/explorer/social/components';
+import { Avatar, FollowButton, SocialActivityCard, activityHref } from '@/components/explorer/social/components';
 import type { Profile } from '@/components/explorer/social/types';
 
 export default function PublicProfilePage() {
@@ -26,7 +26,7 @@ export default function PublicProfilePage() {
   }, [id]);
 
   return (
-    <main style={{ minHeight: '100dvh', background: tokens.cream, padding: '32px 16px 80px' }}>
+    <main style={{ height: '100dvh', overflowY: 'auto', background: tokens.cream, padding: '32px 16px 80px' }}>
       <div style={{ maxWidth: 620, margin: '0 auto' }}>
         <button onClick={() => router.push('/')} style={{ background: 'none', border: 'none', color: tokens.terra, cursor: 'pointer', fontSize: 13, fontWeight: 600, marginBottom: 16 }}>← Retour</button>
 
@@ -53,7 +53,9 @@ export default function PublicProfilePage() {
             </div>
             {profile.activities.length === 0 && <div style={{ color: tokens.inkLight, fontSize: 13 }}>Aucune sortie visible.</div>}
             {profile.activities.map(a => (
-              <SocialActivityCard key={a.id} item={a} onOpenProfile={uid => router.push(`/u/${uid}`)} />
+              <SocialActivityCard key={a.id} item={a}
+                onOpenProfile={uid => router.push(`/u/${uid}`)}
+                onOpenActivity={act => router.push(activityHref(act))} />
             ))}
           </>
         )}

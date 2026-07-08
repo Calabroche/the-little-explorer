@@ -35,9 +35,10 @@ export function ProfilePage({ activities, stats, sport, onSelect }: {
   }, []);
 
   return (
-    <div>
+    // flex column: fixed header on top, the dashboard (FeedPage) scrolls below.
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       {profile && (
-        <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 20px 0' }}>
+        <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 20px 0', width: '100%', boxSizing: 'border-box' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <Avatar src={profile.image} name={profile.name} size={64} />
             <div style={{ flex: 1, minWidth: 0 }}>

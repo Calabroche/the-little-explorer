@@ -55,22 +55,23 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   const counts = await loadFollowCounts(targetId);
 
+  // Light select — jsonb sub-fields only, never the full streams-heavy payload
+  // (see /api/feed for why: it timed the request out).
   const { data: acts, error: aErr } = await supabaseAdmin()
     .from('activities')
-    .select('id, sport, title, start_date, duration_min, distance_km, elevation_m, visibility, payload')
+    .select('id, user_id, sport, title, start_date, duration_min, distance_km, elevation_m, visibility, gps:payload->gps, avgspeed:payload->avg_speed_kmh, maxspeed:payload->max_speed_kmh')
     .eq('user_id', targetId)
     .order('start_date', { ascending: false })
     .limit(PROFILE_ACTIVITY_LIMIT);
   if (aErr) { console.error('[profile] activities failed:', aErr.message); return NextResponse.json({ error: 'db_error' }, { status: 500 }); }
 
-  const visible = (acts ?? []).filter(a =>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const visible = ((acts ?? []) as any[]).filter(a =>
     canView(viewerId, targetId, (a.visibility as Visibility) ?? 'followers', following),
   );
 
   const social = await loadSocialCounts(visible.map(a => Number(a.id)), viewerId);
   const activities = visible.map(a => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const p: any = a.payload ?? {};
     const c = social.get(Number(a.id)) ?? { like_count: 0, comment_count: 0, liked_by_me: false };
     return {
       id:            Number(a.id),
@@ -79,12 +80,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       sport:         a.sport,
       title:         a.title,
       date:          a.start_date,
-      distance_km:   a.distance_km != null ? Number(a.distance_km) : (p.distance_km ?? null),
-      elevation_m:   a.elevation_m ?? p.elevation_m ?? null,
-      duration_min:  a.duration_min ?? p.duration_min ?? null,
-      avg_speed_kmh: p.avg_speed_kmh ?? null,
-      max_speed_kmh: p.max_speed_kmh ?? null,
-      gps:           downsample(p.gps as [number, number][], TRACE_POINTS),
+      distance_km:   a.distance_km != null ? Number(a.distance_km) : null,
+      elevation_m:   a.elevation_m ?? null,
+      duration_min:  a.duration_min ?? null,
+      avg_speed_kmh: a.avgspeed != null ? Number(a.avgspeed) : null,
+      max_speed_kmh: a.maxspeed != null ? Number(a.maxspeed) : null,
+      gps:           downsample((a.gps as [number, number][]) ?? [], TRACE_POINTS),
       visibility:    (a.visibility as Visibility) ?? 'followers',
       like_count:    c.like_count,
       comment_count: c.comment_count,

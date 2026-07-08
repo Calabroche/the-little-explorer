@@ -23,8 +23,8 @@ import { loadFollowing, loadSocialCounts, loadAuthors, type Visibility } from '@
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const FEED_LIMIT = 200;      // rows pulled before visibility filtering
-const TRACE_POINTS = 80;     // downsample the mini-map trace to keep cards light
+const FEED_LIMIT = 50;       // rows pulled before visibility filtering
+const TRACE_POINTS = 60;     // downsample the mini-map trace to keep cards light
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function downsample<T>(arr: T[], max: number): T[] {
@@ -47,9 +47,13 @@ export async function GET(req: NextRequest) {
   const following = source === 'following' ? await loadFollowing(viewerId) : new Set<string>();
   const authorIds = Array.from(new Set<string>([viewerId, ...Array.from(following)]));
 
+  // Select ONLY the jsonb sub-fields we need (gps + the two speeds), never the
+  // whole `payload` — it carries full GPS/HR/altitude/speed streams per ride,
+  // so pulling it for dozens of activities made the response huge and the feed
+  // time out ("erreur de chargement"). The rest come from denormalised columns.
   const { data, error } = await supabaseAdmin()
     .from('activities')
-    .select('id, user_id, sport, title, start_date, duration_min, distance_km, elevation_m, visibility, payload')
+    .select('id, user_id, sport, title, start_date, duration_min, distance_km, elevation_m, visibility, gps:payload->gps, avgspeed:payload->avg_speed_kmh, maxspeed:payload->max_speed_kmh')
     .in('user_id', authorIds)
     .order('start_date', { ascending: false })
     .limit(FEED_LIMIT);
@@ -61,7 +65,8 @@ export async function GET(req: NextRequest) {
   // Visibility filter: own rides always; others hidden only when 'private'
   // (we already restricted to people the viewer follows, so 'followers' and
   // 'public' are both visible here).
-  const rows = (data ?? []).filter(r =>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows = ((data ?? []) as any[]).filter(r =>
     r.user_id === viewerId || (r.visibility as Visibility) !== 'private',
   );
 
@@ -72,8 +77,6 @@ export async function GET(req: NextRequest) {
   ]);
 
   const items = rows.map(r => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const p: any = r.payload ?? {};
     const c = counts.get(Number(r.id)) ?? { like_count: 0, comment_count: 0, liked_by_me: false };
     return {
       id:            Number(r.id),
@@ -82,12 +85,12 @@ export async function GET(req: NextRequest) {
       sport:         r.sport,
       title:         r.title,
       date:          r.start_date,
-      distance_km:   r.distance_km != null ? Number(r.distance_km) : (p.distance_km ?? null),
-      elevation_m:   r.elevation_m ?? p.elevation_m ?? null,
-      duration_min:  r.duration_min ?? p.duration_min ?? null,
-      avg_speed_kmh: p.avg_speed_kmh ?? null,
-      max_speed_kmh: p.max_speed_kmh ?? null,
-      gps:           downsample(p.gps as [number, number][], TRACE_POINTS),
+      distance_km:   r.distance_km != null ? Number(r.distance_km) : null,
+      elevation_m:   r.elevation_m ?? null,
+      duration_min:  r.duration_min ?? null,
+      avg_speed_kmh: r.avgspeed != null ? Number(r.avgspeed) : null,
+      max_speed_kmh: r.maxspeed != null ? Number(r.maxspeed) : null,
+      gps:           downsample((r.gps as [number, number][]) ?? [], TRACE_POINTS),
       visibility:    (r.visibility as Visibility) ?? 'followers',
       like_count:    c.like_count,
       comment_count: c.comment_count,

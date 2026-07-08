@@ -9,7 +9,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { tokens } from '../tokens';
-import { SocialActivityCard, Avatar, FollowButton } from '../social/components';
+import { SocialActivityCard, Avatar, FollowButton, activityHref } from '../social/components';
 import { fetchFeed, searchUsers } from '../social/api';
 import type { FeedItem, UserSearchResult } from '../social/types';
 
@@ -36,6 +36,8 @@ export function SocialFeedPage() {
   const openProfile = (uid: string) => router.push(`/u/${uid}`);
 
   return (
+    // flex:1 + own scroll — <main> is overflow:hidden, so each page scrolls itself.
+    <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
     <div style={{ maxWidth: 620, margin: '0 auto', padding: '20px 16px 80px' }}>
       {/* Search */}
       <div style={{ marginBottom: 16, position: 'relative' }}>
@@ -66,7 +68,11 @@ export function SocialFeedPage() {
           Ton fil est vide. Cherche des amis ci-dessus pour voir leurs sorties ici.
         </div>
       )}
-      {items?.map(it => <SocialActivityCard key={it.id} item={it} onOpenProfile={openProfile} />)}
+      {items?.map(it => (
+        <SocialActivityCard key={it.id} item={it} onOpenProfile={openProfile}
+          onOpenActivity={a => router.push(activityHref(a))} />
+      ))}
+    </div>
     </div>
   );
 }
