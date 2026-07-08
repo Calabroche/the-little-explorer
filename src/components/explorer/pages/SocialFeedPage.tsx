@@ -15,16 +15,16 @@ import type { FeedItem, UserSearchResult } from '../social/types';
 
 export function SocialFeedPage() {
   const router = useRouter();
-  const [source, setSource] = useState<'following' | 'mine'>('following');
   const [items, setItems] = useState<FeedItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState('');
   const [results, setResults] = useState<UserSearchResult[] | null>(null);
 
+  // Home = the following feed only (your own rides live on your profile).
   useEffect(() => {
     setItems(null); setError(null);
-    fetchFeed(source).then(setItems).catch(e => setError((e as Error).message));
-  }, [source]);
+    fetchFeed('following').then(setItems).catch(e => setError((e as Error).message));
+  }, []);
 
   // Debounced user search.
   useEffect(() => {
@@ -59,24 +59,11 @@ export function SocialFeedPage() {
         )}
       </div>
 
-      {/* Source toggle */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-        {(['following', 'mine'] as const).map(s => (
-          <button key={s} onClick={() => setSource(s)} style={{
-            flex: 1, padding: '9px', borderRadius: 6, cursor: 'pointer', fontWeight: 700, fontSize: 12, letterSpacing: '0.04em',
-            border: `1px solid ${source === s ? tokens.terra : tokens.creamBorder}`,
-            background: source === s ? tokens.terra : 'transparent', color: source === s ? '#fff' : tokens.inkMid,
-          }}>{s === 'following' ? 'SUIVIS' : 'MOI'}</button>
-        ))}
-      </div>
-
-      {error && <div style={{ padding: 14, background: '#FEE', border: '1px solid #FCC', borderRadius: 6, color: '#A00' }}>Erreur de chargement du feed.</div>}
+      {error &&<div style={{ padding: 14, background: '#FEE', border: '1px solid #FCC', borderRadius: 6, color: '#A00' }}>Erreur de chargement du feed.</div>}
       {!items && !error && <div style={{ color: tokens.inkMid }}>Chargement…</div>}
       {items && items.length === 0 && (
         <div style={{ textAlign: 'center', padding: '40px 20px', color: tokens.inkMid }}>
-          {source === 'following'
-            ? 'Ton feed est vide. Abonne-toi à des gens avec la recherche ci-dessus.'
-            : "Tu n'as pas encore de sortie."}
+          Ton fil est vide. Cherche des amis ci-dessus pour voir leurs sorties ici.
         </div>
       )}
       {items?.map(it => <SocialActivityCard key={it.id} item={it} onOpenProfile={openProfile} />)}
