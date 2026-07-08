@@ -64,7 +64,9 @@ export const dict = {
     // any other UI surface references it.
     nav: {
       activities:   'Activités',
+      home:         'Accueil',
       social:       'Suivis',
+      profile:      'Profil',
       planner:      'Planificateur',
       itinerary:    'Itinéraire',
       compare:      'Comparer',
@@ -684,7 +686,9 @@ export const dict = {
     // ── Sidebar ──────────────────────────────────────────────────────────────
     nav: {
       activities:   'Activities',
+      home:         'Home',
       social:       'Following',
+      profile:      'Profile',
       planner:      'Planner',
       itinerary:    'Itinerary',
       compare:      'Compare',

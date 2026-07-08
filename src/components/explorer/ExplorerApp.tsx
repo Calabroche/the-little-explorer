@@ -8,8 +8,8 @@ import { FeatureAnnouncement } from './FeatureAnnouncement';
 import { WhatsNewPanel } from './WhatsNewPanel';
 import { useT } from '@/i18n';
 import { useIsMobile } from './ui';
-import { FeedPage } from './pages/FeedPage';
 import { SocialFeedPage } from './pages/SocialFeedPage';
+import { ProfilePage } from './pages/ProfilePage';
 import { PhotosPage } from './pages/PhotosPage';
 import { PlannerPage } from './pages/PlannerPage';
 import { PerformancePage } from './pages/PerformancePage';
@@ -22,7 +22,7 @@ import { AnalysisPage } from './AnalysisPage';
 
 const PAGE_PATHS: Record<PageId, string> = {
   feed:      '/',
-  social:    '/suivis',
+  profile:   '/mon-profil',
   planner:   '/planificateur',
   itinerary: '/itineraire',
   compare:   '/comparer',
@@ -34,7 +34,7 @@ const PAGE_PATHS: Record<PageId, string> = {
 };
 
 function pathToPage(pathname: string): PageId {
-  if (pathname.startsWith('/suivis'))        return 'social';
+  if (pathname.startsWith('/mon-profil'))    return 'profile';
   if (pathname.startsWith('/planificateur')) return 'planner';
   if (pathname.startsWith('/itineraire'))    return 'itinerary';
   if (pathname.startsWith('/comparer'))      return 'compare';
@@ -358,8 +358,8 @@ export function ExplorerApp() {
   // `page` is constructed.
   const renderPage = () => {
     switch (page) {
-      case 'feed':      return <FeedPage      activities={filteredActivities} stats={filteredStats!} sport={sport} onSelect={openActivity} />;
-      case 'social':    return <SocialFeedPage />;
+      case 'feed':      return <SocialFeedPage />;
+      case 'profile':   return <ProfilePage   activities={filteredActivities} stats={filteredStats!} sport={sport} onSelect={openActivity} />;
       // Planner is now a tabbed hub for: itinerary, training plan,
       // auto-route, route proposals. The standalone /itineraire URL
       // still resolves but routes into PlannerPage with the itinerary

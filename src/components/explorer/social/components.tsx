@@ -10,7 +10,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { tokens } from '../tokens';
-import type { FeedItem, Comment, Visibility } from './types';
+import type { FeedItem, Comment, Visibility, UserSearchResult } from './types';
 import * as api from './api';
 
 const VIS_LABEL: Record<Visibility, string> = { public: 'Public', followers: 'Abonnés', private: 'Moi' };
@@ -344,5 +344,38 @@ function ActionBtn({ onClick, label, active }: { onClick: () => void; label: str
       border: `1px solid ${tokens.creamBorder}`, background: active ? tokens.creamDark : 'transparent',
       color: tokens.inkMid, fontWeight: 600, fontSize: 12, fontFamily: "'Space Grotesk'",
     }}>{label}</button>
+  );
+}
+
+// ── Followers / following list (Strava-style) ────────────────────────────
+export function ConnectionsModal({ userId, type, onClose, onOpenProfile }: {
+  userId: string;
+  type: 'followers' | 'following';
+  onClose: () => void;
+  onOpenProfile?: (userId: string) => void;
+}) {
+  const [users, setUsers] = useState<UserSearchResult[] | null>(null);
+  useEffect(() => { api.fetchConnections(userId, type).then(setUsers).catch(() => setUsers([])); }, [userId, type]);
+  const title = type === 'followers' ? 'Abonnés' : 'Abonnements';
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: tokens.surface, borderRadius: 10, width: '100%', maxWidth: 420, maxHeight: '80vh', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderBottom: `1px solid ${tokens.creamBorder}`, position: 'sticky', top: 0, background: tokens.surface }}>
+          <span style={{ fontFamily: "'Space Grotesk'", fontWeight: 700, fontSize: 15, color: tokens.ink }}>{title}</span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: tokens.inkMid }}>✕</button>
+        </div>
+        {users === null && <div style={{ padding: 16, color: tokens.inkLight, fontSize: 13 }}>Chargement…</div>}
+        {users?.length === 0 && <div style={{ padding: 16, color: tokens.inkLight, fontSize: 13 }}>Personne pour l&apos;instant.</div>}
+        {users?.map(u => (
+          <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderBottom: `1px solid ${tokens.creamBorder}` }}>
+            <button onClick={() => onOpenProfile?.(u.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer', flex: 1, minWidth: 0, textAlign: 'left' }}>
+              <Avatar src={u.image} name={u.name} size={34} />
+              <span style={{ fontSize: 14, fontWeight: 600, color: tokens.ink }}>{u.name ?? 'Anonyme'}</span>
+            </button>
+            <FollowButton userId={u.id} initialFollowing={u.is_following} />
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
