@@ -265,6 +265,84 @@ export function ShareActivity({ item, onClose }: { item: FeedItem; onClose: () =
   );
 }
 
+// ── Read-only activity detail (works for anyone's ride you can see) ─────────
+interface DetailData {
+  id: number; title: string | null; sport: string; date: string;
+  distance_km: number | null; elevation_m: number | null; duration_min: number | null;
+  avg_speed_kmh: number | null; max_speed_kmh: number | null;
+  avg_hr: number | null; max_hr: number | null;
+  gps: [number, number][]; altitude: number[];
+  author: { name: string | null; image: string | null };
+}
+
+function ElevationChart({ alt }: { alt: number[] }) {
+  const eles = (alt ?? []).filter(e => typeof e === 'number' && isFinite(e));
+  if (eles.length < 2) return null;
+  const W = 600, H = 90, minE = Math.min(...eles), maxE = Math.max(...eles), span = Math.max(1, maxE - minE);
+  const x = (i: number) => (i / (eles.length - 1)) * W;
+  const y = (e: number) => H - ((e - minE) / span) * H;
+  const pts = eles.map((e, i) => `${x(i).toFixed(1)},${y(e).toFixed(1)}`).join(' ');
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: 80, display: 'block' }}>
+      <path d={`M0,${H} L${pts.replace(/ /g, ' L')} L${W},${H} Z`} fill="rgba(196,96,42,0.15)" />
+      <polyline points={pts} fill="none" stroke={tokens.terra} strokeWidth={2} vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}
+
+export function ActivityDetailModal({ id, onClose }: { id: number; onClose: () => void }) {
+  const [d, setD] = useState<DetailData | null>(null);
+  const [err, setErr] = useState(false);
+  useEffect(() => {
+    setD(null); setErr(false);
+    fetch(`/api/activities/${id}/view`, { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : Promise.reject()))
+      .then(setD).catch(() => setErr(true));
+  }, [id]);
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: tokens.surface, borderRadius: 12, width: '100%', maxWidth: 640, maxHeight: '92vh', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderBottom: `1px solid ${tokens.creamBorder}`, position: 'sticky', top: 0, background: tokens.surface, zIndex: 1 }}>
+          <span style={{ fontFamily: "'Playfair Display', serif", fontWeight: 800, fontSize: 18, color: tokens.ink }}>{d?.title ?? 'Sortie'}</span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: tokens.inkMid }}>✕</button>
+        </div>
+        <div style={{ padding: 16 }}>
+          {err && <div style={{ color: tokens.inkMid, fontSize: 14 }}>Impossible de charger cette sortie.</div>}
+          {!d && !err && <div style={{ color: tokens.inkMid, fontSize: 14 }}>Chargement…</div>}
+          {d && (
+            <>
+              <div style={{ fontSize: 12, color: tokens.inkLight, marginBottom: 12 }}>
+                {d.author.name ? d.author.name + ' · ' : ''}{fmtDate(d.date)} · {d.sport}
+              </div>
+              {d.gps.length >= 2 && (
+                <div style={{ borderRadius: 8, overflow: 'hidden', marginBottom: 14 }}>
+                  <CardMap gps={d.gps.map(p => ({ lat: p[0], lng: p[1] }))} color={tokens.terra} height={280} />
+                </div>
+              )}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, marginBottom: 14 }}>
+                <Stat label="Distance" value={d.distance_km != null ? `${d.distance_km.toFixed(1)} km` : '—'} />
+                <Stat label="Dénivelé +" value={d.elevation_m != null ? `${d.elevation_m} m` : '—'} color={tokens.terra} />
+                <Stat label="Temps" value={fmtDuration(d.duration_min)} />
+                <Stat label="Vitesse max" value={d.max_speed_kmh != null ? `${d.max_speed_kmh.toFixed(1)} km/h` : '—'} color="#3E6FA3" />
+                {d.avg_speed_kmh != null && <Stat label="Vitesse moy." value={`${d.avg_speed_kmh.toFixed(1)} km/h`} color="#3E6FA3" />}
+                {d.avg_hr != null && <Stat label="FC moy." value={`${Math.round(d.avg_hr)} bpm`} />}
+                {d.max_hr != null && <Stat label="FC max" value={`${Math.round(d.max_hr)} bpm`} />}
+              </div>
+              {d.altitude.length >= 2 && (
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: tokens.terra, marginBottom: 6 }}>Profil d&apos;altitude</div>
+                  <ElevationChart alt={d.altitude} />
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── The card ───────────────────────────────────────────────────────────────
 export function SocialActivityCard({ item, onOpenProfile, onOpenActivity }: {
   item: FeedItem; onOpenProfile?: (userId: string) => void; onOpenActivity?: (item: FeedItem) => void;
@@ -276,10 +354,13 @@ export function SocialActivityCard({ item, onOpenProfile, onOpenActivity }: {
   const [visibility, setVis] = useState<Visibility>(item.visibility);
   const [sharing, setSharing] = useState(false);
   const [likeBusy, setLikeBusy] = useState(false);
-  // Only your OWN activities open the in-app detail today (that page resolves
-  // your own rides). Others' full detail needs a dedicated endpoint — until
-  // then their cards aren't click-through, to avoid a broken detail view.
-  const openable = !!onOpenActivity && item.is_mine;
+  const [showDetail, setShowDetail] = useState(false);
+  // Your own rides open the full analysis (navigate); anyone else's open the
+  // read-only social detail modal (map + elevation + stats).
+  const openDetail = () => {
+    if (item.is_mine && onOpenActivity) onOpenActivity(item);
+    else setShowDetail(true);
+  };
 
   const toggleLike = async () => {
     if (likeBusy) return;
@@ -318,18 +399,15 @@ export function SocialActivityCard({ item, onOpenProfile, onOpenActivity }: {
       </div>
 
       {item.title && (
-        <button onClick={() => openable && onOpenActivity?.(item)} style={{
+        <button onClick={openDetail} style={{
           background: 'none', border: 'none', padding: 0, textAlign: 'left', display: 'block',
           fontFamily: "'Playfair Display', serif", fontSize: 18, fontWeight: 800, color: tokens.ink,
-          marginBottom: 8, cursor: openable ? 'pointer' : 'default',
+          marginBottom: 8, cursor: 'pointer',
         }}>{item.title}</button>
       )}
 
       {item.gps.length >= 2 && (
-        <div
-          onClick={() => openable && onOpenActivity?.(item)}
-          style={{ borderRadius: 6, overflow: 'hidden', marginBottom: 10, cursor: openable ? 'pointer' : 'default' }}
-        >
+        <div onClick={openDetail} style={{ borderRadius: 6, overflow: 'hidden', marginBottom: 10, cursor: 'pointer' }}>
           <CardMap gps={item.gps.map(p => ({ lat: p[0], lng: p[1] }))} color={tokens.terra} height={180} />
         </div>
       )}
@@ -351,6 +429,7 @@ export function SocialActivityCard({ item, onOpenProfile, onOpenActivity }: {
 
       {showComments && <CommentThread activityId={item.id} onCountChange={setCommentCount} />}
       {sharing && <ShareActivity item={{ ...item, visibility }} onClose={() => setSharing(false)} />}
+      {showDetail && <ActivityDetailModal id={item.id} onClose={() => setShowDetail(false)} />}
     </div>
   );
 }
