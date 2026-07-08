@@ -22,10 +22,13 @@
  *     the app properly". Saved via PATCH /api/me, then the step event
  *     fires.
  *
- *   Step 3: Connect Strava
- *     Strava OAuth button (signIn provider=strava) OR "Skip pour
- *     l'instant". Either choice flips onboarded_at = now() and
- *     redirects the user to /.
+ *   Step 3: Go to the iOS app
+ *     New accounts no longer connect Strava. The product runs on iOS
+ *     (Apple Health ingestion, no Strava athlete cap), so the final
+ *     step points the user to the app + the one-time Apple Health
+ *     setup, then flips onboarded_at = now() and redirects to /. The
+ *     9 legacy Strava-connected users are untouched (they already have
+ *     onboarded_at, so the middleware never routes them here).
  *
  * Every transition logs an event (`onboarding_step_*`) so the
  * /admin/metrics dashboard can show drop-off between steps.
@@ -36,7 +39,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { signIn, useSession } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
 import { tokens } from '@/components/explorer/tokens';
 
 import type { SportId } from '@/components/explorer/Sidebar';
@@ -63,6 +66,11 @@ const SPORT_OPTIONS: { v: SportId; label: string; icon: string }[] = [
 
 // Only cycling needs the weight / bike-weight / FTP step (power model).
 const sportNeedsWeight = (s: SportId | null): boolean => s === 'cycling';
+
+// Where the final onboarding step sends a new user. TODO(Florian): replace
+// with the real App Store / TestFlight public link once the build is
+// distributed. Kept as a single constant so it's a one-line swap.
+const IOS_APP_URL = 'https://apps.apple.com/app/the-little-explorer';
 
 interface MeResponse {
   id:         string;
@@ -188,20 +196,14 @@ export default function OnboardingPage() {
     setStep(4);
   };
 
-  const connectStrava = async () => {
-    await fireEvent('onboarding_step_strava_connected', { sport });
-    await markComplete();
-    // Use the custom link-account endpoint instead of NextAuth's
-    // signIn — the user is already authed here (Google), so we want
-    // to ATTACH Strava credentials to the existing account, not
-    // create a parallel "strava-only" user that NextAuth would
-    // otherwise spawn (and then fail to link).
-    window.location.href = '/api/connect/strava/start';
-  };
-
-  const skipStrava = async () => {
+  // Final step for a NEW account: we no longer wire Strava here. The product
+  // now lives on iOS (Apple Health ingestion, no Strava athlete cap), so we
+  // point new users to the app and explain the one-time Apple Health setup.
+  // The 9 legacy Strava-connected users are untouched — they already have
+  // onboarded_at set, so the middleware never routes them back through here.
+  const finishOnboarding = async () => {
     setSaving(true);
-    await fireEvent('onboarding_step_strava_skipped', { sport });
+    await fireEvent('onboarding_step_ios_app_seen', { sport });
     await markComplete();
     router.push('/');
   };
@@ -291,9 +293,8 @@ export default function OnboardingPage() {
           <ContactStep onNext={goStep4} pos={posOf(3)} total={totalSteps} />
         )}
         {step === 4 && (
-          <Step3
-            onConnect={connectStrava}
-            onSkip={skipStrava}
+          <IosAppStep
+            onFinish={finishOnboarding}
             saving={saving}
             total={totalSteps}
           />
@@ -312,7 +313,7 @@ function Step0({ userName, onNext }: {
   onNext: () => void;
 }) {
   const HIGHLIGHTS: { icon: string; text: string }[] = [
-    { icon: '◎', text: 'Toutes tes sorties Strava synchronisées : récap, graphes annuels et cartes.' },
+    { icon: '◎', text: 'Toutes tes sorties synchronisées depuis Apple Santé (Apple Watch, Garmin, Coros…) : récap, graphes annuels et cartes.' },
     { icon: '✦', text: 'Un planificateur d\'itinéraires + plans d\'entraînement calibrés sur ta FTP.' },
     { icon: '⚡', text: 'Suivi de ta FTP, de ta charge (TSS) et de ta forme dans le temps.' },
     { icon: '⚙', text: 'Carnet d\'entretien de ton matériel et suivi des pièces d\'usure.' },
@@ -458,55 +459,71 @@ function ContactStep({ onNext, pos, total }: { onNext: () => void; pos: number; 
   );
 }
 
-// ── Step 3: Strava ───────────────────────────────────────────────────────
-function Step3({ onConnect, onSkip, saving, total }: {
-  onConnect: () => void;
-  onSkip:    () => void;
-  saving:    boolean;
-  total:     number;
+// ── Final step: the app is on iOS ────────────────────────────────────────
+// New accounts no longer connect Strava. The product runs on iOS, which reads
+// finished workouts straight from Apple Health (Apple Watch + any brand that
+// writes to Health), with no Strava athlete cap. So the last step points the
+// user to the app and spells out the one-time Apple Health setup — the thing
+// they must do before their rides show up.
+function IosAppStep({ onFinish, saving, total }: {
+  onFinish: () => void;
+  saving:   boolean;
+  total:    number;
 }) {
+  // One-time steps a user does per device brand so their workouts flow into
+  // Apple Health (and from there into the app). Apple Watch needs nothing.
+  const BRAND_STEPS: { brand: string; step: string }[] = [
+    { brand: 'Apple Watch', step: 'Rien à faire, tes séances arrivent toutes seules.' },
+    { brand: 'Garmin',      step: 'App Garmin Connect → Plus → Réglages → Apple Santé → activer.' },
+    { brand: 'Coros',       step: 'App COROS → Profil → Réglages → Apple Santé → connecter.' },
+    { brand: 'Whoop',       step: 'App Whoop → Réglages → Intégrations → Apple Santé → activer.' },
+    { brand: 'Wahoo / Polar / Suunto', step: 'App de la marque → Réglages → Apple Santé → activer.' },
+  ];
   return (
     <>
-      <Title small={`§ ONBOARDING — ${total}/${total}`} big="Connecte Strava" italic="ou skip" />
+      <Title small={`§ ONBOARDING — ${total}/${total}`} big="Direction" italic="l'app iOS" />
       <p style={blurb}>
-        Importer ton historique Strava te donne accès à tes records, ta FTP estimée
-        et le calendrier rempli en un clic. Tu peux le faire plus tard depuis tes
-        paramètres.
+        The Little Explorer se passe sur iPhone. L&apos;app importe tes sorties
+        directement depuis Apple Santé — ton Apple Watch, et n&apos;importe quelle
+        marque qui écrit dans Santé. Pas besoin de Strava.
       </p>
-      <div style={{ display: 'grid', gap: 10, marginTop: 18 }}>
-        <button
-          onClick={onConnect}
-          disabled={saving}
-          style={{
-            padding:      '14px 16px',
-            background:   '#FC5200',    // Strava orange
-            color:        '#fff',
-            border:       '1px solid #FC5200',
-            borderRadius: 3,
-            cursor:       'pointer',
-            fontFamily:   "'Space Grotesk'", fontWeight: 700, fontSize: 14,
-            letterSpacing: '0.04em',
-          }}
-        >
-          CONNECTER STRAVA
-        </button>
-        <button
-          onClick={onSkip}
-          disabled={saving}
-          style={{
-            padding:      '12px 16px',
-            background:   'transparent',
-            color:        tokens.inkMid,
-            border:       `1px solid ${tokens.creamBorder}`,
-            borderRadius: 3,
-            cursor:       'pointer',
-            fontFamily:   "'Space Grotesk'", fontWeight: 600, fontSize: 12,
-            letterSpacing: '0.04em',
-          }}
-        >
-          {saving ? 'CHARGEMENT…' : 'PLUS TARD'}
-        </button>
+
+      <a
+        href={IOS_APP_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          marginTop: 18, padding: '14px 16px',
+          background: tokens.ink, color: '#fff',
+          border: `1px solid ${tokens.ink}`, borderRadius: 3,
+          textDecoration: 'none',
+          fontFamily: "'Space Grotesk'", fontWeight: 700, fontSize: 14,
+          letterSpacing: '0.04em',
+        }}
+      >
+         TÉLÉCHARGER L&apos;APP iOS
+      </a>
+
+      <div style={{
+        marginTop: 18, padding: 16,
+        background: tokens.creamDark, borderRadius: 4,
+        border: `1px solid ${tokens.creamBorder}`,
+      }}>
+        <p style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.04em', color: tokens.ink, margin: '0 0 10px', textTransform: 'uppercase' }}>
+          À faire une fois pour voir tes sorties
+        </p>
+        <div style={{ display: 'grid', gap: 8 }}>
+          {BRAND_STEPS.map((b, i) => (
+            <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: tokens.terra, flexShrink: 0, minWidth: 92 }}>{b.brand}</span>
+              <span style={{ fontSize: 12, color: tokens.inkMid, lineHeight: 1.45 }}>{b.step}</span>
+            </div>
+          ))}
+        </div>
       </div>
+
+      <PrimaryButton onClick={onFinish} disabled={saving} label={saving ? 'CHARGEMENT…' : 'TERMINER'} />
     </>
   );
 }

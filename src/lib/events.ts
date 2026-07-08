@@ -50,7 +50,13 @@ export type EventType =
   | 'onboarding_step_profile_done'        // saved weight + FTP
   | 'onboarding_step_strava_connected'    // chose to connect Strava
   | 'onboarding_step_strava_skipped'      // chose to skip Strava
-  | 'onboarding_complete';                // landed on home with onboarded_at set
+  | 'onboarding_step_ios_app_seen'        // reached the "go to iOS" onboarding step
+  | 'onboarding_complete'                 // landed on home with onboarded_at set
+  // Social layer — like / comment / follow / share.
+  | 'activity_liked'                      // POST /api/activities/[id]/like
+  | 'activity_commented'                  // POST /api/activities/[id]/comments
+  | 'user_followed'                       // POST /api/users/[id]/follow
+  | 'activity_shared';                    // user opened the share sheet / copied a public link
 
 export interface EventEntry {
   type:        EventType;

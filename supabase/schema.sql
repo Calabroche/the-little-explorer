@@ -489,3 +489,73 @@ alter default privileges in schema next_auth grant usage, select on sequences to
 --     drop-off rates without bloating the user row.
 alter table if exists next_auth.users
   add column if not exists onboarded_at timestamptz;
+
+-- ── Social layer: profiles, follows, likes, comments ────────────────────────
+-- Strava-style social graph. Follows are one-directional and auto-accepted
+-- (no request/approval flow) — privacy is controlled PER ACTIVITY via the
+-- `visibility` column below, not per account. This mirrors Strava: you can
+-- follow anyone, but each activity decides who actually sees it.
+
+-- Public profile fields. `bio` is a short free-text blurb; name + image
+-- already exist on next_auth.users (populated by Google/Strava OAuth).
+-- `default_activity_visibility` is the visibility stamped on newly ingested /
+-- synced activities so the user sets it once instead of per ride.
+alter table if exists next_auth.users
+  add column if not exists bio text;
+alter table if exists next_auth.users
+  add column if not exists default_activity_visibility text not null default 'followers'
+    check (default_activity_visibility in ('public', 'followers', 'private'));
+
+-- Per-activity visibility:
+--   * public    — anyone, incl. logged-out via the public share link
+--   * followers — the author's followers (and the author) only
+--   * private   — the author only
+-- Existing rows backfill to 'followers' (the not-null default). The owner
+-- always sees their own activities regardless of this value; it only gates
+-- what OTHER users see in feeds / on profiles / via share links.
+alter table if exists public.activities
+  add column if not exists visibility text not null default 'followers'
+    check (visibility in ('public', 'followers', 'private'));
+create index if not exists activities_visibility_date_idx
+  on public.activities (visibility, start_date desc);
+
+-- Follow graph. (follower_id) follows (following_id). Auto-accepted, so a
+-- single row IS the relationship — no pending/accepted state.
+create table if not exists public.follows (
+  follower_id  uuid not null references next_auth.users(id) on delete cascade,
+  following_id uuid not null references next_auth.users(id) on delete cascade,
+  created_at   timestamptz not null default now(),
+  constraint follows_pkey primary key (follower_id, following_id),
+  -- Can't follow yourself.
+  constraint follows_no_self check (follower_id <> following_id)
+);
+create index if not exists follows_following_idx on public.follows (following_id);
+create index if not exists follows_follower_idx  on public.follows (follower_id);
+grant all on table public.follows to postgres;
+grant all on table public.follows to service_role;
+
+-- Likes (Strava "kudos"). One row per (activity, user).
+create table if not exists public.activity_likes (
+  activity_id bigint not null references public.activities(id) on delete cascade,
+  user_id     uuid   not null references next_auth.users(id)   on delete cascade,
+  created_at  timestamptz not null default now(),
+  constraint activity_likes_pkey primary key (activity_id, user_id)
+);
+create index if not exists activity_likes_user_idx on public.activity_likes (user_id);
+grant all on table public.activity_likes to postgres;
+grant all on table public.activity_likes to service_role;
+
+-- Comments. Flat thread (no replies) — mirrors Strava.
+create table if not exists public.activity_comments (
+  id          uuid primary key default uuid_generate_v4(),
+  activity_id bigint not null references public.activities(id) on delete cascade,
+  user_id     uuid   not null references next_auth.users(id)   on delete cascade,
+  body        text   not null,
+  created_at  timestamptz not null default now()
+);
+create index if not exists activity_comments_activity_idx
+  on public.activity_comments (activity_id, created_at);
+create index if not exists activity_comments_user_idx
+  on public.activity_comments (user_id);
+grant all on table public.activity_comments to postgres;
+grant all on table public.activity_comments to service_role;

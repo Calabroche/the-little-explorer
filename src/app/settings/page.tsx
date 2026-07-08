@@ -27,6 +27,8 @@ interface MeResponse {
   id:        string;
   email:     string | null;
   name:      string | null;
+  bio:       string | null;
+  default_visibility: 'public' | 'followers' | 'private';
   athleteId: number | null;
   settings: {
     rider_kg:   number | null;
@@ -108,6 +110,8 @@ export default function SettingsPage() {
 
   // Form state — strings so the user can type freely (including empty).
   const [name,      setName]      = useState('');
+  const [bio,       setBio]       = useState('');
+  const [defaultVis, setDefaultVis] = useState<'public' | 'followers' | 'private'>('followers');
   const [riderKg,   setRiderKg]   = useState('');
   const [bikeKg,    setBikeKg]    = useState('');
   const [customFtp, setCustomFtp] = useState('');
@@ -141,6 +145,8 @@ export default function SettingsPage() {
       .then(d => {
         setMe(d);
         setName(d.name ?? '');
+        setBio(d.bio ?? '');
+        setDefaultVis(d.default_visibility ?? 'followers');
         setRiderKg(toInput(d.settings.rider_kg));
         setBikeKg(toInput(d.settings.bike_kg));
         setCustomFtp(toInput(d.settings.custom_ftp));
@@ -174,6 +180,9 @@ export default function SettingsPage() {
     // server, falling back to the OAuth-provided name.
     const nameTrim = name.trim();
     patch.name = nameTrim.length === 0 ? null : nameTrim;
+    // Social profile: bio + default activity visibility.
+    patch.bio = bio.trim().length === 0 ? null : bio.trim();
+    patch.default_visibility = defaultVis;
 
     try {
       const r = await fetch('/api/me', {
@@ -188,6 +197,8 @@ export default function SettingsPage() {
       const fresh = await r.json() as MeResponse;
       setMe(fresh);
       setName(fresh.name ?? '');
+      setBio(fresh.bio ?? '');
+      setDefaultVis(fresh.default_visibility ?? 'followers');
       setRiderKg(toInput(fresh.settings.rider_kg));
       setBikeKg(toInput(fresh.settings.bike_kg));
       setCustomFtp(toInput(fresh.settings.custom_ftp));
@@ -365,6 +376,25 @@ export default function SettingsPage() {
                 value={name} onChange={e => setName(e.target.value)}
                 placeholder={me.name ?? 'auto'}
                 style={INPUT} />
+            </div>
+
+            <div style={ROW}>
+              <label style={LABEL} htmlFor="bio">Bio (profil public)</label>
+              <textarea id="bio" maxLength={280} rows={2}
+                value={bio} onChange={e => setBio(e.target.value)}
+                placeholder="Une phrase sur toi, visible sur ton profil…"
+                style={{ ...INPUT, resize: 'vertical', fontFamily: "'Space Grotesk', sans-serif" }} />
+            </div>
+
+            <div style={ROW}>
+              <label style={LABEL} htmlFor="default_vis">Visibilité par défaut des sorties</label>
+              <select id="default_vis" value={defaultVis}
+                onChange={e => setDefaultVis(e.target.value as 'public' | 'followers' | 'private')}
+                style={INPUT}>
+                <option value="public">Public (tout le monde + lien partageable)</option>
+                <option value="followers">Abonnés</option>
+                <option value="private">Moi seul</option>
+              </select>
             </div>
 
             <div style={ROW}>

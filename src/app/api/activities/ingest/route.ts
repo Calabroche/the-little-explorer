@@ -162,6 +162,17 @@ export async function POST(req: NextRequest) {
     gps, altitude, time_s, distance_m: distanceArr, heartrate, speed_kmh,
   };
 
+  // Stamp the user's default visibility so a newly ingested workout respects
+  // their social preference (public / followers / private) without a per-ride
+  // choice. Falls back to the column default ('followers') on lookup failure.
+  let visibility = 'followers';
+  try {
+    const { data: prefs } = await supabaseAdmin()
+      .schema('next_auth').from('users')
+      .select('default_activity_visibility').eq('id', userId).maybeSingle();
+    if (prefs?.default_activity_visibility) visibility = prefs.default_activity_visibility as string;
+  } catch { /* keep default */ }
+
   const row = {
     id,
     user_id:       userId,
@@ -173,6 +184,7 @@ export async function POST(req: NextRequest) {
     distance_km:   payload.distance_km,
     elevation_m:   elevM,
     gear_id:       null as string | null,
+    visibility,
     payload,
   };
 

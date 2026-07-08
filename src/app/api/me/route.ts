@@ -59,6 +59,9 @@ interface MeResponse {
   id:         string;
   email:      string | null;
   name:       string | null;
+  image:      string | null;
+  bio:        string | null;
+  default_visibility: 'public' | 'followers' | 'private';
   athleteId:  number | null;
   // Stored overrides — null means "use defaults"
   settings:   UserSettings;
@@ -79,7 +82,7 @@ async function loadCurrentUser(req: NextRequest | null): Promise<{ row: any } | 
   const { data, error } = await supabaseAdmin()
     .schema('next_auth')
     .from('users')
-    .select('id, email, name, athlete_id, rider_kg, bike_kg, custom_ftp')
+    .select('id, email, name, image, bio, default_activity_visibility, athlete_id, rider_kg, bike_kg, custom_ftp')
     .eq('id', authed.id)
     .maybeSingle();
   if (error) {
@@ -112,6 +115,9 @@ export async function GET(req: NextRequest) {
     id:        row.id,
     email:     row.email,
     name:      row.name,
+    image:     row.image ?? null,
+    bio:       row.bio ?? null,
+    default_visibility: row.default_activity_visibility ?? 'followers',
     athleteId: row.athlete_id,
     settings: {
       rider_kg:   row.rider_kg,
@@ -180,6 +186,27 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
+  // Social profile: bio (≤ 280 chars, null/empty clears) + default activity
+  // visibility. Kept alongside the physical-profile fields so the settings
+  // page can save everything in one PATCH.
+  if ('bio' in body) {
+    const raw = (body as { bio?: string | null }).bio;
+    if (raw === null) update.bio = null;
+    else if (typeof raw === 'string') {
+      const trimmed = raw.trim();
+      if (trimmed.length === 0) update.bio = null;
+      else if (trimmed.length > 280) return NextResponse.json({ error: 'bio_too_long', message: '280 caractères max' }, { status: 400 });
+      else update.bio = trimmed;
+    } else return NextResponse.json({ error: 'invalid_bio' }, { status: 400 });
+  }
+  if ('default_visibility' in body) {
+    const v = (body as { default_visibility?: unknown }).default_visibility;
+    if (v !== 'public' && v !== 'followers' && v !== 'private') {
+      return NextResponse.json({ error: 'invalid_default_visibility' }, { status: 400 });
+    }
+    update.default_activity_visibility = v;
+  }
+
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: 'empty_update' }, { status: 400 });
   }
@@ -201,6 +228,9 @@ export async function PATCH(req: NextRequest) {
     id:        merged.id,
     email:     merged.email,
     name:      merged.name,
+    image:     merged.image ?? null,
+    bio:       merged.bio ?? null,
+    default_visibility: merged.default_activity_visibility ?? 'followers',
     athleteId: merged.athlete_id,
     settings: {
       rider_kg:   merged.rider_kg,

@@ -8,7 +8,7 @@ import { Label } from './ui';
 import { useT } from '@/i18n';
 import type { Lang } from '@/i18n';
 
-export type PageId = 'feed' | 'planner' | 'photos' | 'ftp' | 'training-load' | 'equipment' | 'compare' | 'wrapped' | 'itinerary';
+export type PageId = 'feed' | 'social' | 'planner' | 'photos' | 'ftp' | 'training-load' | 'equipment' | 'compare' | 'wrapped' | 'itinerary';
 /// Sport buckets shown in the sidebar picker. We map every Strava
 /// activity type into one of these — see sportFromType() in
 /// /api/strava/sync.ts. Variants of the same Strava family are
@@ -58,6 +58,7 @@ const ALL_SPORTS: SportId[] = [
 ];
 const ALL_NAV_ITEMS: { id: PageId; icon: string; label: string; sports: SportId[] }[] = [
   { id: 'feed',      icon: '◎', label: 'Activités',     sports: ALL_SPORTS },
+  { id: 'social',    icon: '❤', label: 'Suivis',        sports: ALL_SPORTS },
   // 'itinerary' is no longer a top-level destination — it lives as a
   // tab inside Planner. Kept as a PageId for backward-compat URLs
   // (/itineraire still works and lands on the itinerary tab).
@@ -364,6 +365,7 @@ export function GlobalLangToggle({ lang, onChange }: { lang: Lang; onChange: (l:
 
 const NAV_LABEL_KEY: Record<PageId, string> = {
   feed:      'nav.activities',
+  social:    'nav.social',
   planner:   'nav.planner',
   itinerary: 'nav.itinerary',
   compare:   'nav.compare',
