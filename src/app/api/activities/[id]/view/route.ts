@@ -40,7 +40,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   const { data, error } = await supabaseAdmin()
     .from('activities')
-    .select('id, user_id, sport, title, start_date, duration_min, distance_km, elevation_m, visibility, gps:payload->gps, altitude:payload->altitude, avgspeed:payload->avg_speed_kmh, maxspeed:payload->max_speed_kmh, avghr:payload->avg_hr, maxhr:payload->max_hr')
+    .select('id, user_id, sport, title, start_date, duration_min, distance_km, elevation_m, visibility, gps:payload->gps, altitude:payload->altitude, heartrate:payload->heartrate, speed:payload->speed_kmh, avgspeed:payload->avg_speed_kmh, maxspeed:payload->max_speed_kmh, avghr:payload->avg_hr, maxhr:payload->max_hr')
     .eq('id', id)
     .maybeSingle();
   if (error) { console.error('[activity-view] query failed:', error.message); return NextResponse.json({ error: 'db_error' }, { status: 500 }); }
@@ -66,6 +66,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     max_hr:        d.maxhr != null ? Number(d.maxhr) : null,
     gps:           downsample((d.gps as [number, number][]) ?? [], MAP_POINTS),
     altitude:      downsample((d.altitude as number[]) ?? [], MAP_POINTS),
+    heartrate:     downsample((d.heartrate as number[]) ?? [], MAP_POINTS),
+    speed_kmh:     downsample((d.speed as number[]) ?? [], MAP_POINTS),
     visibility:    (d.visibility as Visibility) ?? 'followers',
   }, { headers: { 'Cache-Control': 'no-store' } });
 }

@@ -280,8 +280,32 @@ interface DetailData {
   distance_km: number | null; elevation_m: number | null; duration_min: number | null;
   avg_speed_kmh: number | null; max_speed_kmh: number | null;
   avg_hr: number | null; max_hr: number | null;
-  gps: [number, number][]; altitude: number[];
+  gps: [number, number][]; altitude: number[]; heartrate: number[]; speed_kmh: number[];
   author: { name: string | null; image: string | null };
+}
+
+/** Small area+line chart for a stream (elevation / HR / speed). */
+function MiniLineChart({ data, color }: { data: number[]; color: string }) {
+  const vals = (data ?? []).filter(e => typeof e === 'number' && isFinite(e));
+  if (vals.length < 2) return null;
+  const W = 600, H = 90, minV = Math.min(...vals), maxV = Math.max(...vals), span = Math.max(1, maxV - minV);
+  const x = (i: number) => (i / (vals.length - 1)) * W;
+  const y = (v: number) => H - ((v - minV) / span) * H;
+  const pts = vals.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: 70, display: 'block' }}>
+      <path d={`M0,${H} L${pts.replace(/ /g, ' L')} L${W},${H} Z`} fill={color} fillOpacity={0.12} />
+      <polyline points={pts} fill="none" stroke={color} strokeWidth={2} vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}
+function ChartBlock({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: tokens.terra, marginBottom: 6 }}>{title}</div>
+      {children}
+    </div>
+  );
 }
 
 function ElevationChart({ alt }: { alt: number[] }) {
@@ -339,10 +363,13 @@ export function ActivityDetailModal({ id, onClose }: { id: number; onClose: () =
                 {d.max_hr != null && <Stat label="FC max" value={`${Math.round(d.max_hr)} bpm`} />}
               </div>
               {d.altitude.length >= 2 && (
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: tokens.terra, marginBottom: 6 }}>Profil d&apos;altitude</div>
-                  <ElevationChart alt={d.altitude} />
-                </div>
+                <ChartBlock title="Profil d'altitude"><MiniLineChart data={d.altitude} color={tokens.terra} /></ChartBlock>
+              )}
+              {d.heartrate.length >= 2 && (
+                <ChartBlock title="Fréquence cardiaque"><MiniLineChart data={d.heartrate} color="#C0392B" /></ChartBlock>
+              )}
+              {d.speed_kmh.length >= 2 && (
+                <ChartBlock title="Vitesse (km/h)"><MiniLineChart data={d.speed_kmh} color="#3E6FA3" /></ChartBlock>
               )}
             </>
           )}
