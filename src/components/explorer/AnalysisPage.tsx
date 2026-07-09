@@ -544,7 +544,7 @@ function MetricList({ rows, accentColor }: { rows: MetricRow[]; accentColor: str
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack: () => void }) {
+export function AnalysisPage({ activity, onBack, onDelete }: { activity: Activity; onBack: () => void; onDelete?: () => void }) {
   const { t, lang } = useT();
   const localizedDate = formatDateLocale(activity.rawDate, lang);
   const [mounted, setMounted] = useState(false);
@@ -687,13 +687,22 @@ export function AnalysisPage({ activity, onBack }: { activity: Activity; onBack:
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '16px 16px' : '32px 40px', background: tokens.cream }}>
       {/* Header */}
-      <button onClick={onBack} style={{
-        background: 'none', border: 'none', cursor: 'pointer',
-        fontFamily: "'Space Grotesk'", fontSize: 11, letterSpacing: '0.1em',
-        color: tokens.inkLight, textTransform: 'uppercase', marginBottom: 20, padding: 0,
-      }}>
-        {t('common.back')}
-      </button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <button onClick={onBack} style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          fontFamily: "'Space Grotesk'", fontSize: 11, letterSpacing: '0.1em',
+          color: tokens.inkLight, textTransform: 'uppercase', padding: 0,
+        }}>
+          {t('common.back')}
+        </button>
+        {onDelete && (
+          <button onClick={onDelete} style={{
+            background: 'none', border: `1px solid ${tokens.creamBorder}`, borderRadius: 6,
+            padding: '6px 12px', cursor: 'pointer', color: '#A0392B',
+            fontFamily: "'Space Grotesk'", fontSize: 12, fontWeight: 600,
+          }}>🗑 Supprimer</button>
+        )}
+      </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
         <TypeBadge type={activity.type} />

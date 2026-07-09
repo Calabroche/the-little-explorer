@@ -324,6 +324,18 @@ export function ExplorerApp() {
     navTo(PAGE_PATHS[page]);
   };
 
+  // Permanently delete one of YOUR OWN activities (with confirmation), then
+  // drop it from the local list and go back.
+  const deleteActivity = async (id: number) => {
+    if (typeof window !== 'undefined' && !window.confirm('Supprimer définitivement cette sortie ?')) return;
+    try {
+      const r = await fetch(`/api/activities/${id}`, { method: 'DELETE' });
+      if (!r.ok) return;
+      setActivities(prev => prev.filter(a => a.id !== id));
+      closeActivity();
+    } catch { /* ignore */ }
+  };
+
   // Hooks MUST be called ABOVE the early `if (loading) return ...`
   // below — otherwise React sees a different hook count between the
   // loading and post-loading renders and throws "Rendered more hooks
@@ -467,7 +479,9 @@ export function ExplorerApp() {
           </div>
         )}
         {analysisActivity
-          ? <AnalysisPage activity={analysisActivity} onBack={closeActivity} />
+          ? <AnalysisPage activity={analysisActivity} onBack={closeActivity}
+              onDelete={activities.some(a => a.id === analysisActivity.id) ? () => deleteActivity(analysisActivity.id) : undefined} />
+
           : renderPage()
         }
       </main>

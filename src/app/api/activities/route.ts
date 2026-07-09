@@ -495,9 +495,19 @@ export async function GET(req: NextRequest) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let raws: any[] = [];
   if (isSupabaseConfigured()) {
-    raws = await loadFromSupabase(ownerId);
+    if (singleId != null) {
+      // Fast path — load ONLY the requested activity, not the owner's whole
+      // history. (Opening one ride was pulling every activity's full streams
+      // just to derive the owner's FTP. FTP here is then estimated from this
+      // ride's own bests, or the owner's custom FTP if they set one.)
+      const { data } = await supabaseAdmin()
+        .from('activities').select('payload, gear_id').eq('id', singleId).eq('user_id', ownerId).maybeSingle();
+      if (data) raws = [{ ...(data.payload as Record<string, unknown>), gear_id: data.gear_id }];
+    } else {
+      raws = await loadFromSupabase(ownerId);
+    }
   }
-  if (raws.length === 0) {
+  if (raws.length === 0 && singleId == null) {
     const slug = EMAIL_TO_USER_SLUG[ownerEmail];
     if (slug) raws = loadFromJsonFiles(slug);
   }
