@@ -28,6 +28,15 @@ export function activityHref(item: { title: string | null; id: number }): string
 
 const VIS_LABEL: Record<Visibility, string> = { public: 'Public', followers: 'Abonnés', private: 'Moi' };
 
+const SPORT_LABELS: Record<string, string> = {
+  cycling: 'Vélo', running: 'Course à pied', walking: 'Marche', hiking: 'Randonnée',
+  swim: 'Natation', rowing: 'Aviron', ski: 'Ski', snowboard: 'Snowboard',
+  yoga: 'Yoga', workout: 'Renforcement',
+};
+function SPORT_LABEL(s: string): string {
+  return SPORT_LABELS[s] ?? (s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Sortie');
+}
+
 function fmtDate(iso: string): string {
   try { return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }); }
   catch { return ''; }
@@ -379,15 +388,15 @@ export function SocialActivityCard({ item, onOpenProfile, onOpenActivity }: {
   return (
     <div style={{ background: tokens.surface, border: `1px solid ${tokens.creamBorder}`, borderRadius: 14, padding: 18, marginBottom: 16, boxShadow: '0 1px 2px rgba(60,40,20,0.04), 0 10px 30px rgba(60,40,20,0.05)' }}>
       {/* Author header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
         <button onClick={() => onOpenProfile?.(item.author.id)} style={{ background: 'none', border: 'none', padding: 0, cursor: onOpenProfile ? 'pointer' : 'default' }}>
-          <Avatar src={item.author.image} name={item.author.name} />
+          <Avatar src={item.author.image} name={item.author.name} size={46} />
         </button>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <button onClick={() => onOpenProfile?.(item.author.id)} style={{ background: 'none', border: 'none', padding: 0, cursor: onOpenProfile ? 'pointer' : 'default', fontFamily: "'Space Grotesk'", fontWeight: 700, fontSize: 14, color: tokens.ink }}>
+          <button onClick={() => onOpenProfile?.(item.author.id)} style={{ background: 'none', border: 'none', padding: 0, cursor: onOpenProfile ? 'pointer' : 'default', fontFamily: "'Space Grotesk'", fontWeight: 700, fontSize: 15, color: tokens.ink }}>
             {item.author.name ?? 'Anonyme'}
           </button>
-          <div style={{ fontSize: 11, color: tokens.inkLight }}>{fmtDate(item.date)} · {item.sport}</div>
+          <div style={{ fontSize: 12, color: tokens.inkLight, marginTop: 1 }}>{fmtDate(item.date)} · {SPORT_LABEL(item.sport)}</div>
         </div>
         {item.is_mine && (
           <select value={visibility} onChange={e => changeVis(e.target.value as Visibility)} title="Visibilité" style={{
@@ -401,30 +410,30 @@ export function SocialActivityCard({ item, onOpenProfile, onOpenActivity }: {
       {item.title && (
         <button onClick={openDetail} style={{
           background: 'none', border: 'none', padding: 0, textAlign: 'left', display: 'block',
-          fontFamily: "'Playfair Display', serif", fontSize: 18, fontWeight: 800, color: tokens.ink,
-          marginBottom: 8, cursor: 'pointer',
+          fontFamily: "'Playfair Display', serif", fontSize: 22, fontWeight: 800, color: tokens.ink,
+          marginBottom: 12, cursor: 'pointer', lineHeight: 1.15,
         }}>{item.title}</button>
       )}
 
       {item.gps.length >= 2 && (
-        <div onClick={openDetail} style={{ borderRadius: 6, overflow: 'hidden', marginBottom: 10, cursor: 'pointer' }}>
-          <CardMap gps={item.gps.map(p => ({ lat: p[0], lng: p[1] }))} color={tokens.terra} height={180} />
+        <div onClick={openDetail} style={{ borderRadius: 10, overflow: 'hidden', marginBottom: 12, cursor: 'pointer', border: `1px solid ${tokens.creamBorder}` }}>
+          <CardMap gps={item.gps.map(p => ({ lat: p[0], lng: p[1] }))} color={tokens.terra} height={220} />
         </div>
       )}
 
       {/* Stats */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, marginBottom: 12 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, marginBottom: 14 }}>
         <Stat label="Distance" value={item.distance_km != null ? `${item.distance_km.toFixed(1)} km` : '—'} />
         <Stat label="Dénivelé +" value={item.elevation_m != null ? `${item.elevation_m} m` : '—'} color={tokens.terra} />
         <Stat label="Temps" value={fmtDuration(item.duration_min)} />
         <Stat label="Vitesse max" value={item.max_speed_kmh != null ? `${item.max_speed_kmh.toFixed(1)} km/h` : '—'} color="#3E6FA3" />
       </div>
 
-      {/* Actions */}
-      <div style={{ display: 'flex', gap: 8, borderTop: `1px solid ${tokens.creamBorder}`, paddingTop: 10 }}>
-        <ActionBtn onClick={toggleLike} active={liked} label={`${liked ? '❤️' : '🤍'} ${likeCount}`} />
-        <ActionBtn onClick={() => setShowComments(s => !s)} label={`💬 ${commentCount}`} />
-        <ActionBtn onClick={() => setSharing(true)} label="↗ Partager" />
+      {/* Actions — clean icon row, Strava-style */}
+      <div style={{ display: 'flex', borderTop: `1px solid ${tokens.creamBorder}`, paddingTop: 6, marginTop: 2 }}>
+        <ActionBtn onClick={toggleLike} active={liked} icon={liked ? '❤️' : '🤍'} label={likeCount > 0 ? String(likeCount) : 'Kudos'} />
+        <ActionBtn onClick={() => setShowComments(s => !s)} icon="💬" label={commentCount > 0 ? String(commentCount) : 'Commenter'} />
+        <ActionBtn onClick={() => setSharing(true)} icon="↗" label="Partager" />
       </div>
 
       {showComments && <CommentThread activityId={item.id} onCountChange={setCommentCount} />}
@@ -437,18 +446,21 @@ export function SocialActivityCard({ item, onOpenProfile, onOpenActivity }: {
 function Stat({ label, value, color = tokens.ink }: { label: string; value: string; color?: string }) {
   return (
     <div>
-      <div style={{ fontFamily: 'Georgia, serif', fontSize: 18, fontWeight: 800, color, lineHeight: 1.1 }}>{value}</div>
+      <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, fontWeight: 800, color, lineHeight: 1.1 }}>{value}</div>
       <div style={{ fontSize: 9, color: tokens.inkLight, letterSpacing: '0.05em', textTransform: 'uppercase', marginTop: 2 }}>{label}</div>
     </div>
   );
 }
-function ActionBtn({ onClick, label, active }: { onClick: () => void; label: string; active?: boolean }) {
+function ActionBtn({ onClick, icon, label, active }: { onClick: () => void; icon: string; label: string; active?: boolean }) {
   return (
     <button onClick={onClick} style={{
-      flex: 1, padding: '8px', borderRadius: 4, cursor: 'pointer',
-      border: `1px solid ${tokens.creamBorder}`, background: active ? tokens.creamDark : 'transparent',
-      color: tokens.inkMid, fontWeight: 600, fontSize: 12, fontFamily: "'Space Grotesk'",
-    }}>{label}</button>
+      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+      padding: '10px 8px', borderRadius: 8, cursor: 'pointer',
+      border: 'none', background: 'transparent',
+      color: active ? tokens.terra : tokens.inkMid, fontWeight: 600, fontSize: 13, fontFamily: "'Space Grotesk'",
+    }}>
+      <span style={{ fontSize: 16, lineHeight: 1 }}>{icon}</span>{label}
+    </button>
   );
 }
 
