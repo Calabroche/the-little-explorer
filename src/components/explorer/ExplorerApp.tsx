@@ -263,9 +263,14 @@ export function ExplorerApp() {
         setPage('feed');
         return;
       }
-      // id inconnu → fallback feed
-      setAnalysisActivity(null);
+      // Not one of the viewer's own rides → could be a followed user's.
+      // Fetch it fully-computed (owner's profile) so deep-links / back-forward
+      // to /activites/:id work for anyone's activity.
       setPage('feed');
+      fetch(`/api/activities?activityId=${id}`, { cache: 'no-store' })
+        .then(r => (r.ok ? r.json() : null))
+        .then((a: Activity | null) => setAnalysisActivity(a))
+        .catch(() => setAnalysisActivity(null));
       return;
     }
     setAnalysisActivity(null);
@@ -296,6 +301,22 @@ export function ExplorerApp() {
   const openActivity = (a: Activity) => {
     setAnalysisActivity(a);
     navTo(activityPath(a));
+  };
+
+  // Open the full analysis for ANY activity id — one of the viewer's own (found
+  // locally) or a followed user's ride (fetched fully-computed with the owner's
+  // profile via ?activityId). Powers "open a sortie" from the social feed.
+  const openActivityById = async (id: number) => {
+    const local = activities.find(a => a.id === id);
+    if (local) { openActivity(local); return; }
+    try {
+      const r = await fetch(`/api/activities?activityId=${id}`, { cache: 'no-store' });
+      if (!r.ok) return;
+      const act = await r.json() as Activity;
+      setAnalysisActivity(act);
+      setPage('feed');
+      navTo(activityPath(act));
+    } catch { /* ignore */ }
   };
 
   const closeActivity = () => {
@@ -358,7 +379,7 @@ export function ExplorerApp() {
   // `page` is constructed.
   const renderPage = () => {
     switch (page) {
-      case 'feed':      return <SocialFeedPage />;
+      case 'feed':      return <SocialFeedPage onOpenActivity={openActivityById} />;
       case 'profile':   return <ProfilePage   activities={filteredActivities} stats={filteredStats!} sport={sport} onSelect={openActivity} />;
       // Planner is now a tabbed hub for: itinerary, training plan,
       // auto-route, route proposals. The standalone /itineraire URL

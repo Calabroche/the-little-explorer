@@ -9,11 +9,11 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { tokens } from '../tokens';
-import { SocialActivityCard, Avatar, FollowButton, activityHref } from '../social/components';
+import { SocialActivityCard, Avatar, FollowButton } from '../social/components';
 import { fetchFeed, searchUsers } from '../social/api';
 import type { FeedItem, UserSearchResult } from '../social/types';
 
-export function SocialFeedPage() {
+export function SocialFeedPage({ onOpenActivity }: { onOpenActivity?: (id: number) => void } = {}) {
   const router = useRouter();
   const [items, setItems] = useState<FeedItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -86,7 +86,7 @@ export function SocialFeedPage() {
       )}
       {items?.map(it => (
         <SocialActivityCard key={it.id} item={it} onOpenProfile={openProfile}
-          onOpenActivity={a => router.push(activityHref(a))} />
+          onOpenActivity={a => onOpenActivity?.(a.id)} />
       ))}
     </div>
     </div>

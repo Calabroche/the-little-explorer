@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { supabaseAdmin, isSupabaseConfigured } from '@/lib/db';
 import { getAuthedUser } from '@/lib/api-auth';
+import { viewerCanSeeActivity } from '@/lib/social';
 import { calcInclines } from '@/lib/inclines';
 
 // Force dynamic rendering : the route reads from Supabase (or legacy JSON
@@ -435,6 +436,29 @@ export async function GET(req: NextRequest) {
   const email  = authed.email;
   const userId = authed.id;
 
+  // Single-activity mode (?activityId=X): return ONE fully-computed activity,
+  // which may belong to ANOTHER user. We enforce visibility and then compute
+  // the whole analysis with the OWNER's profile (so power/FTP/TSS are correct
+  // for them, not the viewer). This is what powers "open a followed user's
+  // ride" with the same rich detail as your own.
+  const singleId = (() => {
+    const v = new URL(req.url).searchParams.get('activityId');
+    const n = v != null ? Number(v) : NaN;
+    return Number.isFinite(n) ? n : null;
+  })();
+  let ownerId = userId;
+  let ownerEmail = email;
+  if (singleId != null) {
+    const access = await viewerCanSeeActivity(userId, singleId);
+    if (!access.ok || !access.authorId) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+    ownerId = access.authorId;
+    if (ownerId !== userId) {
+      const { data: owner } = await supabaseAdmin()
+        .schema('next_auth').from('users').select('email').eq('id', ownerId).maybeSingle();
+      ownerEmail = (owner?.email ?? '') as string;
+    }
+  }
+
   // Resolve the per-user profile: DB override > legacy hardcoded by
   // email > global default. customFtp is null when the user hasn't set
   // one; downstream code falls back to the derived FTP in that case.
@@ -445,14 +469,14 @@ export async function GET(req: NextRequest) {
       .schema('next_auth')
       .from('users')
       .select('rider_kg, bike_kg, custom_ftp')
-      .eq('id', userId)
+      .eq('id', ownerId)
       .maybeSingle();
     if (data) dbOverride = data as DbProfile;
   } catch (err) {
     // Non-fatal — fall through to legacy/default profile.
     console.warn('[activities] profile lookup failed:', (err as Error).message);
   }
-  const legacy = PROFILES_BY_EMAIL[email];
+  const legacy = PROFILES_BY_EMAIL[ownerEmail];
   const riderKg   = dbOverride?.rider_kg ?? legacy?.riderKg ?? DEFAULT_PROFILE.riderKg;
   const bikeKg    = dbOverride?.bike_kg  ?? legacy?.bikeKg  ?? DEFAULT_PROFILE.bikeKg;
   const customFtp = dbOverride?.custom_ftp ?? null;
@@ -465,10 +489,10 @@ export async function GET(req: NextRequest) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let raws: any[] = [];
   if (isSupabaseConfigured()) {
-    raws = await loadFromSupabase(userId);
+    raws = await loadFromSupabase(ownerId);
   }
   if (raws.length === 0) {
-    const slug = EMAIL_TO_USER_SLUG[email];
+    const slug = EMAIL_TO_USER_SLUG[ownerEmail];
     if (slug) raws = loadFromJsonFiles(slug);
   }
 
@@ -508,7 +532,7 @@ export async function GET(req: NextRequest) {
 
   // Single bike-gear lookup so each cycling activity can render its
   // bike nickname inline (no client-side join needed).
-  const bikesById = isSupabaseConfigured() ? await loadBikes(userId) : new Map<string, string>();
+  const bikesById = isSupabaseConfigured() ? await loadBikes(ownerId) : new Map<string, string>();
 
   // Pass 3: transform each activity with the dynamic FTP + profile.
   const activities = await Promise.all(
@@ -523,13 +547,21 @@ export async function GET(req: NextRequest) {
     })
   );
 
-  return NextResponse.json(activities, {
-    headers: {
-      // Force CDN invalidation — otherwise a previously baked response can
-      // be served HIT for days even after new rides arrive.
-      'Cache-Control':            'no-store, must-revalidate',
-      'CDN-Cache-Control':        'no-store',
-      'Vercel-CDN-Cache-Control': 'no-store',
-    },
-  });
+  const cacheHeaders = {
+    // Force CDN invalidation — otherwise a previously baked response can
+    // be served HIT for days even after new rides arrive.
+    'Cache-Control':            'no-store, must-revalidate',
+    'CDN-Cache-Control':        'no-store',
+    'Vercel-CDN-Cache-Control': 'no-store',
+  };
+
+  // Single-activity mode → return just that one (fully computed).
+  if (singleId != null) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const one = activities.find((a: any) => Number(a.id) === singleId);
+    if (!one) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+    return NextResponse.json(one, { headers: cacheHeaders });
+  }
+
+  return NextResponse.json(activities, { headers: cacheHeaders });
 }

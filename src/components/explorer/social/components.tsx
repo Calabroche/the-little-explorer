@@ -391,10 +391,11 @@ export function SocialActivityCard({ item, onOpenProfile, onOpenActivity }: {
   const [sharing, setSharing] = useState(false);
   const [likeBusy, setLikeBusy] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
-  // Your own rides open the full analysis (navigate); anyone else's open the
-  // read-only social detail modal (map + elevation + stats).
+  // Prefer the host's full-analysis opener (own or followed user's ride, both
+  // computed server-side). Falls back to the lightweight modal (e.g. on the
+  // standalone public profile page where there's no host opener).
   const openDetail = () => {
-    if (item.is_mine && onOpenActivity) onOpenActivity(item);
+    if (onOpenActivity) onOpenActivity(item);
     else setShowDetail(true);
   };
 
