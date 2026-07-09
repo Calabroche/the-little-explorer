@@ -508,19 +508,23 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
             switching users from the sidebar no longer makes sense. */}
       </div>
 
-      <div style={{ padding: '14px 12px 4px' }}>
-        <Label style={{ display: 'block', marginBottom: 6 }}>{t('common.sport')}</Label>
-        <SportDropdown sport={sport} onChange={onSportChange} available={availableSports} />
-      </div>
+      {/* The sport filter is irrelevant on the Accueil feed (it shows every
+          sport). Show it only on your profile + the analysis tools. */}
+      {activePage !== 'feed' && (
+        <div style={{ padding: '14px 12px 4px' }}>
+          <Label style={{ display: 'block', marginBottom: 6 }}>{t('common.sport')}</Label>
+          <SportDropdown sport={sport} onChange={onSportChange} available={availableSports} />
+        </div>
+      )}
 
       {/* Language toggle moved out of the sidebar to the top-right
           floating chip in ExplorerApp. Mobile keeps its own LangToggle
           in the bottom-bar header below (thumb-accessible there). */}
 
       <nav style={{ padding: '12px 12px', flex: 1 }}>
-        {navItems.map(item => {
+        {navItems.flatMap(item => {
           const active = activePage === item.id;
-          return (
+          const el = (
             <div key={item.id} onClick={() => onNav(item.id)} style={{
               display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
               borderRadius: 3, cursor: 'pointer', marginBottom: 2,
@@ -537,6 +541,11 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
               </span>
             </div>
           );
+          // Divider after Profil: separates the social block (Accueil, Profil)
+          // from the analysis tools below.
+          return item.id === 'profile'
+            ? [el, <div key="nav-divider" style={{ height: 1, background: tokens.creamBorder, margin: '10px 12px' }} />]
+            : [el];
         })}
       </nav>
 
@@ -790,8 +799,7 @@ function ProfileSection() {
           {expanded && u.email && u.email !== displayName && (
             <div style={{
               fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight,
-              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-              marginTop: 2,
+              wordBreak: 'break-all', lineHeight: 1.35, marginTop: 2,
             }}>{u.email}</div>
           )}
         </div>
