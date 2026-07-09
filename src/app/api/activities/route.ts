@@ -208,7 +208,13 @@ async function getWeather(id: number, lat: number, lng: number, isoDate: string)
   const hour = new Date(isoDate).getUTCHours();
   try {
     const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat.toFixed(4)}&longitude=${lng.toFixed(4)}&start_date=${date}&end_date=${date}&hourly=temperature_2m,windspeed_10m,relativehumidity_2m,weathercode&timezone=UTC`;
-    const res  = await fetch(url);
+    // Bound the external call so a slow open-meteo can't stall the whole
+    // activities response (weather is best-effort — null on timeout is fine).
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2500);
+    let res: Response;
+    try { res = await fetch(url, { signal: controller.signal }); }
+    finally { clearTimeout(timer); }
     if (!res.ok) return null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data: any = await res.json();
@@ -534,9 +540,15 @@ export async function GET(req: NextRequest) {
   // bike nickname inline (no client-side join needed).
   const bikesById = isSupabaseConfigured() ? await loadBikes(ownerId) : new Map<string, string>();
 
-  // Pass 3: transform each activity with the dynamic FTP + profile.
+  // Pass 3: transform each activity with the dynamic FTP + profile. In
+  // single-activity mode we only transform (and fetch weather for) the ONE
+  // requested ride — transforming the owner's whole history + a weather API
+  // call per ride is what made opening a followed user's activity slow.
+  const toTransform = singleId != null
+    ? enriched.filter(e => Number(e.raw.id) === singleId)
+    : enriched;
   const activities = await Promise.all(
-    enriched.map(async ({ raw, powerStream, bestEfforts }) => {
+    toTransform.map(async ({ raw, powerStream, bestEfforts }) => {
       const act    = transform(raw, ftp, powerStream, bestEfforts, profile.riderKg, profile.mass);
       const lat    = raw.gps?.[0]?.[0] ?? 0;
       const lng    = raw.gps?.[0]?.[1] ?? 0;

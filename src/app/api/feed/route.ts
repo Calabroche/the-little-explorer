@@ -23,8 +23,8 @@ import { loadFollowing, loadSocialCounts, loadAuthors, dedupActivities, type Vis
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const FEED_LIMIT = 50;       // rows pulled before visibility filtering
-const TRACE_POINTS = 60;     // downsample the mini-map trace to keep cards light
+const FEED_LIMIT = 30;       // rows pulled before visibility filtering
+const TRACE_POINTS = 50;     // downsample the mini-map trace to keep cards light
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function downsample<T>(arr: T[], max: number): T[] {

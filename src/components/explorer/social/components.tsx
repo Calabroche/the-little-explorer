@@ -415,46 +415,48 @@ export function SocialActivityCard({ item, onOpenProfile, onOpenActivity }: {
 
   return (
     <div style={{ background: tokens.surface, border: `1px solid ${tokens.creamBorder}`, borderRadius: 14, padding: 18, marginBottom: 16, boxShadow: '0 1px 2px rgba(60,40,20,0.04), 0 10px 30px rgba(60,40,20,0.05)' }}>
-      {/* Author header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-        <button onClick={() => onOpenProfile?.(item.author.id)} style={{ background: 'none', border: 'none', padding: 0, cursor: onOpenProfile ? 'pointer' : 'default' }}>
-          <Avatar src={item.author.image} name={item.author.name} size={46} />
-        </button>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <button onClick={() => onOpenProfile?.(item.author.id)} style={{ background: 'none', border: 'none', padding: 0, cursor: onOpenProfile ? 'pointer' : 'default', fontFamily: "'Space Grotesk'", fontWeight: 700, fontSize: 15, color: tokens.ink }}>
-            {item.author.name ?? 'Anonyme'}
+      {/* Everything above the action row opens the detail on click. */}
+      <div onClick={openDetail} style={{ cursor: 'pointer' }}>
+        {/* Author header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+          <button onClick={e => { e.stopPropagation(); onOpenProfile?.(item.author.id); }} style={{ background: 'none', border: 'none', padding: 0, cursor: onOpenProfile ? 'pointer' : 'default' }}>
+            <Avatar src={item.author.image} name={item.author.name} size={46} />
           </button>
-          <div style={{ fontSize: 12, color: tokens.inkLight, marginTop: 1 }}>{fmtDate(item.date)} · {SPORT_LABEL(item.sport)}</div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <button onClick={e => { e.stopPropagation(); onOpenProfile?.(item.author.id); }} style={{ background: 'none', border: 'none', padding: 0, cursor: onOpenProfile ? 'pointer' : 'default', fontFamily: "'Space Grotesk'", fontWeight: 700, fontSize: 15, color: tokens.ink }}>
+              {item.author.name ?? 'Anonyme'}
+            </button>
+            <div style={{ fontSize: 12, color: tokens.inkLight, marginTop: 1 }}>{fmtDate(item.date)} · {SPORT_LABEL(item.sport)}</div>
+          </div>
+          {item.is_mine && (
+            <select onClick={e => e.stopPropagation()} value={visibility} onChange={e => changeVis(e.target.value as Visibility)} title="Visibilité" style={{
+              fontSize: 11, padding: '4px 6px', borderRadius: 4, border: `1px solid ${tokens.creamBorder}`, background: tokens.cream, color: tokens.inkMid, cursor: 'pointer',
+            }}>
+              {(['public', 'followers', 'private'] as Visibility[]).map(v => <option key={v} value={v}>{VIS_LABEL[v]}</option>)}
+            </select>
+          )}
         </div>
-        {item.is_mine && (
-          <select value={visibility} onChange={e => changeVis(e.target.value as Visibility)} title="Visibilité" style={{
-            fontSize: 11, padding: '4px 6px', borderRadius: 4, border: `1px solid ${tokens.creamBorder}`, background: tokens.cream, color: tokens.inkMid, cursor: 'pointer',
-          }}>
-            {(['public', 'followers', 'private'] as Visibility[]).map(v => <option key={v} value={v}>{VIS_LABEL[v]}</option>)}
-          </select>
+
+        {item.title && (
+          <div style={{
+            fontFamily: "'Playfair Display', serif", fontSize: 22, fontWeight: 800, color: tokens.ink,
+            marginBottom: 12, lineHeight: 1.15,
+          }}>{item.title}</div>
         )}
-      </div>
 
-      {item.title && (
-        <button onClick={openDetail} style={{
-          background: 'none', border: 'none', padding: 0, textAlign: 'left', display: 'block',
-          fontFamily: "'Playfair Display', serif", fontSize: 22, fontWeight: 800, color: tokens.ink,
-          marginBottom: 12, cursor: 'pointer', lineHeight: 1.15,
-        }}>{item.title}</button>
-      )}
+        {item.gps.length >= 2 && (
+          <div style={{ borderRadius: 10, overflow: 'hidden', marginBottom: 12, border: `1px solid ${tokens.creamBorder}` }}>
+            <CardMap gps={item.gps.map(p => ({ lat: p[0], lng: p[1] }))} color={tokens.terra} height={220} />
+          </div>
+        )}
 
-      {item.gps.length >= 2 && (
-        <div onClick={openDetail} style={{ borderRadius: 10, overflow: 'hidden', marginBottom: 12, cursor: 'pointer', border: `1px solid ${tokens.creamBorder}` }}>
-          <CardMap gps={item.gps.map(p => ({ lat: p[0], lng: p[1] }))} color={tokens.terra} height={220} />
+        {/* Stats */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, marginBottom: 14 }}>
+          <Stat label="Distance" value={item.distance_km != null ? `${item.distance_km.toFixed(1)} km` : '—'} />
+          <Stat label="Dénivelé +" value={item.elevation_m != null ? `${item.elevation_m} m` : '—'} color={tokens.terra} />
+          <Stat label="Temps" value={fmtDuration(item.duration_min)} />
+          <Stat label="Vitesse max" value={item.max_speed_kmh != null ? `${item.max_speed_kmh.toFixed(1)} km/h` : '—'} color="#3E6FA3" />
         </div>
-      )}
-
-      {/* Stats */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, marginBottom: 14 }}>
-        <Stat label="Distance" value={item.distance_km != null ? `${item.distance_km.toFixed(1)} km` : '—'} />
-        <Stat label="Dénivelé +" value={item.elevation_m != null ? `${item.elevation_m} m` : '—'} color={tokens.terra} />
-        <Stat label="Temps" value={fmtDuration(item.duration_min)} />
-        <Stat label="Vitesse max" value={item.max_speed_kmh != null ? `${item.max_speed_kmh.toFixed(1)} km/h` : '—'} color="#3E6FA3" />
       </div>
 
       {/* Actions — clean icon row, Strava-style */}
