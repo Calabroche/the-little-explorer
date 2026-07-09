@@ -21,9 +21,25 @@ export function SocialFeedPage() {
   const [results, setResults] = useState<UserSearchResult[] | null>(null);
 
   // Home = the following feed only (your own rides live on your profile).
+  // Retry once on a transient empty/failed load (a hard reload can race the
+  // session cookie / a cold serverless start → a spurious empty feed).
   useEffect(() => {
+    let cancelled = false;
+    const load = async (attempt = 0) => {
+      try {
+        const data = await fetchFeed('following');
+        if (cancelled) return;
+        if (data.length === 0 && attempt === 0) { setTimeout(() => load(1), 700); return; }
+        setItems(data);
+      } catch {
+        if (cancelled) return;
+        if (attempt === 0) { setTimeout(() => load(1), 700); return; }
+        setError('load_failed');
+      }
+    };
     setItems(null); setError(null);
-    fetchFeed('following').then(setItems).catch(e => setError((e as Error).message));
+    load();
+    return () => { cancelled = true; };
   }, []);
 
   // Debounced user search.

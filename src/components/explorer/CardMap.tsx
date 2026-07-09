@@ -95,7 +95,16 @@ function buildSegments(
 function FitBounds({ positions }: { positions: [number, number][] }) {
   const map = useMap();
   useEffect(() => {
-    if (positions.length > 1) map.fitBounds(positions, { padding: [6, 6] });
+    // invalidateSize forces Leaflet to recompute the container size and (re)load
+    // tiles — without it a map created before its card has its final height
+    // renders on a grey background. Fit now, then again after layout settles.
+    const apply = () => {
+      map.invalidateSize();
+      if (positions.length > 1) map.fitBounds(positions, { padding: [6, 6] });
+    };
+    apply();
+    const t = setTimeout(apply, 250);
+    return () => clearTimeout(t);
   }, [map, positions]);
   return null;
 }
