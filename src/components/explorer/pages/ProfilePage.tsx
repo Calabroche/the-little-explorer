@@ -27,6 +27,14 @@ export function ProfilePage({ activities, stats, sport, onSelect }: {
   const [editingBio, setEditingBio] = useState(false);
   const [bioDraft, setBioDraft] = useState('');
   const [savingBio, setSavingBio] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 768);
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   useEffect(() => {
     fetch('/api/me')
@@ -55,11 +63,14 @@ export function ProfilePage({ activities, stats, sport, onSelect }: {
     // flex column: fixed header on top, the dashboard (FeedPage) scrolls below.
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       {profile && (
-        <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 20px 0', width: '100%', boxSizing: 'border-box' }}>
-          {/* Enlarged presentation card */}
-          <div style={{ background: tokens.surface, border: `1px solid ${tokens.creamBorder}`, borderRadius: 16, padding: 28 }}>
+        // Full-width header band — no floating box, so no black side gutters.
+        // Inner content aligns to the same 720 max-width as the dashboard below.
+        <div style={{ width: '100%', background: tokens.surface, borderBottom: `1px solid ${tokens.creamBorder}` }}>
+          {/* Same horizontal padding as the dashboard below (full-width, 40px)
+              so the avatar/name line up with the activity cards underneath. */}
+          <div style={{ padding: isMobile ? '20px 16px' : '28px 40px', boxSizing: 'border-box' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 22 }}>
-              <Avatar src={profile.image} name={profile.name} size={92} />
+              <Avatar src={profile.image} name={profile.name} size={isMobile ? 68 : 88} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 32, fontWeight: 800, color: tokens.ink, margin: 0 }}>
                   {profile.name ?? 'Mon profil'}
