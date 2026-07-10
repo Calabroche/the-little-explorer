@@ -11,11 +11,19 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { tokens, type Activity } from '../tokens';
 import { SocialActivityCard, Avatar, FollowButton } from '../social/components';
+import { SportDropdown } from '../Sidebar';
+import type { SportId } from '../Sidebar';
 import { fetchFeed, searchUsers, fetchSuggestions } from '../social/api';
 import type { FeedItem, UserSearchResult } from '../social/types';
 
 export function SocialFeedPage(
-  { onOpenActivity, activities }: { onOpenActivity?: (id: number) => void; activities?: Activity[] } = {},
+  { onOpenActivity, activities, sport, onSportChange, availableSports }: {
+    onOpenActivity?: (id: number) => void;
+    activities?: Activity[];
+    sport?: SportId;
+    onSportChange?: (s: SportId) => void;
+    availableSports?: SportId[];
+  } = {},
 ) {
   const router = useRouter();
   const [items, setItems] = useState<FeedItem[] | null>(null);
@@ -154,7 +162,12 @@ export function SocialFeedPage(
         maxWidth: wide ? 980 : 620, margin: '0 auto', padding: '20px 16px 80px',
       }}>
         {feedColumn}
-        {wide && <ProfileStatsAside activities={activities ?? []} />}
+        {wide && (
+          <ProfileStatsAside
+            activities={activities ?? []}
+            sport={sport} onSportChange={onSportChange} availableSports={availableSports}
+          />
+        )}
       </div>
     </div>
   );
@@ -198,8 +211,16 @@ function SuggestionsStrip(
 
 const DAY = 86400000;
 
-function ProfileStatsAside({ activities }: { activities: Activity[] }) {
+function ProfileStatsAside(
+  { activities, sport, onSportChange, availableSports }: {
+    activities: Activity[];
+    sport?: SportId;
+    onSportChange?: (s: SportId) => void;
+    availableSports?: SportId[];
+  },
+) {
   const s = useMemo(() => computeStats(activities), [activities]);
+  const canPickSport = sport && onSportChange && availableSports && availableSports.length > 1;
   return (
     <aside style={{
       // Pushed down so it clears the floating top-right chips (info / theme /
@@ -208,10 +229,12 @@ function ProfileStatsAside({ activities }: { activities: Activity[] }) {
       background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
       borderRadius: 12, padding: 20, boxSizing: 'border-box',
     }}>
-      <div style={{ fontFamily: "'Playfair Display'", fontSize: 18, fontWeight: 800, color: tokens.ink, marginBottom: 4 }}>
+      <div style={{ fontFamily: "'Playfair Display'", fontSize: 18, fontWeight: 800, color: tokens.ink, marginBottom: 12 }}>
         Mes statistiques
       </div>
-      <div style={{ fontSize: 12, color: tokens.inkLight, marginBottom: 18 }}>Sport sélectionné</div>
+      {canPickSport
+        ? <div style={{ marginBottom: 18 }}><SportDropdown sport={sport!} onChange={onSportChange!} available={availableSports!} /></div>
+        : <div style={{ fontSize: 12, color: tokens.inkLight, marginBottom: 18 }}>Sport sélectionné</div>}
 
       {activities.length === 0 ? (
         <div style={{ fontSize: 13, color: tokens.inkMid }}>Aucune activité pour ce sport.</div>

@@ -233,7 +233,7 @@ function LangToggle({ lang, onChange, compact }: { lang: Lang; onChange: (l: Lan
 // with a chevron; click to expand a panel listing the other available
 // sports. Mobile keeps the horizontally-scrolling chip-bar (better for
 // thumb access on a narrow screen).
-function SportDropdown({ sport, onChange, available }: {
+export function SportDropdown({ sport, onChange, available }: {
   sport: SportId;
   onChange: (s: SportId) => void;
   available: SportId[];
