@@ -596,3 +596,57 @@ create index if not exists perf_samples_created_idx on public.perf_samples (crea
 create index if not exists perf_samples_kind_label_idx on public.perf_samples (kind, label);
 grant all on table public.perf_samples to postgres;
 grant all on table public.perf_samples to service_role;
+
+-- ── Feed denormalization: compact trace + speeds ───────────────────────────
+-- The feed / profile cards only need a ~60-point mini-map trace and the two
+-- speeds, but those lived inside the heavy `payload` jsonb (full GPS/HR/
+-- altitude/speed streams). Selecting `payload->gps` forced Postgres to DETOAST
+-- and parse the whole payload for every row → the feed p95 hit ~9 s.
+--
+-- These columns cache exactly what the cards need. A BEFORE INSERT/UPDATE
+-- trigger fills them from `payload`, so no application write path has to change
+-- and they can never drift. The feed then reads only light columns.
+alter table public.activities add column if not exists trace         jsonb;
+alter table public.activities add column if not exists avg_speed_kmh numeric(6,2);
+alter table public.activities add column if not exists max_speed_kmh numeric(6,2);
+
+create or replace function public.activities_denorm() returns trigger as $$
+declare
+  g    jsonb;
+  n    int;
+  step int;
+  i    int;
+  acc  jsonb := '[]'::jsonb;
+begin
+  -- Denorm must never block a write — swallow any malformed-payload error.
+  begin
+    g := NEW.payload -> 'gps';
+    if g is not null and jsonb_typeof(g) = 'array' then
+      n := jsonb_array_length(g);
+      if n > 0 then
+        step := greatest(1, ceil(n::numeric / 60)::int);
+        i := 0;
+        while i < n loop
+          acc := acc || jsonb_build_array(g -> i);
+          i := i + step;
+        end loop;
+        NEW.trace := acc;
+      end if;
+    end if;
+    NEW.avg_speed_kmh := nullif(NEW.payload ->> 'avg_speed_kmh', '')::numeric;
+    NEW.max_speed_kmh := nullif(NEW.payload ->> 'max_speed_kmh', '')::numeric;
+  exception when others then
+    null;
+  end;
+  return NEW;
+end;
+$$ language plpgsql;
+
+drop trigger if exists activities_denorm_trg on public.activities;
+create trigger activities_denorm_trg
+  before insert or update on public.activities
+  for each row execute function public.activities_denorm();
+
+-- One-time backfill of existing rows (fires the trigger for each). Safe to
+-- re-run; only touches rows not yet denormalized.
+update public.activities set created_at = created_at where trace is null;

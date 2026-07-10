@@ -59,7 +59,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   // (see /api/feed for why: it timed the request out).
   const { data: acts, error: aErr } = await supabaseAdmin()
     .from('activities')
-    .select('id, user_id, sport, title, start_date, duration_min, distance_km, elevation_m, visibility, gps:payload->gps, avgspeed:payload->avg_speed_kmh, maxspeed:payload->max_speed_kmh')
+    .select('id, user_id, sport, title, start_date, duration_min, distance_km, elevation_m, visibility, trace, avg_speed_kmh, max_speed_kmh')
     .eq('user_id', targetId)
     .order('start_date', { ascending: false })
     .limit(PROFILE_ACTIVITY_LIMIT);
@@ -83,9 +83,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       distance_km:   a.distance_km != null ? Number(a.distance_km) : null,
       elevation_m:   a.elevation_m ?? null,
       duration_min:  a.duration_min ?? null,
-      avg_speed_kmh: a.avgspeed != null ? Number(a.avgspeed) : null,
-      max_speed_kmh: a.maxspeed != null ? Number(a.maxspeed) : null,
-      gps:           downsample((a.gps as [number, number][]) ?? [], TRACE_POINTS),
+      avg_speed_kmh: a.avg_speed_kmh != null ? Number(a.avg_speed_kmh) : null,
+      max_speed_kmh: a.max_speed_kmh != null ? Number(a.max_speed_kmh) : null,
+      gps:           downsample((a.trace as [number, number][]) ?? [], TRACE_POINTS),
       visibility:    (a.visibility as Visibility) ?? 'followers',
       like_count:    c.like_count,
       comment_count: c.comment_count,

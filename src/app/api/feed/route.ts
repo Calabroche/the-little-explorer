@@ -47,13 +47,13 @@ export async function GET(req: NextRequest) {
   const following = source === 'following' ? await loadFollowing(viewerId) : new Set<string>();
   const authorIds = Array.from(new Set<string>([viewerId, ...Array.from(following)]));
 
-  // Select ONLY the jsonb sub-fields we need (gps + the two speeds), never the
-  // whole `payload` — it carries full GPS/HR/altitude/speed streams per ride,
-  // so pulling it for dozens of activities made the response huge and the feed
-  // time out ("erreur de chargement"). The rest come from denormalised columns.
+  // Read ONLY the denormalized light columns — never `payload`. `trace` is the
+  // pre-downsampled (~60 pt) mini-map path and the speeds are cached columns,
+  // both filled by the activities_denorm trigger. Touching `payload->gps` here
+  // forced a full jsonb DETOAST per row and pushed the feed p95 to ~9 s.
   const { data, error } = await supabaseAdmin()
     .from('activities')
-    .select('id, user_id, sport, title, start_date, duration_min, distance_km, elevation_m, visibility, gps:payload->gps, avgspeed:payload->avg_speed_kmh, maxspeed:payload->max_speed_kmh')
+    .select('id, user_id, sport, title, start_date, duration_min, distance_km, elevation_m, visibility, trace, avg_speed_kmh, max_speed_kmh')
     .in('user_id', authorIds)
     .order('start_date', { ascending: false })
     .limit(FEED_LIMIT);
@@ -90,9 +90,9 @@ export async function GET(req: NextRequest) {
       distance_km:   r.distance_km != null ? Number(r.distance_km) : null,
       elevation_m:   r.elevation_m ?? null,
       duration_min:  r.duration_min ?? null,
-      avg_speed_kmh: r.avgspeed != null ? Number(r.avgspeed) : null,
-      max_speed_kmh: r.maxspeed != null ? Number(r.maxspeed) : null,
-      gps:           downsample((r.gps as [number, number][]) ?? [], TRACE_POINTS),
+      avg_speed_kmh: r.avg_speed_kmh != null ? Number(r.avg_speed_kmh) : null,
+      max_speed_kmh: r.max_speed_kmh != null ? Number(r.max_speed_kmh) : null,
+      gps:           downsample((r.trace as [number, number][]) ?? [], TRACE_POINTS),
       visibility:    (r.visibility as Visibility) ?? 'followers',
       like_count:    c.like_count,
       comment_count: c.comment_count,
