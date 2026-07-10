@@ -213,6 +213,9 @@ export default function AdminPage() {
           <Link href="/admin/metrics" style={headerBtn(tokens.terra, '#fff', tokens.terra)}>
             MÉTRIQUES →
           </Link>
+          <Link href="/admin/perf" style={headerBtn(tokens.surface, tokens.inkMid, tokens.creamBorder)}>
+            PERFORMANCE →
+          </Link>
           <button onClick={refresh} disabled={loading} style={{
             ...headerBtn(tokens.creamDark, tokens.inkMid, tokens.creamBorder),
             cursor: loading ? 'wait' : 'pointer',

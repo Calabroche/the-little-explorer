@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { Activity, GlobalStats, deriveStats, tokens } from './tokens';
 import { Sidebar, GlobalLangToggle, PageId, SportId, UserId } from './Sidebar';
 import { FeatureAnnouncement } from './FeatureAnnouncement';
+import { PerfCollector } from '../PerfCollector';
 import { WhatsNewPanel } from './WhatsNewPanel';
 import { useT } from '@/i18n';
 import { useIsMobile } from './ui';
@@ -414,6 +415,8 @@ export function ExplorerApp() {
 
   return (
     <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: '100dvh', overflow: 'hidden' }}>
+      {/* Real-user performance telemetry (invisible) → /admin/perf. */}
+      <PerfCollector />
       {/* "What's new" popup — shows the latest undismissed feature note. */}
       <FeatureAnnouncement />
       {/* The full changelog, opened from the "i" button. */}

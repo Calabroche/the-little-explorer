@@ -576,3 +576,23 @@ create table if not exists next_auth.device_tokens (
 create index if not exists device_tokens_user_idx on next_auth.device_tokens (user_id);
 grant all on table next_auth.device_tokens to postgres;
 grant all on table next_auth.device_tokens to service_role;
+
+-- ── Performance telemetry ──────────────────────────────────────────────────
+-- Real-user timing samples collected client-side: API round-trips (kind=api),
+-- page navigation timing (kind=nav: ttfb/dcl/load), and web vitals
+-- (kind=vital: lcp). `label` is a normalized route/metric (ids stripped) so we
+-- can aggregate p50/p95 per endpoint on /admin/perf. High-volume, disposable —
+-- prune old rows periodically; nothing FKs to it.
+create table if not exists public.perf_samples (
+  id         bigint generated always as identity primary key,
+  kind       text not null,               -- 'api' | 'nav' | 'vital'
+  label      text not null,               -- normalized route or metric name
+  ms         double precision not null,   -- duration in milliseconds
+  status     int,                         -- http status for api samples, else null
+  user_id    uuid,                        -- viewer (nullable; not FK'd to keep inserts cheap)
+  created_at timestamptz not null default now()
+);
+create index if not exists perf_samples_created_idx on public.perf_samples (created_at desc);
+create index if not exists perf_samples_kind_label_idx on public.perf_samples (kind, label);
+grant all on table public.perf_samples to postgres;
+grant all on table public.perf_samples to service_role;
