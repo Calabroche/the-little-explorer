@@ -72,18 +72,22 @@ export function ProfilePage({ activities, stats, sport, onSelect }: {
             <div style={{ display: 'flex', alignItems: 'center', gap: 22 }}>
               <Avatar src={profile.image} name={profile.name} size={isMobile ? 68 : 88} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 32, fontWeight: 800, color: tokens.ink, margin: 0 }}>
-                  {profile.name ?? 'Mon profil'}
-                </h1>
+                {/* Name + edit action together — the edit button lives next to the
+                    name, not top-right where it collided with the floating chips. */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                  <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 32, fontWeight: 800, color: tokens.ink, margin: 0 }}>
+                    {profile.name ?? 'Mon profil'}
+                  </h1>
+                  <button onClick={() => router.push('/settings')} style={{
+                    padding: '6px 14px', borderRadius: 6, cursor: 'pointer', fontFamily: "'Space Grotesk'", fontWeight: 700, fontSize: 11, letterSpacing: '0.04em',
+                    background: 'transparent', color: tokens.inkMid, border: `1px solid ${tokens.creamBorder}`, whiteSpace: 'nowrap',
+                  }}>MODIFIER</button>
+                </div>
                 <div style={{ display: 'flex', gap: 24, marginTop: 8, fontSize: 14, color: tokens.inkMid }}>
                   <button onClick={() => setConns('followers')} style={linkBtn}><strong>{profile.followers}</strong> abonnés</button>
                   <button onClick={() => setConns('following')} style={linkBtn}><strong>{profile.following}</strong> abonnements</button>
                 </div>
               </div>
-              <button onClick={() => router.push('/settings')} style={{
-                padding: '9px 18px', borderRadius: 6, cursor: 'pointer', fontFamily: "'Space Grotesk'", fontWeight: 700, fontSize: 12,
-                background: 'transparent', color: tokens.inkMid, border: `1px solid ${tokens.creamBorder}`, whiteSpace: 'nowrap',
-              }}>MODIFIER</button>
             </div>
 
             {/* Description — displayed + inline editable, no trip to /settings. */}
