@@ -178,14 +178,14 @@ export function SocialFeedPage(
     // flex:1 + own scroll — <main> is overflow:hidden, so each page scrolls itself.
     <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
       {wide ? (
-        // 3-column: flexible spacer · centered feed (620) · stats pinned to the
-        // far-right edge of the pane.
-        <div style={{ display: 'flex', alignItems: 'flex-start', width: '100%', padding: '20px 24px 80px', boxSizing: 'border-box' }}>
+        // 3-column: flexible spacer · centered feed (600) · stats pinned to the
+        // far-right edge. alignItems:stretch makes the right column as tall as
+        // the feed so the sticky panel inside it has scroll range; that column
+        // then aligns the panel to the top (flex-start) so it isn't stretched.
+        <div style={{ display: 'flex', alignItems: 'stretch', width: '100%', padding: '20px 24px 80px', boxSizing: 'border-box' }}>
           <div style={{ flex: 1, minWidth: 24 }} />
           <div style={{ width: 600, flexShrink: 0 }}>{feedColumn}</div>
-          {/* alignSelf:stretch makes this column as tall as the feed so the
-              sticky aside has room to stay pinned while the page scrolls. */}
-          <div style={{ flex: 1, minWidth: 320, alignSelf: 'stretch', display: 'flex', justifyContent: 'flex-end', paddingLeft: 28 }}>
+          <div style={{ flex: 1, minWidth: 320, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', paddingLeft: 28 }}>
             {aside}
           </div>
         </div>
