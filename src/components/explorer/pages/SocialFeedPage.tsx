@@ -114,20 +114,32 @@ export function SocialFeedPage(
           }}>×</button>
         )}
       </div>
-      {focused && results && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20, marginTop: 6, background: tokens.surface, border: `1px solid ${tokens.creamBorder}`, borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
-          {results.length === 0 && <div style={{ padding: 12, color: tokens.inkLight, fontSize: 13 }}>Personne trouvé.</div>}
-          {results.map(u => (
-            <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: `1px solid ${tokens.creamBorder}` }}>
-              <button onClick={() => openProfile(u.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer', flex: 1, minWidth: 0, textAlign: 'left' }}>
-                <Avatar src={u.image} name={u.name} size={30} />
-                <span style={{ fontSize: 14, fontWeight: 600, color: tokens.ink }}>{u.name ?? 'Anonyme'}</span>
-              </button>
-              <FollowButton userId={u.id} initialFollowing={u.is_following} />
-            </div>
-          ))}
-        </div>
-      )}
+      {focused && (() => {
+        // Typing (≥2 chars) → live search results. Empty field → surface the
+        // follow suggestions right away so a click on the loupe is never blank.
+        const typing = q.trim().length >= 2;
+        const list = typing ? results : suggestions;
+        if (!list) return null; // still loading
+        return (
+          <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20, marginTop: 6, background: tokens.surface, border: `1px solid ${tokens.creamBorder}`, borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', overflow: 'hidden', maxHeight: 360, overflowY: 'auto' }}>
+            {!typing && list.length > 0 && (
+              <div style={{ padding: '10px 12px 6px', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: tokens.inkLight }}>Suggestions</div>
+            )}
+            {list.length === 0 && (
+              <div style={{ padding: 12, color: tokens.inkLight, fontSize: 13 }}>{typing ? 'Personne trouvé.' : 'Aucune suggestion pour le moment.'}</div>
+            )}
+            {list.map(u => (
+              <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: `1px solid ${tokens.creamBorder}` }}>
+                <button onClick={() => openProfile(u.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer', flex: 1, minWidth: 0, textAlign: 'left' }}>
+                  <Avatar src={u.image} name={u.name} size={30} />
+                  <span style={{ fontSize: 14, fontWeight: 600, color: tokens.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name ?? 'Anonyme'}</span>
+                </button>
+                <FollowButton userId={u.id} initialFollowing={u.is_following} />
+              </div>
+            ))}
+          </div>
+        );
+      })()}
     </div>
   );
 
