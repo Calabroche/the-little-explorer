@@ -202,7 +202,9 @@ function ProfileStatsAside({ activities }: { activities: Activity[] }) {
   const s = useMemo(() => computeStats(activities), [activities]);
   return (
     <aside style={{
-      width: 300, flexShrink: 0, position: 'sticky', top: 20,
+      // Pushed down so it clears the floating top-right chips (info / theme /
+      // language) that sit fixed over the page.
+      width: 300, flexShrink: 0, position: 'sticky', top: 72, marginTop: 48,
       background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
       borderRadius: 12, padding: 20, boxSizing: 'border-box',
     }}>
