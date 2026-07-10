@@ -686,8 +686,9 @@ export function AnalysisPage({ activity, onBack, onDelete }: { activity: Activit
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '16px 16px' : '32px 40px', background: tokens.cream }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+      {/* Header — both controls kept on the LEFT so they never sit under the
+          floating top-right chips (info / theme / language). */}
+      <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: 16, marginBottom: 20 }}>
         <button onClick={onBack} style={{
           background: 'none', border: 'none', cursor: 'pointer',
           fontFamily: "'Space Grotesk'", fontSize: 11, letterSpacing: '0.1em',

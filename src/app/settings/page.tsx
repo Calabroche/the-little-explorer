@@ -17,7 +17,7 @@
  * users never reach this page).
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { signOut } from 'next-auth/react';
 import { tokens } from '@/components/explorer/tokens';
@@ -27,6 +27,7 @@ interface MeResponse {
   id:        string;
   email:     string | null;
   name:      string | null;
+  image:     string | null;
   bio:       string | null;
   default_visibility: 'public' | 'followers' | 'private';
   athleteId: number | null;
@@ -101,6 +102,48 @@ function parseInput(s: string): number | null {
   return Number.isFinite(n) ? n : NaN;
 }
 
+// Load an image file, center-crop to a square, downscale to `size`px, and
+// return a JPEG data URL (~20–40 KB). Keeps the stored avatar tiny so it fits
+// comfortably in the users.image text column.
+function resizeToSquareDataUrl(file: File, size: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith('image/')) { reject(new Error('Fichier non image')); return; }
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const side = Math.min(img.width, img.height);
+      const sx = (img.width - side) / 2;
+      const sy = (img.height - side) / 2;
+      const canvas = document.createElement('canvas');
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { reject(new Error('Canvas indisponible')); return; }
+      ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image illisible')); };
+    img.src = url;
+  });
+}
+
+function AvatarPreview({ image, name }: { image: string | null; name: string | null }) {
+  const initials = (name ?? '?').trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase() || '?';
+  const common: React.CSSProperties = {
+    width: 64, height: 64, borderRadius: '50%', flexShrink: 0,
+    border: `1px solid ${tokens.creamBorder}`, objectFit: 'cover',
+  };
+  if (image) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={image} alt="" style={common} />;
+  }
+  return (
+    <div style={{ ...common, display: 'flex', alignItems: 'center', justifyContent: 'center', background: tokens.terra, color: '#fff', fontFamily: "'Playfair Display'", fontSize: 22, fontWeight: 800 }}>
+      {initials}
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const [me,       setMe]       = useState<MeResponse | null>(null);
   const [loading,  setLoading]  = useState(true);
@@ -135,6 +178,43 @@ export default function SettingsPage() {
   // was lost or shared with someone who shouldn't have access.
   const [logoutAllRunning, setLogoutAllRunning] = useState(false);
   const [logoutAllError,   setLogoutAllError]   = useState<string | null>(null);
+
+  // Custom profile photo — resized client-side to a small square and saved
+  // straight away (its own PATCH) so the change is instant and independent
+  // of the main "Enregistrer".
+  const [photoBusy,  setPhotoBusy]  = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const savePhoto = async (image: string | null) => {
+    setPhotoBusy(true);
+    setPhotoError(null);
+    try {
+      const r = await fetch('/api/me', {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ image }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({})) as { error?: string; message?: string };
+        throw new Error(err.message ?? err.error ?? `HTTP ${r.status}`);
+      }
+      setMe(await r.json() as MeResponse);
+    } catch (e) {
+      setPhotoError((e as Error).message ?? 'Erreur inconnue');
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
+
+  const onPickPhoto = async (file: File) => {
+    try {
+      const dataUrl = await resizeToSquareDataUrl(file, 256);
+      await savePhoto(dataUrl);
+    } catch (e) {
+      setPhotoError((e as Error).message ?? 'Image illisible');
+    }
+  };
 
   useEffect(() => {
     fetch('/api/me')
@@ -369,6 +449,33 @@ export default function SettingsPage() {
               metrics (TSS, W/kg, IF) sont recalculés à partir de ces
               valeurs sur chaque chargement du feed.
             </p>
+
+            <div style={ROW}>
+              <label style={LABEL}>Photo de profil</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                <AvatarPreview image={me.image} name={me.name} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
+                    onChange={e => { const f = e.target.files?.[0]; if (f) onPickPhoto(f); e.target.value = ''; }} />
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button type="button" disabled={photoBusy} onClick={() => fileRef.current?.click()}
+                      style={{ padding: '8px 14px', borderRadius: 6, border: `1px solid ${tokens.creamBorder}`, background: tokens.surface, cursor: photoBusy ? 'default' : 'pointer', fontFamily: "'Space Grotesk'", fontSize: 13, fontWeight: 600, color: tokens.ink, opacity: photoBusy ? 0.6 : 1 }}>
+                      {photoBusy ? 'Envoi…' : (me.image ? 'Changer la photo' : 'Ajouter une photo')}
+                    </button>
+                    {me.image && (
+                      <button type="button" disabled={photoBusy} onClick={() => savePhoto(null)}
+                        style={{ padding: '8px 14px', borderRadius: 6, border: `1px solid ${tokens.creamBorder}`, background: 'none', cursor: photoBusy ? 'default' : 'pointer', fontFamily: "'Space Grotesk'", fontSize: 13, fontWeight: 600, color: tokens.inkMid }}>
+                        Retirer
+                      </button>
+                    )}
+                  </div>
+                  <span style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight }}>
+                    Ta propre photo, indépendante de ton compte Google.
+                  </span>
+                  {photoError && <span style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: '#A00' }}>{photoError}</span>}
+                </div>
+              </div>
+            </div>
 
             <div style={ROW}>
               <label style={LABEL} htmlFor="name">Nom affiché</label>

@@ -207,6 +207,27 @@ export async function PATCH(req: NextRequest) {
     update.default_activity_visibility = v;
   }
 
+  // Custom profile photo. Accepts a self-contained data URL (client resizes to
+  // a small square before sending) so the avatar no longer depends on the
+  // OAuth/Google picture. null clears back to the initials avatar. Capped at
+  // ~1.5 MB of string so a crafted body can't bloat the row.
+  if ('image' in body) {
+    const raw = (body as { image?: string | null }).image;
+    if (raw === null) {
+      update.image = null;
+    } else if (typeof raw === 'string') {
+      if (!/^data:image\/(png|jpe?g|webp);base64,/.test(raw)) {
+        return NextResponse.json({ error: 'invalid_image', message: 'must be a base64 image data URL' }, { status: 400 });
+      }
+      if (raw.length > 1_500_000) {
+        return NextResponse.json({ error: 'image_too_large', message: 'image trop lourde (max ~1 Mo)' }, { status: 400 });
+      }
+      update.image = raw;
+    } else {
+      return NextResponse.json({ error: 'invalid_image' }, { status: 400 });
+    }
+  }
+
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: 'empty_update' }, { status: 400 });
   }

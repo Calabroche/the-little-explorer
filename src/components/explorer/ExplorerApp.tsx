@@ -391,7 +391,7 @@ export function ExplorerApp() {
   // `page` is constructed.
   const renderPage = () => {
     switch (page) {
-      case 'feed':      return <SocialFeedPage onOpenActivity={openActivityById} />;
+      case 'feed':      return <SocialFeedPage onOpenActivity={openActivityById} activities={filteredActivities} />;
       case 'profile':   return <ProfilePage   activities={filteredActivities} stats={filteredStats!} sport={sport} onSelect={openActivity} />;
       // Planner is now a tabbed hub for: itinerary, training plan,
       // auto-route, route proposals. The standalone /itineraire URL

@@ -20,6 +20,10 @@ export function fetchProfile(userId: string): Promise<Profile> {
   return fetch(`/api/users/${userId}`, { cache: 'no-store' }).then(r => jsonOrThrow<Profile>(r));
 }
 
+export function fetchSuggestions(): Promise<UserSearchResult[]> {
+  return fetch(`/api/users/suggestions`, { cache: 'no-store' }).then(r => jsonOrThrow<UserSearchResult[]>(r));
+}
+
 export function searchUsers(q: string): Promise<UserSearchResult[]> {
   return fetch(`/api/users/search?q=${encodeURIComponent(q)}`, { cache: 'no-store' }).then(r => jsonOrThrow<UserSearchResult[]>(r));
 }
