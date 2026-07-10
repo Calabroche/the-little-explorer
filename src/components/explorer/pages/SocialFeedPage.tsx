@@ -37,7 +37,8 @@ export function SocialFeedPage(
 
   // Two-column layout only when there's room for the stats aside.
   useEffect(() => {
-    const onResize = () => setWide(window.innerWidth >= 1040);
+    // Need room for the sidebar + a 620 feed + the 300 aside pinned right.
+    const onResize = () => setWide(window.innerWidth >= 1280);
     onResize();
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
@@ -131,7 +132,7 @@ export function SocialFeedPage(
   );
 
   const feedColumn = (
-    <div style={{ flex: 1, minWidth: 0, maxWidth: 620, margin: wide ? 0 : '0 auto' }}>
+    <div>
       {searchBox}
 
       {/* Suggestions strip — surfaced always when you have room to grow, and
@@ -154,21 +155,29 @@ export function SocialFeedPage(
     </div>
   );
 
+  const aside = (
+    <ProfileStatsAside
+      activities={activities ?? []}
+      sport={sport} onSportChange={onSportChange} availableSports={availableSports}
+    />
+  );
+
   return (
     // flex:1 + own scroll — <main> is overflow:hidden, so each page scrolls itself.
     <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-      <div style={{
-        display: 'flex', alignItems: 'flex-start', gap: 28,
-        maxWidth: wide ? 980 : 620, margin: '0 auto', padding: '20px 16px 80px',
-      }}>
-        {feedColumn}
-        {wide && (
-          <ProfileStatsAside
-            activities={activities ?? []}
-            sport={sport} onSportChange={onSportChange} availableSports={availableSports}
-          />
-        )}
-      </div>
+      {wide ? (
+        // 3-column: flexible spacer · centered feed (620) · stats pinned to the
+        // far-right edge of the pane.
+        <div style={{ display: 'flex', alignItems: 'flex-start', width: '100%', padding: '20px 24px 80px', boxSizing: 'border-box' }}>
+          <div style={{ flex: 1, minWidth: 24 }} />
+          <div style={{ width: 620, flexShrink: 0 }}>{feedColumn}</div>
+          <div style={{ flex: 1, minWidth: 320, display: 'flex', justifyContent: 'flex-end', paddingLeft: 28 }}>
+            {aside}
+          </div>
+        </div>
+      ) : (
+        <div style={{ maxWidth: 620, margin: '0 auto', padding: '20px 16px 80px' }}>{feedColumn}</div>
+      )}
     </div>
   );
 }
