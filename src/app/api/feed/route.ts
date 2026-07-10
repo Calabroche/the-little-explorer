@@ -43,6 +43,11 @@ export async function GET(req: NextRequest) {
 
   const source = new URL(req.url).searchParams.get('source') === 'mine' ? 'mine' : 'following';
 
+  // Phase timing — recorded as diagnostic perf_samples (labels prefixed "_")
+  // so /admin/perf reveals which part of the feed is slow. Cheap; remove once
+  // the bottleneck is fixed.
+  const t0 = Date.now();
+
   // Author set: self always; "following" adds the people you follow.
   const following = source === 'following' ? await loadFollowing(viewerId) : new Set<string>();
   const authorIds = Array.from(new Set<string>([viewerId, ...Array.from(following)]));
@@ -57,6 +62,7 @@ export async function GET(req: NextRequest) {
     .in('user_id', authorIds)
     .order('start_date', { ascending: false })
     .limit(FEED_LIMIT);
+  const t1 = Date.now();
   if (error) {
     console.error('[feed] supabase error:', error.message);
     return NextResponse.json({ error: 'db_error' }, { status: 500 });
@@ -77,6 +83,7 @@ export async function GET(req: NextRequest) {
     loadSocialCounts(ids, viewerId),
     loadAuthors(rows.map(r => r.user_id as string)),
   ]);
+  const t2 = Date.now();
 
   const items = rows.map(r => {
     const c = counts.get(Number(r.id)) ?? { like_count: 0, comment_count: 0, liked_by_me: false };
@@ -100,8 +107,20 @@ export async function GET(req: NextRequest) {
     };
   });
 
-  return NextResponse.json(items, {
+  const body = JSON.stringify(items);
+
+  // Fire-and-forget diagnostics → /admin/perf. `_feed:*` phase timings + the
+  // response size (KB) so we can see whether the cost is queries or payload.
+  void supabaseAdmin().from('perf_samples').insert([
+    { kind: 'api', label: '_feed:following+select', ms: t1 - t0, user_id: viewerId },
+    { kind: 'api', label: '_feed:counts+authors',   ms: t2 - t1, user_id: viewerId },
+    { kind: 'api', label: '_feed:response_kb',       ms: Math.round(body.length / 1024), user_id: viewerId },
+    { kind: 'api', label: '_feed:rows',              ms: rows.length, user_id: viewerId },
+  ]).then(() => {}, () => {});
+
+  return new NextResponse(body, {
     headers: {
+      'Content-Type':             'application/json',
       'Cache-Control':            'no-store, must-revalidate',
       'CDN-Cache-Control':        'no-store',
       'Vercel-CDN-Cache-Control': 'no-store',
