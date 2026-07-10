@@ -24,6 +24,9 @@ export function ProfilePage({ activities, stats, sport, onSelect }: {
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [conns, setConns] = useState<'followers' | 'following' | null>(null);
+  const [editingBio, setEditingBio] = useState(false);
+  const [bioDraft, setBioDraft] = useState('');
+  const [savingBio, setSavingBio] = useState(false);
 
   useEffect(() => {
     fetch('/api/me')
@@ -34,28 +37,82 @@ export function ProfilePage({ activities, stats, sport, onSelect }: {
       .catch(() => {});
   }, []);
 
+  const startEdit = () => { setBioDraft(profile?.bio ?? ''); setEditingBio(true); };
+  const saveBio = async () => {
+    setSavingBio(true);
+    try {
+      const r = await fetch('/api/me', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bio: bioDraft.trim().length === 0 ? null : bioDraft.trim() }),
+      });
+      if (r.ok) setProfile(p => (p ? { ...p, bio: bioDraft.trim().length === 0 ? null : bioDraft.trim() } : p));
+      setEditingBio(false);
+    } catch { /* keep editor open */ }
+    finally { setSavingBio(false); }
+  };
+
   return (
     // flex column: fixed header on top, the dashboard (FeedPage) scrolls below.
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       {profile && (
         <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 20px 0', width: '100%', boxSizing: 'border-box' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <Avatar src={profile.image} name={profile.name} size={64} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 26, fontWeight: 800, color: tokens.ink, margin: 0 }}>
-                {profile.name ?? 'Mon profil'}
-              </h1>
-              <div style={{ display: 'flex', gap: 18, marginTop: 4, fontSize: 13, color: tokens.inkMid }}>
-                <button onClick={() => setConns('followers')} style={linkBtn}><strong>{profile.followers}</strong> abonnés</button>
-                <button onClick={() => setConns('following')} style={linkBtn}><strong>{profile.following}</strong> abonnements</button>
+          {/* Enlarged presentation card */}
+          <div style={{ background: tokens.surface, border: `1px solid ${tokens.creamBorder}`, borderRadius: 16, padding: 28 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 22 }}>
+              <Avatar src={profile.image} name={profile.name} size={92} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 32, fontWeight: 800, color: tokens.ink, margin: 0 }}>
+                  {profile.name ?? 'Mon profil'}
+                </h1>
+                <div style={{ display: 'flex', gap: 24, marginTop: 8, fontSize: 14, color: tokens.inkMid }}>
+                  <button onClick={() => setConns('followers')} style={linkBtn}><strong>{profile.followers}</strong> abonnés</button>
+                  <button onClick={() => setConns('following')} style={linkBtn}><strong>{profile.following}</strong> abonnements</button>
+                </div>
               </div>
+              <button onClick={() => router.push('/settings')} style={{
+                padding: '9px 18px', borderRadius: 6, cursor: 'pointer', fontFamily: "'Space Grotesk'", fontWeight: 700, fontSize: 12,
+                background: 'transparent', color: tokens.inkMid, border: `1px solid ${tokens.creamBorder}`, whiteSpace: 'nowrap',
+              }}>MODIFIER</button>
             </div>
-            <button onClick={() => router.push('/settings')} style={{
-              padding: '8px 16px', borderRadius: 4, cursor: 'pointer', fontFamily: "'Space Grotesk'", fontWeight: 700, fontSize: 12,
-              background: 'transparent', color: tokens.inkMid, border: `1px solid ${tokens.creamBorder}`,
-            }}>MODIFIER</button>
+
+            {/* Description — displayed + inline editable, no trip to /settings. */}
+            <div style={{ marginTop: 20, paddingTop: 20, borderTop: `1px solid ${tokens.creamBorder}` }}>
+              {editingBio ? (
+                <div>
+                  <textarea
+                    value={bioDraft} maxLength={280} rows={3} autoFocus
+                    onChange={e => setBioDraft(e.target.value)}
+                    placeholder="Décris-toi en quelques mots (vélo, objectifs, terrain de jeu…)"
+                    style={{
+                      width: '100%', boxSizing: 'border-box', resize: 'vertical', padding: '10px 12px',
+                      borderRadius: 8, border: `1px solid ${tokens.creamBorder}`, background: tokens.cream,
+                      fontFamily: "'Space Grotesk', sans-serif", fontSize: 14, color: tokens.ink, lineHeight: 1.5,
+                    }}
+                  />
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
+                    <button onClick={saveBio} disabled={savingBio} style={{
+                      padding: '7px 16px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                      background: tokens.terra, color: '#fff', fontFamily: "'Space Grotesk'", fontWeight: 700, fontSize: 12, opacity: savingBio ? 0.6 : 1,
+                    }}>{savingBio ? 'Enregistrement…' : 'Enregistrer'}</button>
+                    <button onClick={() => setEditingBio(false)} style={{
+                      padding: '7px 16px', borderRadius: 6, cursor: 'pointer',
+                      background: 'transparent', color: tokens.inkMid, border: `1px solid ${tokens.creamBorder}`, fontFamily: "'Space Grotesk'", fontWeight: 600, fontSize: 12,
+                    }}>Annuler</button>
+                    <span style={{ fontSize: 11, color: tokens.inkLight, marginLeft: 'auto' }}>{bioDraft.length}/280</span>
+                  </div>
+                </div>
+              ) : profile.bio ? (
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                  <p style={{ flex: 1, fontSize: 15, color: tokens.inkMid, lineHeight: 1.55, margin: 0, whiteSpace: 'pre-wrap' }}>{profile.bio}</p>
+                  <button onClick={startEdit} style={{ ...linkBtn, color: tokens.terra, fontWeight: 600, whiteSpace: 'nowrap' }}>Modifier</button>
+                </div>
+              ) : (
+                <button onClick={startEdit} style={{ ...linkBtn, color: tokens.terra, fontWeight: 600, fontSize: 14 }}>
+                  ＋ Ajouter une description
+                </button>
+              )}
+            </div>
           </div>
-          {profile.bio && <p style={{ fontSize: 14, color: tokens.inkMid, lineHeight: 1.5, marginTop: 12 }}>{profile.bio}</p>}
         </div>
       )}
 
