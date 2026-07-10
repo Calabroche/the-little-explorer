@@ -8,6 +8,7 @@
  */
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { FeedPage } from './FeedPage';
 import { tokens, Activity, GlobalStats } from '../tokens';
 import type { SportId } from '../Sidebar';
@@ -22,6 +23,7 @@ export function ProfilePage({ activities, stats, sport, onSelect }: {
   onSelect: (a: Activity) => void;
 }) {
   const router = useRouter();
+  const { data: session } = useSession();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [conns, setConns] = useState<'followers' | 'following' | null>(null);
   const [editingBio, setEditingBio] = useState(false);
@@ -36,14 +38,20 @@ export function ProfilePage({ activities, stats, sport, onSelect }: {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
+  // Prefer the session's user id (already in memory) so we skip the /api/me
+  // round-trip and only make ONE call for the counts + bio. Fall back to
+  // /api/me if the session doesn't carry an id.
   useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const uid = (session?.user as any)?.id as string | undefined;
+    if (uid) { fetchProfile(uid).then(setProfile).catch(() => {}); return; }
     fetch('/api/me')
       .then(r => (r.ok ? r.json() : null))
       .then((me: { id?: string } | null) => {
         if (me?.id) fetchProfile(me.id).then(setProfile).catch(() => {});
       })
       .catch(() => {});
-  }, []);
+  }, [session]);
 
   const startEdit = () => { setBioDraft(profile?.bio ?? ''); setEditingBio(true); };
   const saveBio = async () => {
@@ -62,21 +70,23 @@ export function ProfilePage({ activities, stats, sport, onSelect }: {
   return (
     // flex column: fixed header on top, the dashboard (FeedPage) scrolls below.
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      {profile && (
+      {(profile || session?.user) && (
         // Full-width header band — no floating box, so no black side gutters.
-        // Inner content aligns to the same 720 max-width as the dashboard below.
+        // Rendered as soon as the session identity is available (no waiting on
+        // the profile fetch), so the banner is there instantly; the counts and
+        // description fill in when /api/users/[id] returns.
         <div style={{ width: '100%', background: tokens.surface, borderBottom: `1px solid ${tokens.creamBorder}` }}>
           {/* Same horizontal padding as the dashboard below (full-width, 40px)
               so the avatar/name line up with the activity cards underneath. */}
           <div style={{ padding: isMobile ? '20px 16px' : '28px 40px', boxSizing: 'border-box' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 22 }}>
-              <Avatar src={profile.image} name={profile.name} size={isMobile ? 68 : 88} />
+              <Avatar src={profile?.image ?? session?.user?.image ?? null} name={profile?.name ?? session?.user?.name ?? null} size={isMobile ? 68 : 88} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 {/* Name + edit action together — the edit button lives next to the
                     name, not top-right where it collided with the floating chips. */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
                   <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 32, fontWeight: 800, color: tokens.ink, margin: 0 }}>
-                    {profile.name ?? 'Mon profil'}
+                    {profile?.name ?? session?.user?.name ?? 'Mon profil'}
                   </h1>
                   <button onClick={() => router.push('/settings')} style={{
                     padding: '6px 14px', borderRadius: 6, cursor: 'pointer', fontFamily: "'Space Grotesk'", fontWeight: 700, fontSize: 11, letterSpacing: '0.04em',
@@ -84,13 +94,14 @@ export function ProfilePage({ activities, stats, sport, onSelect }: {
                   }}>MODIFIER</button>
                 </div>
                 <div style={{ display: 'flex', gap: 24, marginTop: 8, fontSize: 14, color: tokens.inkMid }}>
-                  <button onClick={() => setConns('followers')} style={linkBtn}><strong>{profile.followers}</strong> abonnés</button>
-                  <button onClick={() => setConns('following')} style={linkBtn}><strong>{profile.following}</strong> abonnements</button>
+                  <button onClick={() => setConns('followers')} style={linkBtn}><strong>{profile?.followers ?? '—'}</strong> abonnés</button>
+                  <button onClick={() => setConns('following')} style={linkBtn}><strong>{profile?.following ?? '—'}</strong> abonnements</button>
                 </div>
               </div>
             </div>
 
             {/* Description — displayed + inline editable, no trip to /settings. */}
+            {profile && (
             <div style={{ marginTop: 20, paddingTop: 20, borderTop: `1px solid ${tokens.creamBorder}` }}>
               {editingBio ? (
                 <div>
@@ -127,6 +138,7 @@ export function ProfilePage({ activities, stats, sport, onSelect }: {
                 </button>
               )}
             </div>
+            )}
           </div>
         </div>
       )}
