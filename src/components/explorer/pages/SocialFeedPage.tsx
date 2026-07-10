@@ -183,7 +183,9 @@ export function SocialFeedPage(
         <div style={{ display: 'flex', alignItems: 'flex-start', width: '100%', padding: '20px 24px 80px', boxSizing: 'border-box' }}>
           <div style={{ flex: 1, minWidth: 24 }} />
           <div style={{ width: 620, flexShrink: 0 }}>{feedColumn}</div>
-          <div style={{ flex: 1, minWidth: 320, display: 'flex', justifyContent: 'flex-end', paddingLeft: 28 }}>
+          {/* alignSelf:stretch makes this column as tall as the feed so the
+              sticky aside has room to stay pinned while the page scrolls. */}
+          <div style={{ flex: 1, minWidth: 320, alignSelf: 'stretch', display: 'flex', justifyContent: 'flex-end', paddingLeft: 28 }}>
             {aside}
           </div>
         </div>
