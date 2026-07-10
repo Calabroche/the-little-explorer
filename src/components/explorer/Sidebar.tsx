@@ -467,6 +467,10 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
     <div style={{
       width: 220, background: tokens.surface, borderRight: `1px solid ${tokens.creamBorder}`,
       display: 'flex', flexDirection: 'column', flexShrink: 0, padding: '0 0 24px',
+      // Scroll when the content (nav + stats + expanded profile card) is taller
+      // than the viewport, so the bottom actions (Paramètres / Admin / Se
+      // déconnecter) are never clipped.
+      height: '100dvh', overflowY: 'auto',
     }}>
       <div style={{ padding: '28px 24px 24px', borderBottom: `1px solid ${tokens.creamBorder}` }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 6 }}>
