@@ -650,3 +650,8 @@ create trigger activities_denorm_trg
 -- One-time backfill of existing rows (fires the trigger for each). Safe to
 -- re-run; only touches rows not yet denormalized.
 update public.activities set created_at = created_at where trace is null;
+
+-- Feed query is `where user_id in (...) order by start_date desc limit 30`.
+-- Without this composite index Postgres scans + sorts (feed select ~2s p95).
+create index if not exists activities_user_start_idx
+  on public.activities (user_id, start_date desc);

@@ -30,6 +30,7 @@ import { supabaseAdmin } from '@/lib/db';
 import { getAuthedUser } from '@/lib/api-auth';
 import { logEvent } from '@/lib/events';
 import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { uploadAvatarDataUrl } from '@/lib/avatar';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -207,24 +208,28 @@ export async function PATCH(req: NextRequest) {
     update.default_activity_visibility = v;
   }
 
-  // Custom profile photo. Accepts a self-contained data URL (client resizes to
-  // a small square before sending) so the avatar no longer depends on the
-  // OAuth/Google picture. null clears back to the initials avatar. Capped at
-  // ~1.5 MB of string so a crafted body can't bloat the row.
+  // Custom profile photo. The client sends a resized base64 data URL; we UPLOAD
+  // it to Supabase Storage and store only the short public URL — never the data
+  // URL itself (that bloated responses + the session cookie → 494). null clears
+  // back to the initials avatar. Already-a-URL passes through.
   if ('image' in body) {
     const raw = (body as { image?: string | null }).image;
     if (raw === null) {
       update.image = null;
-    } else if (typeof raw === 'string') {
-      if (!/^data:image\/(png|jpe?g|webp);base64,/.test(raw)) {
-        return NextResponse.json({ error: 'invalid_image', message: 'must be a base64 image data URL' }, { status: 400 });
-      }
+    } else if (typeof raw === 'string' && raw.startsWith('http')) {
+      update.image = raw.slice(0, 512);
+    } else if (typeof raw === 'string' && raw.startsWith('data:')) {
       if (raw.length > 1_500_000) {
         return NextResponse.json({ error: 'image_too_large', message: 'image trop lourde (max ~1 Mo)' }, { status: 400 });
       }
-      update.image = raw;
+      try {
+        update.image = await uploadAvatarDataUrl(row.id, raw);
+      } catch (e) {
+        console.error('[me] avatar upload failed:', (e as Error).message);
+        return NextResponse.json({ error: 'avatar_upload_failed' }, { status: 500 });
+      }
     } else {
-      return NextResponse.json({ error: 'invalid_image' }, { status: 400 });
+      return NextResponse.json({ error: 'invalid_image', message: 'must be a base64 image data URL' }, { status: 400 });
     }
   }
 

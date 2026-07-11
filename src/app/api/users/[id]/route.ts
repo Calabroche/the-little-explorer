@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthedUser } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/db';
 import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
-import { loadFollowCounts, loadSocialCounts, canView, dedupActivities, type Visibility } from '@/lib/social';
+import { loadFollowCounts, loadSocialCounts, canView, dedupActivities, safeAvatar, type Visibility } from '@/lib/social';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -75,7 +75,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const c = social.get(Number(a.id)) ?? { like_count: 0, comment_count: 0, liked_by_me: false };
     return {
       id:            Number(a.id),
-      author:        { id: user.id, name: user.name ?? null, image: user.image ?? null },
+      author:        { id: user.id, name: user.name ?? null, image: safeAvatar(user.image) },
       is_mine:       viewerId === targetId,
       sport:         a.sport,
       title:         a.title,
@@ -96,7 +96,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   return NextResponse.json({
     id:            user.id,
     name:          user.name ?? null,
-    image:         user.image ?? null,
+    image:         safeAvatar(user.image),
     bio:           user.bio ?? null,
     is_me:         viewerId === targetId,
     is_following:  isFollowing,

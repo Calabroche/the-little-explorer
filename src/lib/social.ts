@@ -178,7 +178,14 @@ export async function loadAuthors(userIds: string[]): Promise<Map<string, Author
     return out;
   }
   for (const u of data ?? []) {
-    out.set(u.id as string, { id: u.id as string, name: (u.name ?? null) as string | null, image: (u.image ?? null) as string | null });
+    out.set(u.id as string, { id: u.id as string, name: (u.name ?? null) as string | null, image: safeAvatar(u.image) });
   }
   return out;
+}
+
+/** Never return a heavy base64 `data:` avatar in a list/feed response — those
+ *  are pre-Storage rows not yet migrated. Falling back to the initials avatar
+ *  keeps the payload tiny (the migration restores the real photo as a URL). */
+export function safeAvatar(image: unknown): string | null {
+  return typeof image === 'string' && !image.startsWith('data:') ? image : null;
 }

@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthedUser } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/db';
 import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
-import { loadFollowing } from '@/lib/social';
+import { loadFollowing, safeAvatar } from '@/lib/social';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
   const users = (data ?? []).map(u => ({
     id:           u.id as string,
     name:         (u.name ?? null) as string | null,
-    image:        (u.image ?? null) as string | null,
+    image:        safeAvatar(u.image),
     is_following: following.has(u.id as string),
   }));
   return NextResponse.json(users, { headers: { 'Cache-Control': 'no-store' } });
