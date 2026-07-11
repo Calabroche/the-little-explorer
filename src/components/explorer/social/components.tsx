@@ -47,6 +47,13 @@ function fmtDuration(min: number | null): string {
   return h > 0 ? `${h}h${String(m).padStart(2, '0')}` : `${m} min`;
 }
 
+// Under 1 km (typical for a swim) metres read far better than "0.8 km".
+function fmtDistance(km: number | null): string {
+  if (km == null) return '—';
+  if (km < 1) return `${Math.round(km * 1000)} m`;
+  return `${km.toFixed(1)} km`;
+}
+
 // ── GPS trace as an aspect-correct SVG polyline ────────────────────────────
 export function TraceSvg({ gps, width = 260, height = 120, stroke = tokens.terra }: {
   gps: [number, number][]; width?: number; height?: number; stroke?: string;
@@ -206,7 +213,7 @@ function drawStoryImage(item: FeedItem): HTMLCanvasElement {
   }
   // Stats row
   const stats: [string, string][] = [
-    ['DISTANCE', item.distance_km != null ? `${item.distance_km.toFixed(1)} km` : '—'],
+    ['DISTANCE', fmtDistance(item.distance_km)],
     ['DÉNIVELÉ', item.elevation_m != null ? `${item.elevation_m} m` : '—'],
     ['TEMPS', fmtDuration(item.duration_min)],
     ['V. MAX', item.max_speed_kmh != null ? `${item.max_speed_kmh.toFixed(1)} km/h` : '—'],
@@ -354,7 +361,7 @@ export function ActivityDetailModal({ id, onClose }: { id: number; onClose: () =
                 </div>
               )}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, marginBottom: 14 }}>
-                <Stat label="Distance" value={d.distance_km != null ? `${d.distance_km.toFixed(1)} km` : '—'} />
+                <Stat label="Distance" value={fmtDistance(d.distance_km)} />
                 <Stat label="Dénivelé +" value={d.elevation_m != null ? `${d.elevation_m} m` : '—'} color={tokens.terra} />
                 <Stat label="Temps" value={fmtDuration(d.duration_min)} />
                 <Stat label="Vitesse max" value={d.max_speed_kmh != null ? `${d.max_speed_kmh.toFixed(1)} km/h` : '—'} color="#3E6FA3" />
@@ -452,7 +459,7 @@ export function SocialActivityCard({ item, onOpenProfile, onOpenActivity }: {
 
         {/* Stats */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, marginBottom: 14 }}>
-          <Stat label="Distance" value={item.distance_km != null ? `${item.distance_km.toFixed(1)} km` : '—'} />
+          <Stat label="Distance" value={fmtDistance(item.distance_km)} />
           <Stat label="Dénivelé +" value={item.elevation_m != null ? `${item.elevation_m} m` : '—'} color={tokens.terra} />
           <Stat label="Temps" value={fmtDuration(item.duration_min)} />
           <Stat label="Vitesse max" value={item.max_speed_kmh != null ? `${item.max_speed_kmh.toFixed(1)} km/h` : '—'} color="#3E6FA3" />
