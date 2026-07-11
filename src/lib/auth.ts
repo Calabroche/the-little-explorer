@@ -251,6 +251,19 @@ export function buildAuthOptions(): AuthOptions {
        */
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       async jwt({ token, user, account, profile }: any) {
+        // CRITICAL: never let a base64 `data:` avatar into the JWT. With the
+        // JWT session strategy the token is stored in a cookie, and a custom
+        // photo (data URL, tens/hundreds of KB) blows the cookie past Vercel's
+        // request-header limit → every request 494 REQUEST_HEADER_TOO_LARGE and
+        // the whole site goes down. The real image lives in the DB and is
+        // served through /api/users/[id]; the cookie only needs identity.
+        if (typeof token.picture === 'string' && (token.picture.startsWith('data:') || token.picture.length > 512)) {
+          token.picture = null;
+        }
+        if (user && typeof (user as any).image === 'string' && ((user as any).image.startsWith('data:') || (user as any).image.length > 512)) {
+          (user as any).image = null;
+        }
+
         if (user) {
           token.uid = user.id;
           if (account?.provider === 'strava' && profile?.id) {
