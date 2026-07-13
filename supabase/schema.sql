@@ -655,3 +655,20 @@ update public.activities set created_at = created_at where trace is null;
 -- Without this composite index Postgres scans + sorts (feed select ~2s p95).
 create index if not exists activities_user_start_idx
   on public.activities (user_id, start_date desc);
+
+-- ── Activity media (photos, later videos) ──────────────────────────────────
+-- User-added photos/videos on a ride, Strava-style. Files live in the public
+-- `media` Storage bucket; this table holds the URLs + ordering. Owner-scoped
+-- writes. Cascades when the activity's owner is deleted.
+create table if not exists public.activity_media (
+  id          uuid primary key default uuid_generate_v4(),
+  activity_id bigint not null,
+  user_id     uuid not null references next_auth.users(id) on delete cascade,
+  url         text not null,
+  kind        text not null default 'image',   -- 'image' | 'video'
+  position    int not null default 0,
+  created_at  timestamptz not null default now()
+);
+create index if not exists activity_media_activity_idx on public.activity_media (activity_id, position);
+grant all on table public.activity_media to postgres;
+grant all on table public.activity_media to service_role;

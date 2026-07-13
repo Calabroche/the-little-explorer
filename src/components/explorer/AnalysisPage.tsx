@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import {
   ComposedChart, AreaChart, Area, Bar, Line,
@@ -768,6 +768,8 @@ export function AnalysisPage({ activity, onBack, onDelete, onEdit }: { activity:
         {activity.calories  != null && <StatChip label={t('analysis.cal')}  value={activity.calories}   unit="kcal" />}
       </div>
 
+      <MediaSection activityId={activity.id} canEdit={!!onEdit} />
+
       {/* Grade-adjusted pace (running) */}
       <GradeAdjustedPace activity={activity} />
 
@@ -1050,6 +1052,103 @@ export function AnalysisPage({ activity, onBack, onDelete, onEdit }: { activity:
             </div>
           </div>
 
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Media (photos) on an activity ──────────────────────────────────────────
+
+interface MediaItem { id: string; url: string; kind: string }
+
+// Resize a picked image to a max dimension and return a JPEG data URL (keeps
+// the payload reasonable — the API stores it in Supabase Storage).
+function resizeImageDataUrl(file: File, maxDim: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith('image/')) { reject(new Error('not_image')); return; }
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { reject(new Error('no_ctx')); return; }
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', 0.82));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('load_failed')); };
+    img.src = url;
+  });
+}
+
+function MediaSection({ activityId, canEdit }: { activityId: number; canEdit: boolean }) {
+  const [media, setMedia] = useState<MediaItem[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    fetch(`/api/activities/${activityId}/media`).then(r => (r.ok ? r.json() : [])).then(setMedia).catch(() => setMedia([]));
+  }, [activityId]);
+
+  const onPick = async (file: File) => {
+    setBusy(true); setError(null);
+    try {
+      const dataUrl = await resizeImageDataUrl(file, 1280);
+      const r = await fetch(`/api/activities/${activityId}/media`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image: dataUrl }),
+      });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.message ?? 'échec');
+      const item = await r.json() as MediaItem;
+      setMedia(prev => [...(prev ?? []), item]);
+    } catch (e) { setError((e as Error).message ?? 'Échec de l’ajout'); }
+    finally { setBusy(false); }
+  };
+
+  const remove = async (id: string) => {
+    setMedia(prev => (prev ?? []).filter(m => m.id !== id));
+    await fetch(`/api/activities/${activityId}/media`, {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mediaId: id }),
+    }).catch(() => {});
+  };
+
+  if (media == null) return null;
+  if (media.length === 0 && !canEdit) return null;
+
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <Label>Photos</Label>
+        {canEdit && (
+          <>
+            <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
+              onChange={e => { const f = e.target.files?.[0]; if (f) onPick(f); e.target.value = ''; }} />
+            <button onClick={() => fileRef.current?.click()} disabled={busy} style={{
+              padding: '6px 12px', borderRadius: 6, border: `1px solid ${tokens.creamBorder}`, background: 'transparent',
+              cursor: busy ? 'default' : 'pointer', color: tokens.inkMid, fontFamily: "'Space Grotesk'", fontSize: 12, fontWeight: 600, opacity: busy ? 0.6 : 1,
+            }}>{busy ? 'Ajout…' : '＋ Ajouter une photo'}</button>
+          </>
+        )}
+      </div>
+      {error && <div style={{ color: '#A00', fontSize: 12, marginBottom: 8 }}>{error}</div>}
+      {media.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 }}>
+          {media.map(m => (
+            <div key={m.id} style={{ position: 'relative', aspectRatio: '4 / 3', borderRadius: 8, overflow: 'hidden', border: `1px solid ${tokens.creamBorder}` }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={m.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+              {canEdit && (
+                <button onClick={() => remove(m.id)} style={{
+                  position: 'absolute', top: 6, right: 6, width: 24, height: 24, borderRadius: '50%', border: 'none',
+                  background: 'rgba(0,0,0,0.55)', color: '#fff', cursor: 'pointer', fontSize: 13, lineHeight: 1,
+                }}>✕</button>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>

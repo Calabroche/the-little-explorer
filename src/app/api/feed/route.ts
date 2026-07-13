@@ -79,10 +79,19 @@ export async function GET(req: NextRequest) {
   const rows = dedupActivities(visibleRows);
 
   const ids = rows.map(r => Number(r.id));
-  const [counts, authors] = await Promise.all([
+  const [counts, authors, mediaRows] = await Promise.all([
     loadSocialCounts(ids, viewerId),
     loadAuthors(rows.map(r => r.user_id as string)),
+    ids.length
+      ? supabaseAdmin().from('activity_media').select('activity_id, url, kind').in('activity_id', ids).order('position', { ascending: true })
+      : Promise.resolve({ data: [] as { activity_id: number; url: string; kind: string }[] }),
   ]);
+  // First photo per activity → shown on the card.
+  const firstPhoto = new Map<number, string>();
+  for (const m of (mediaRows.data ?? []) as { activity_id: number; url: string; kind: string }[]) {
+    const aid = Number(m.activity_id);
+    if (m.kind === 'image' && !firstPhoto.has(aid)) firstPhoto.set(aid, m.url);
+  }
   const t2 = Date.now();
 
   const items = rows.map(r => {
@@ -100,6 +109,7 @@ export async function GET(req: NextRequest) {
       avg_speed_kmh: r.avg_speed_kmh != null ? Number(r.avg_speed_kmh) : null,
       max_speed_kmh: r.max_speed_kmh != null ? Number(r.max_speed_kmh) : null,
       gps:           downsample((r.trace as [number, number][]) ?? [], TRACE_POINTS),
+      photo:         firstPhoto.get(Number(r.id)) ?? null,
       visibility:    (r.visibility as Visibility) ?? 'followers',
       like_count:    c.like_count,
       comment_count: c.comment_count,

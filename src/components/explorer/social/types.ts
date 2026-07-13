@@ -23,6 +23,7 @@ export interface FeedItem {
   avg_speed_kmh: number | null;
   max_speed_kmh: number | null;
   gps:           [number, number][];
+  photo?:        string | null;
   visibility:    Visibility;
   like_count:    number;
   comment_count: number;

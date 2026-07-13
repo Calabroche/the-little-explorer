@@ -457,6 +457,13 @@ export function SocialActivityCard({ item, onOpenProfile, onOpenActivity }: {
           </div>
         )}
 
+        {item.photo && (
+          <div style={{ borderRadius: 10, overflow: 'hidden', marginBottom: 12, border: `1px solid ${tokens.creamBorder}` }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={item.photo} alt="" style={{ width: '100%', maxHeight: 320, objectFit: 'cover', display: 'block' }} />
+          </div>
+        )}
+
         {/* Stats */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, marginBottom: 14 }}>
           <Stat label="Distance" value={fmtDistance(item.distance_km)} />
