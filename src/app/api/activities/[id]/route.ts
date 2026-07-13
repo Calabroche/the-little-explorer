@@ -1,8 +1,9 @@
 /**
- * PATCH /api/activities/<id>  { visibility }
+ * PATCH /api/activities/<id>  { visibility?, title?, sport? }
  *
- * Set an activity's visibility (public | followers | private). Owner only —
- * scoped by user_id so a user can only change their own activities.
+ * Edit one of YOUR activities: visibility (public | followers | private),
+ * display title, and sport/type. Owner only — scoped by user_id. Any subset of
+ * the three fields may be sent; at least one is required.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthedUser } from '@/lib/api-auth';
@@ -12,6 +13,14 @@ import { isVisibility } from '@/lib/social';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+
+// Sports the user can switch a ride to (mirrors the Activity type union).
+const SPORTS = new Set([
+  'cycling', 'running', 'hiking', 'walking', 'swim', 'snowshoe', 'ski',
+  'snowboard', 'iceSkate', 'yoga', 'workout', 'cardio', 'rowing', 'kayak',
+  'paddle', 'surf', 'sail', 'inlineSkate', 'skateboard', 'climbing', 'racket',
+  'soccer', 'golf', 'wheelchair', 'other',
+]);
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const authed = await getAuthedUser(req);
@@ -23,15 +32,31 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const id = Number(params.id);
   if (!Number.isFinite(id)) return NextResponse.json({ error: 'invalid_id' }, { status: 400 });
 
-  let body: { visibility?: unknown };
+  let body: { visibility?: unknown; title?: unknown; sport?: unknown };
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }); }
-  if (!isVisibility(body.visibility)) {
-    return NextResponse.json({ error: 'invalid_visibility' }, { status: 400 });
+
+  const update: Record<string, string> = {};
+  if ('visibility' in body && body.visibility !== undefined) {
+    if (!isVisibility(body.visibility)) return NextResponse.json({ error: 'invalid_visibility' }, { status: 400 });
+    update.visibility = body.visibility;
+  }
+  if ('title' in body && body.title !== undefined) {
+    if (typeof body.title !== 'string') return NextResponse.json({ error: 'invalid_title' }, { status: 400 });
+    const t = body.title.trim();
+    if (t.length === 0 || t.length > 200) return NextResponse.json({ error: 'invalid_title', message: '1–200 caractères' }, { status: 400 });
+    update.title = t;
+  }
+  if ('sport' in body && body.sport !== undefined) {
+    if (typeof body.sport !== 'string' || !SPORTS.has(body.sport)) return NextResponse.json({ error: 'invalid_sport' }, { status: 400 });
+    update.sport = body.sport;
+  }
+  if (Object.keys(update).length === 0) {
+    return NextResponse.json({ error: 'empty_update' }, { status: 400 });
   }
 
   const { data, error } = await supabaseAdmin()
     .from('activities')
-    .update({ visibility: body.visibility })
+    .update(update)
     .eq('id', id)
     .eq('user_id', authed.id)   // owner scope
     .select('id')
@@ -42,7 +67,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
   if (!data) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
-  return NextResponse.json({ ok: true, id, visibility: body.visibility });
+  return NextResponse.json({ ok: true, id, ...update });
 }
 
 /**

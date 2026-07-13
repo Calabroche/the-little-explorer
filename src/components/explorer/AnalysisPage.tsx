@@ -544,12 +544,38 @@ function MetricList({ rows, accentColor }: { rows: MetricRow[]; accentColor: str
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function AnalysisPage({ activity, onBack, onDelete }: { activity: Activity; onBack: () => void; onDelete?: () => void }) {
+export function AnalysisPage({ activity, onBack, onDelete, onEdit }: { activity: Activity; onBack: () => void; onDelete?: () => void; onEdit?: (patch: { title?: string; sport?: string }) => void }) {
   const { t, lang } = useT();
   const localizedDate = formatDateLocale(activity.rawDate, lang);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const isMobile = useIsMobile();
+
+  // Inline edit (title + sport). Own activities only — gated by onEdit being set.
+  const [editing, setEditing] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(activity.title);
+  const [sportDraft, setSportDraft] = useState<string>(activity.type);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [override, setOverride] = useState<{ title?: string; sport?: string }>({});
+  const shownTitle = override.title ?? activity.title;
+  const shownType = (override.sport ?? activity.type) as Activity['type'];
+  const openEdit = () => { setTitleDraft(shownTitle); setSportDraft(shownType); setEditing(true); };
+  const saveEdit = async () => {
+    setSavingEdit(true);
+    try {
+      const r = await fetch(`/api/activities/${activity.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: titleDraft.trim(), sport: sportDraft }),
+      });
+      if (r.ok) {
+        const patch = { title: titleDraft.trim(), sport: sportDraft };
+        setOverride(patch);
+        onEdit?.(patch);
+        setEditing(false);
+      }
+    } catch { /* keep modal open */ }
+    finally { setSavingEdit(false); }
+  };
 
   const data   = useMemo(() => buildChartData(activity), [activity]);
   const hasHR  = (activity.heartrate?.length ?? 0) > 10;
@@ -696,6 +722,13 @@ export function AnalysisPage({ activity, onBack, onDelete }: { activity: Activit
         }}>
           {t('common.back')}
         </button>
+        {onEdit && (
+          <button onClick={openEdit} style={{
+            background: 'none', border: `1px solid ${tokens.creamBorder}`, borderRadius: 6,
+            padding: '6px 12px', cursor: 'pointer', color: tokens.inkMid,
+            fontFamily: "'Space Grotesk'", fontSize: 12, fontWeight: 600,
+          }}>✏️ Modifier</button>
+        )}
         {onDelete && (
           <button onClick={onDelete} style={{
             background: 'none', border: `1px solid ${tokens.creamBorder}`, borderRadius: 6,
@@ -706,12 +739,20 @@ export function AnalysisPage({ activity, onBack, onDelete }: { activity: Activit
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-        <TypeBadge type={activity.type} />
+        <TypeBadge type={shownType} />
         <Label>{localizedDate} · {activity.location}</Label>
       </div>
       <h1 style={{ fontFamily: "'Playfair Display'", fontSize: isMobile ? 24 : 36, fontWeight: 900, color: tokens.ink, marginBottom: 24, lineHeight: 1.1 }}>
-        {activity.title}
+        {shownTitle}
       </h1>
+
+      {editing && (
+        <EditActivityModal
+          title={titleDraft} sport={sportDraft} saving={savingEdit}
+          onTitle={setTitleDraft} onSport={setSportDraft}
+          onSave={saveEdit} onClose={() => setEditing(false)}
+        />
+      )}
 
       {/* Key stats */}
       <div style={{ ...CARD_STYLE, display: 'flex', flexWrap: 'wrap', marginBottom: 20 }}>
@@ -1011,6 +1052,46 @@ export function AnalysisPage({ activity, onBack, onDelete }: { activity: Activit
 
         </div>
       )}
+    </div>
+  );
+}
+
+// Sports a ride can be re-typed to (value → French label).
+const SPORT_OPTIONS: [string, string][] = [
+  ['cycling', 'Vélo'], ['running', 'Course à pied'], ['walking', 'Marche'],
+  ['hiking', 'Randonnée'], ['swim', 'Natation'], ['rowing', 'Aviron'],
+  ['ski', 'Ski'], ['snowboard', 'Snowboard'], ['yoga', 'Yoga'],
+  ['workout', 'Renforcement'], ['cardio', 'Cardio'], ['climbing', 'Escalade'],
+  ['kayak', 'Kayak'], ['paddle', 'Paddle'], ['surf', 'Surf'], ['other', 'Autre'],
+];
+
+function EditActivityModal(
+  { title, sport, saving, onTitle, onSport, onSave, onClose }: {
+    title: string; sport: string; saving: boolean;
+    onTitle: (v: string) => void; onSport: (v: string) => void;
+    onSave: () => void; onClose: () => void;
+  },
+) {
+  const field: React.CSSProperties = {
+    width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 8,
+    border: `1px solid ${tokens.creamBorder}`, background: tokens.surface,
+    fontFamily: "'Space Grotesk', sans-serif", fontSize: 14, color: tokens.ink,
+  };
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: tokens.cream, borderRadius: 14, padding: 22, width: '100%', maxWidth: 420, border: `1px solid ${tokens.creamBorder}` }}>
+        <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 20, fontWeight: 800, color: tokens.ink, marginBottom: 16 }}>Modifier la sortie</div>
+        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: tokens.inkLight, marginBottom: 6 }}>Titre</label>
+        <input value={title} maxLength={200} onChange={e => onTitle(e.target.value)} style={{ ...field, marginBottom: 16 }} />
+        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: tokens.inkLight, marginBottom: 6 }}>Sport</label>
+        <select value={sport} onChange={e => onSport(e.target.value)} style={{ ...field, marginBottom: 22 }}>
+          {SPORT_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{ padding: '9px 18px', borderRadius: 6, cursor: 'pointer', background: 'transparent', color: tokens.inkMid, border: `1px solid ${tokens.creamBorder}`, fontFamily: "'Space Grotesk'", fontWeight: 600, fontSize: 13 }}>Annuler</button>
+          <button onClick={onSave} disabled={saving || title.trim().length === 0} style={{ padding: '9px 18px', borderRadius: 6, border: 'none', cursor: 'pointer', background: tokens.terra, color: '#fff', fontFamily: "'Space Grotesk'", fontWeight: 700, fontSize: 13, opacity: saving || title.trim().length === 0 ? 0.6 : 1 }}>{saving ? 'Enregistrement…' : 'Enregistrer'}</button>
+        </div>
+      </div>
     </div>
   );
 }

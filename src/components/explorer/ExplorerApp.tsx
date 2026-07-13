@@ -483,7 +483,12 @@ export function ExplorerApp() {
         )}
         {analysisActivity
           ? <AnalysisPage activity={analysisActivity} onBack={closeActivity}
-              onDelete={activities.some(a => a.id === analysisActivity.id) ? () => deleteActivity(analysisActivity.id) : undefined} />
+              onDelete={activities.some(a => a.id === analysisActivity.id) ? () => deleteActivity(analysisActivity.id) : undefined}
+              onEdit={activities.some(a => a.id === analysisActivity.id) ? (patch) => {
+                const merged = (a: Activity): Activity => ({ ...a, ...(patch.title != null ? { title: patch.title } : {}), ...(patch.sport != null ? { type: patch.sport as Activity['type'] } : {}) });
+                setActivities(prev => prev.map(a => a.id === analysisActivity.id ? merged(a) : a));
+                setAnalysisActivity(prev => prev ? merged(prev) : prev);
+              } : undefined} />
 
           : renderPage()
         }
