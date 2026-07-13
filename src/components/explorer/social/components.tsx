@@ -470,7 +470,8 @@ export function SocialActivityCard({ item, onOpenProfile, onOpenActivity }: {
       <div style={{ display: 'flex', borderTop: `1px solid ${tokens.creamBorder}`, paddingTop: 6, marginTop: 2 }}>
         <ActionBtn onClick={toggleLike} active={liked} icon={liked ? '❤️' : '🤍'} label={likeCount > 0 ? String(likeCount) : 'Kudos'} />
         <ActionBtn onClick={() => setShowComments(s => !s)} icon="💬" label={commentCount > 0 ? String(commentCount) : 'Commenter'} />
-        <ActionBtn onClick={() => setSharing(true)} icon="↗" label="Partager" />
+        {/* Only your own activities can be shared, never someone else's. */}
+        {item.is_mine && <ActionBtn onClick={() => setSharing(true)} icon="↗" label="Partager" />}
       </div>
 
       {showComments && <CommentThread activityId={item.id} onCountChange={setCommentCount} />}
