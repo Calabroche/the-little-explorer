@@ -386,6 +386,57 @@ export function ActivityDetailModal({ id, onClose }: { id: number; onClose: () =
   );
 }
 
+// ── Media carousel (map first, then photos — Strava-style) ──────────────────
+
+function MediaCarousel({ gps, photos }: { gps: [number, number][]; photos: string[] }) {
+  const hasMap = gps.length >= 2;
+  const total = (hasMap ? 1 : 0) + photos.length;
+  const [active, setActive] = useState(0);
+  const ref = useRef<HTMLDivElement>(null);
+  if (total === 0) return null;
+
+  const onScroll = () => {
+    const el = ref.current;
+    if (!el) return;
+    setActive(Math.round(el.scrollLeft / el.clientWidth));
+  };
+
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div
+        ref={ref}
+        onScroll={onScroll}
+        // stopPropagation so a horizontal swipe doesn't trigger the card's open-detail click.
+        onClick={e => { if (total > 1) e.stopPropagation(); }}
+        style={{
+          display: 'flex', height: 240, overflowX: total > 1 ? 'auto' : 'hidden',
+          scrollSnapType: 'x mandatory', borderRadius: 10, border: `1px solid ${tokens.creamBorder}`,
+          WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none',
+        }}
+      >
+        {hasMap && (
+          <div style={{ flex: '0 0 100%', height: 240, scrollSnapAlign: 'center' }}>
+            <CardMap gps={gps.map(p => ({ lat: p[0], lng: p[1] }))} color={tokens.terra} height={240} />
+          </div>
+        )}
+        {photos.map((url, i) => (
+          <div key={i} style={{ flex: '0 0 100%', height: 240, scrollSnapAlign: 'center', background: '#000' }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          </div>
+        ))}
+      </div>
+      {total > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 8 }}>
+          {Array.from({ length: total }).map((_, i) => (
+            <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: i === active ? tokens.terra : tokens.creamBorder }} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── The card ───────────────────────────────────────────────────────────────
 export function SocialActivityCard({ item, onOpenProfile, onOpenActivity }: {
   item: FeedItem; onOpenProfile?: (userId: string) => void; onOpenActivity?: (item: FeedItem) => void;
@@ -451,18 +502,7 @@ export function SocialActivityCard({ item, onOpenProfile, onOpenActivity }: {
           }}>{item.title}</div>
         )}
 
-        {item.gps.length >= 2 && (
-          <div style={{ borderRadius: 10, overflow: 'hidden', marginBottom: 12, border: `1px solid ${tokens.creamBorder}` }}>
-            <CardMap gps={item.gps.map(p => ({ lat: p[0], lng: p[1] }))} color={tokens.terra} height={220} />
-          </div>
-        )}
-
-        {item.photo && (
-          <div style={{ borderRadius: 10, overflow: 'hidden', marginBottom: 12, border: `1px solid ${tokens.creamBorder}` }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={item.photo} alt="" style={{ width: '100%', maxHeight: 320, objectFit: 'cover', display: 'block' }} />
-          </div>
-        )}
+        <MediaCarousel gps={item.gps} photos={item.photos ?? []} />
 
         {/* Stats */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, marginBottom: 14 }}>

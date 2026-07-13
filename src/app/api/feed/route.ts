@@ -86,11 +86,14 @@ export async function GET(req: NextRequest) {
       ? supabaseAdmin().from('activity_media').select('activity_id, url, kind').in('activity_id', ids).order('position', { ascending: true })
       : Promise.resolve({ data: [] as { activity_id: number; url: string; kind: string }[] }),
   ]);
-  // First photo per activity → shown on the card.
-  const firstPhoto = new Map<number, string>();
+  // All photos per activity → the card shows a map+photos carousel.
+  const photosByActivity = new Map<number, string[]>();
   for (const m of (mediaRows.data ?? []) as { activity_id: number; url: string; kind: string }[]) {
+    if (m.kind !== 'image') continue;
     const aid = Number(m.activity_id);
-    if (m.kind === 'image' && !firstPhoto.has(aid)) firstPhoto.set(aid, m.url);
+    const arr = photosByActivity.get(aid) ?? [];
+    arr.push(m.url);
+    photosByActivity.set(aid, arr);
   }
   const t2 = Date.now();
 
@@ -109,7 +112,7 @@ export async function GET(req: NextRequest) {
       avg_speed_kmh: r.avg_speed_kmh != null ? Number(r.avg_speed_kmh) : null,
       max_speed_kmh: r.max_speed_kmh != null ? Number(r.max_speed_kmh) : null,
       gps:           downsample((r.trace as [number, number][]) ?? [], TRACE_POINTS),
-      photo:         firstPhoto.get(Number(r.id)) ?? null,
+      photos:        photosByActivity.get(Number(r.id)) ?? [],
       visibility:    (r.visibility as Visibility) ?? 'followers',
       like_count:    c.like_count,
       comment_count: c.comment_count,
