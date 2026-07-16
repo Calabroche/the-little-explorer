@@ -672,3 +672,24 @@ create table if not exists public.activity_media (
 create index if not exists activity_media_activity_idx on public.activity_media (activity_id, position);
 grant all on table public.activity_media to postgres;
 grant all on table public.activity_media to service_role;
+
+-- ── Favorite places (itinerary start points) ───────────────────────────────
+-- Saved addresses the user reuses as itinerary steps ("je pars toujours du même
+-- endroit"). Stores a full BAN waypoint so it drops straight into the planner.
+-- Per-user, synced across web + iOS.
+create table if not exists public.favorite_places (
+  id         uuid primary key default uuid_generate_v4(),
+  user_id    uuid not null references next_auth.users(id) on delete cascade,
+  name       text not null,
+  label      text,
+  code       text,
+  postal     text,
+  city       text,
+  kind       text,
+  lat        double precision not null,
+  lng        double precision not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists favorite_places_user_idx on public.favorite_places (user_id, created_at desc);
+grant all on table public.favorite_places to postgres;
+grant all on table public.favorite_places to service_role;

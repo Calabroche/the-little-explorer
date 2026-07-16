@@ -171,6 +171,80 @@ function VillageSearch({ onPick, placeholder }: {
   );
 }
 
+// ── Step extras: current position + favorite places ─────────────────────────
+
+type FavPlace = Waypoint & { id: string };
+
+function StepExtras({ onPick }: { onPick: (w: Waypoint) => void }) {
+  const [favs, setFavs] = useState<FavPlace[]>([]);
+  const [locating, setLocating] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => { fetch('/api/me/places').then(r => (r.ok ? r.json() : [])).then(setFavs).catch(() => {}); }, []);
+
+  const useMyPosition = () => {
+    if (!navigator.geolocation) { setErr('Géolocalisation indisponible sur cet appareil.'); return; }
+    setLocating(true); setErr(null);
+    navigator.geolocation.getCurrentPosition(
+      async pos => {
+        try {
+          const { latitude, longitude } = pos.coords;
+          const r = await fetch(`/api/commune-search?lat=${latitude}&lng=${longitude}`);
+          const arr: Waypoint[] = r.ok ? await r.json() : [];
+          onPick(arr[0] ?? { name: 'Ma position', code: '', lat: latitude, lng: longitude });
+        } catch { setErr('Impossible de trouver ton adresse.'); }
+        finally { setLocating(false); }
+      },
+      () => { setErr('Position refusée. Autorise la localisation.'); setLocating(false); },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 },
+    );
+  };
+
+  const saveFav = async (w: Waypoint) => {
+    try {
+      const r = await fetch('/api/me/places', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(w) });
+      if (r.ok) { const row = await r.json() as FavPlace; setFavs(prev => [row, ...prev]); }
+    } catch { /* ignore */ }
+    finally { setAddOpen(false); }
+  };
+  const delFav = async (id: string) => {
+    setFavs(prev => prev.filter(f => f.id !== id));
+    await fetch('/api/me/places', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }).catch(() => {});
+  };
+
+  const chip: CSSProperties = {
+    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 11px', borderRadius: 999,
+    border: `1px solid ${tokens.creamBorder}`, background: tokens.cream, color: tokens.inkMid,
+    fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+  };
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <button onClick={useMyPosition} disabled={locating} style={{ ...chip, color: tokens.terra, borderColor: tokens.terra, opacity: locating ? 0.6 : 1 }}>
+          📍 {locating ? 'Localisation…' : 'Ma position'}
+        </button>
+        {favs.map(f => (
+          <span key={f.id} style={chip}>
+            <button onClick={() => onPick(f)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: tokens.ink, fontFamily: "'Space Grotesk'", fontSize: 11, fontWeight: 600 }}>
+              ★ {f.city || f.name}
+            </button>
+            <button onClick={() => delFav(f.id)} title="Retirer" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: tokens.inkLight, fontSize: 12, lineHeight: 1 }}>✕</button>
+          </span>
+        ))}
+        <button onClick={() => setAddOpen(o => !o)} style={chip}>☆ Enregistrer un lieu</button>
+      </div>
+      {addOpen && (
+        <div style={{ marginTop: 8 }}>
+          <VillageSearch onPick={saveFav} placeholder="Adresse à mettre en favori…" />
+        </div>
+      )}
+      {err && <div style={{ color: '#A0392B', fontSize: 11, marginTop: 6, fontFamily: "'Space Grotesk'" }}>{err}</div>}
+    </div>
+  );
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 function formatDuration(s: number): string {
@@ -1021,6 +1095,7 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
               )}
             </div>
             <VillageSearch onPick={addWaypoint} placeholder={t('itinerary.searchPlaceholder')} />
+            <StepExtras onPick={addWaypoint} />
             {waypoints.length === 0 && (
               <p style={{ marginTop: 12, fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkLight, lineHeight: 1.5 }}>
                 {t('itinerary.searchHint')}
