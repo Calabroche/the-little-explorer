@@ -32,19 +32,19 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   const { data, error } = await supabaseAdmin()
     .from('activity_media')
-    .select('id, url, path, kind, position')
+    .select('id, url, path, kind, position, lat, lng')
     .eq('activity_id', activityId)
     .order('position', { ascending: true });
   if (error) return NextResponse.json({ error: 'db_error' }, { status: 500 });
 
   // The bucket is private: hand out short-lived signed URLs, only now that the
   // viewer has passed the activity's visibility check above.
-  const rows = (data ?? []) as { id: string; url: string | null; path: string | null; kind: string; position: number }[];
+  const rows = (data ?? []) as { id: string; url: string | null; path: string | null; kind: string; position: number; lat: number | null; lng: number | null }[];
   const paths = rows.map(r => r.path ?? pathFromLegacyUrl(r.url)).filter((p): p is string => !!p);
   const signed = await signMediaPaths(paths);
   const out = rows.map(r => {
     const p = r.path ?? pathFromLegacyUrl(r.url);
-    return { id: r.id, kind: r.kind, position: r.position, url: (p && signed.get(p)) ?? null };
+    return { id: r.id, kind: r.kind, position: r.position, lat: r.lat, lng: r.lng, url: (p && signed.get(p)) ?? null };
   }).filter(r => r.url);
 
   return NextResponse.json(out, { headers: { 'Cache-Control': 'no-store' } });
@@ -60,12 +60,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!Number.isFinite(activityId)) return NextResponse.json({ error: 'invalid_id' }, { status: 400 });
   if (!(await ownsActivity(authed.id, activityId))) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
-  let body: { image?: unknown };
+  let body: { image?: unknown; lat?: unknown; lng?: unknown };
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }); }
   if (typeof body.image !== 'string' || !body.image.startsWith('data:image/')) {
     return NextResponse.json({ error: 'invalid_image' }, { status: 400 });
   }
   if (body.image.length > 8_000_000) return NextResponse.json({ error: 'image_too_large' }, { status: 400 });
+
+  // Optional photo geotag (EXIF / PHAsset) → lets the app pin it on the map.
+  const lat = typeof body.lat === 'number' && Number.isFinite(body.lat) && Math.abs(body.lat) <= 90 ? body.lat : null;
+  const lng = typeof body.lng === 'number' && Number.isFinite(body.lng) && Math.abs(body.lng) <= 180 ? body.lng : null;
 
   // Cap the number of photos per activity.
   const { count } = await supabaseAdmin()
@@ -80,8 +84,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const { data, error } = await supabaseAdmin()
     .from('activity_media')
-    .insert({ activity_id: activityId, user_id: authed.id, path, kind: 'image', position: count ?? 0 })
-    .select('id, kind, position')
+    .insert({ activity_id: activityId, user_id: authed.id, path, kind: 'image', position: count ?? 0, lat, lng })
+    .select('id, kind, position, lat, lng')
     .single();
   if (error) return NextResponse.json({ error: 'db_error' }, { status: 500 });
 

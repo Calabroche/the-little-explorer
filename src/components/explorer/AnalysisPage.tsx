@@ -10,6 +10,7 @@ import { Activity, tokens } from './tokens';
 import { Label, TypeBadge, StatChip, useIsMobile } from './ui';
 import { useT, formatDateLocale } from '@/i18n';
 import { formatPace } from '@/utils/format';
+import { readGpsFromFile } from '@/lib/exif-gps';
 import { detectClimbs, Climb } from '@/lib/climbs';
 import { GradeAdjustedPace } from './GradeAdjustedPace';
 
@@ -557,6 +558,7 @@ export function AnalysisPage({ activity, onBack, onDelete, onEdit }: { activity:
   const [sportDraft, setSportDraft] = useState<string>(activity.type);
   const [savingEdit, setSavingEdit] = useState(false);
   const [override, setOverride] = useState<{ title?: string; sport?: string }>({});
+  const [photoPins, setPhotoPins] = useState<PhotoPin[]>([]);
   const shownTitle = override.title ?? activity.title;
   const shownType = (override.sport ?? activity.type) as Activity['type'];
   const openEdit = () => { setTitleDraft(shownTitle); setSportDraft(shownType); setEditing(true); };
@@ -768,7 +770,7 @@ export function AnalysisPage({ activity, onBack, onDelete, onEdit }: { activity:
         {activity.calories  != null && <StatChip label={t('analysis.cal')}  value={activity.calories}   unit="kcal" />}
       </div>
 
-      <MediaSection activityId={activity.id} canEdit={!!onEdit} />
+      <MediaSection activityId={activity.id} canEdit={!!onEdit} onPins={setPhotoPins} />
 
       {/* Grade-adjusted pace (running) */}
       <GradeAdjustedPace activity={activity} />
@@ -889,7 +891,7 @@ export function AnalysisPage({ activity, onBack, onDelete, onEdit }: { activity:
             }}>
               <div style={{ ...CARD_STYLE, marginBottom: 0, height: '100%' }}>
                 <Label style={{ display: 'block', marginBottom: 14 }}>CARTE DU TRAJET</Label>
-                <ActivityRouteMap activity={activity} highlightSegment={highlightSegment} />
+                <ActivityRouteMap activity={activity} highlightSegment={highlightSegment} photoPins={photoPins} />
               </div>
             </div>
           )}
@@ -1060,7 +1062,8 @@ export function AnalysisPage({ activity, onBack, onDelete, onEdit }: { activity:
 
 // ── Media (photos) on an activity ──────────────────────────────────────────
 
-interface MediaItem { id: string; url: string; kind: string }
+interface MediaItem { id: string; url: string; kind: string; lat?: number | null; lng?: number | null }
+export interface PhotoPin { lat: number; lng: number; url: string }
 
 // Resize a picked image to a max dimension and return a JPEG data URL (keeps
 // the payload reasonable — the API stores it in Supabase Storage).
@@ -1085,7 +1088,7 @@ function resizeImageDataUrl(file: File, maxDim: number): Promise<string> {
   });
 }
 
-function MediaSection({ activityId, canEdit }: { activityId: number; canEdit: boolean }) {
+function MediaSection({ activityId, canEdit, onPins }: { activityId: number; canEdit: boolean; onPins?: (pins: PhotoPin[]) => void }) {
   const [media, setMedia] = useState<MediaItem[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1095,12 +1098,21 @@ function MediaSection({ activityId, canEdit }: { activityId: number; canEdit: bo
     fetch(`/api/activities/${activityId}/media`).then(r => (r.ok ? r.json() : [])).then(setMedia).catch(() => setMedia([]));
   }, [activityId]);
 
+  // Report geolocated photos up so the route map can pin them.
+  useEffect(() => {
+    if (!onPins || media == null) return;
+    onPins(media.filter(m => m.lat != null && m.lng != null).map(m => ({ lat: m.lat as number, lng: m.lng as number, url: m.url })));
+  }, [media, onPins]);
+
   const onPick = async (file: File) => {
     setBusy(true); setError(null);
     try {
+      // Read the geotag from the ORIGINAL file before the resize strips EXIF.
+      const gps = await readGpsFromFile(file);
       const dataUrl = await resizeImageDataUrl(file, 1280);
       const r = await fetch(`/api/activities/${activityId}/media`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image: dataUrl }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: dataUrl, lat: gps?.lat, lng: gps?.lng }),
       });
       if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.message ?? 'échec');
       const item = await r.json() as MediaItem;

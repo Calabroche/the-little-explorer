@@ -708,6 +708,11 @@ update public.activity_media
  where path is null and url like '%/object/public/media/%';
 alter table public.activity_media alter column url drop not null;
 
+-- Photo location (from EXIF / PHAsset) so a photo can be pinned on the ride's
+-- map where it was taken. Null when the photo has no geotag.
+alter table public.activity_media add column if not exists lat double precision;
+alter table public.activity_media add column if not exists lng double precision;
+
 -- ── Favorite places (itinerary start points) ───────────────────────────────
 -- Saved addresses the user reuses as itinerary steps ("je pars toujours du même
 -- endroit"). Stores a full BAN waypoint so it drops straight into the planner.

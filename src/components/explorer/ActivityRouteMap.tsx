@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { MapContainer, Polyline, Popup, useMap } from 'react-leaflet';
+import { MapContainer, Polyline, Popup, CircleMarker, useMap } from 'react-leaflet';
 import type { LeafletMouseEvent } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Activity, tokens } from './tokens';
@@ -271,8 +271,11 @@ function RouteWithHover({ activity, positions, gradient, highlightSegment }: {
 export function ActivityRouteMap({
   activity,
   highlightSegment,
+  photoPins,
 }: {
   activity: Activity;
+  /** Geolocated photos to pin on the map (lat/lng from EXIF). */
+  photoPins?: { lat: number; lng: number; url: string }[];
   /** Optional climb / segment to highlight + focus on. Indices are
    *  into the activity's altitude/distance streams; we clamp into
    *  the GPS array's bounds defensively in case Strava returned
@@ -340,6 +343,16 @@ export function ActivityRouteMap({
         />
         <FitBounds positions={positions} focus={focusCoords} zoomPercent={zoomPercent} />
         <FullscreenRefit active={mapFull} positions={positions} zoomPercent={zoomPercent} />
+        {/* Geolocated photos pinned where they were taken. */}
+        {(photoPins ?? []).map((p, i) => (
+          <CircleMarker key={i} center={[p.lat, p.lng]} radius={7}
+            pathOptions={{ color: '#fff', weight: 2, fillColor: tokens.terra, fillOpacity: 1 }}>
+            <Popup>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={p.url} alt="" style={{ width: 180, maxHeight: 180, objectFit: 'cover', display: 'block', borderRadius: 6 }} />
+            </Popup>
+          </CircleMarker>
+        ))}
       </MapContainer>
       <BasemapToggle basemap={basemap} onChange={setBasemap} />
       <ZoomPercentPill value={zoomPercent} onChange={setZoomPercent} />
