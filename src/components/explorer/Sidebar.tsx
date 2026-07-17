@@ -8,7 +8,7 @@ import { Label } from './ui';
 import { useT } from '@/i18n';
 import type { Lang } from '@/i18n';
 
-export type PageId = 'feed' | 'profile' | 'planner' | 'photos' | 'ftp' | 'training-load' | 'equipment' | 'compare' | 'wrapped' | 'itinerary';
+export type PageId = 'feed' | 'profile' | 'planner' | 'analyses' | 'photos' | 'ftp' | 'training-load' | 'equipment' | 'compare' | 'wrapped' | 'itinerary';
 /// Sport buckets shown in the sidebar picker. We map every Strava
 /// activity type into one of these — see sportFromType() in
 /// /api/strava/sync.ts. Variants of the same Strava family are
@@ -63,10 +63,10 @@ const ALL_NAV_ITEMS: { id: PageId; icon: string; label: string; sports: SportId[
   // tab inside Planner. Kept as a PageId for backward-compat URLs
   // (/itineraire still works and lands on the itinerary tab).
   { id: 'planner',   icon: '✦', label: 'Planificateur', sports: ['cycling', 'running'] },
-  { id: 'compare',   icon: '⇄', label: 'Comparer',      sports: ALL_SPORTS },
-  { id: 'ftp',       icon: '⚡', label: 'Puissance & Charge',  sports: ['cycling'] },
-  { id: 'equipment', icon: '⚙', label: 'Matériel',      sports: ['cycling'] },
-  { id: 'wrapped',   icon: '✺', label: 'Bilan',         sports: ALL_SPORTS },
+  // "Analyses" is a hub that folds in Puissance & Charge, Comparer, Matériel
+  // and Bilan (was 4 separate nav items → all analysis of your own data in one
+  // place, matching the iOS "Analyses" tab).
+  { id: 'analyses',  icon: '⚡', label: 'Analyses',      sports: ALL_SPORTS },
 ];
 
 interface Props {
@@ -367,6 +367,7 @@ const NAV_LABEL_KEY: Record<PageId, string> = {
   feed:      'nav.home',
   profile:   'nav.profile',
   planner:   'nav.planner',
+  analyses:  'nav.analyses',
   itinerary: 'nav.itinerary',
   compare:   'nav.compare',
   wrapped:   'nav.wrapped',

@@ -17,6 +17,7 @@ import { PerformancePage } from './pages/PerformancePage';
 import { EquipmentPage }   from './pages/EquipmentPage';
 import { ComparePage } from './pages/ComparePage';
 import { WrappedPage } from './pages/WrappedPage';
+import { AnalysesPage } from './pages/AnalysesPage';
 import { AnalysisPage } from './AnalysisPage';
 
 // ── URL <-> state helpers ────────────────────────────────────────────────────
@@ -25,6 +26,7 @@ const PAGE_PATHS: Record<PageId, string> = {
   feed:      '/',
   profile:   '/mon-profil',
   planner:   '/planificateur',
+  analyses:  '/analyses',
   itinerary: '/itineraire',
   compare:   '/comparer',
   wrapped:   '/bilan',
@@ -37,6 +39,7 @@ const PAGE_PATHS: Record<PageId, string> = {
 function pathToPage(pathname: string): PageId {
   if (pathname.startsWith('/mon-profil'))    return 'profile';
   if (pathname.startsWith('/planificateur')) return 'planner';
+  if (pathname.startsWith('/analyses'))      return 'analyses';
   if (pathname.startsWith('/itineraire'))    return 'itinerary';
   if (pathname.startsWith('/comparer'))      return 'compare';
   if (pathname.startsWith('/bilan'))         return 'wrapped';
@@ -401,6 +404,9 @@ export function ExplorerApp() {
       // to one nav item.
       case 'planner':   return <PlannerPage activities={filteredActivities} user={user} initialTab="itineraire" sport={sport} />;
       case 'itinerary': return <PlannerPage activities={filteredActivities} user={user} initialTab="itineraire" sport={sport} />;
+      // "Analyses" hub — the single nav item. The old page ids below still
+      // resolve for deep links / bookmarks, they just render their bare page.
+      case 'analyses':  return <AnalysesPage activities={filteredActivities} sport={sport} />;
       case 'compare':   return <ComparePage activities={filteredActivities} />;
       case 'wrapped':   return <WrappedPage activities={filteredActivities} sport={sport} />;
       // 'ftp' + 'training-load' both land on PerformancePage now —
