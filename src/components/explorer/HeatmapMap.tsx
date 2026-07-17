@@ -24,14 +24,20 @@ function useDarkMode() {
   return dark;
 }
 
-/** Bounds of the dense 94% of points — a lone ride far away no longer zooms the
- *  whole map out; we frame where you actually ride. */
+/** Frame where you actually ride: keep the 82% of points closest to the median
+ *  centre and fit to those. A handful of far-away rides (e.g. a trip to Dijon)
+ *  are dropped, so the default view lands tight on your main area (Lyon). */
 function clusterBounds(points: [number, number][]): L.LatLngBounds | null {
   if (points.length < 2) return null;
-  const lats = points.map(p => p[0]).sort((a, b) => a - b);
-  const lngs = points.map(p => p[1]).sort((a, b) => a - b);
-  const q = (arr: number[], p: number) => arr[Math.min(arr.length - 1, Math.max(0, Math.floor(p * arr.length)))];
-  return L.latLngBounds([q(lats, 0.03), q(lngs, 0.03)], [q(lats, 0.97), q(lngs, 0.97)]);
+  const median = (arr: number[]) => { const s = [...arr].sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
+  const cLat = median(points.map(p => p[0]));
+  const cLng = median(points.map(p => p[1]));
+  const kx = Math.cos((cLat * Math.PI) / 180); // longitude scaling at this latitude
+  const byDist = points
+    .map(p => ({ p, d: (p[0] - cLat) ** 2 + ((p[1] - cLng) * kx) ** 2 }))
+    .sort((a, b) => a.d - b.d);
+  const keep = byDist.slice(0, Math.max(2, Math.floor(byDist.length * 0.82))).map(x => x.p);
+  return L.latLngBounds(keep);
 }
 
 function FitAll({ points, resizeKey }: { points: [number, number][]; resizeKey: unknown }) {
@@ -89,17 +95,21 @@ export function HeatmapMap({ traces }: { traces: { lat: number; lng: number }[][
         <FitAll points={allPoints} resizeKey={full} />
       </MapContainer>
       <BasemapToggle basemap={basemap} onChange={setBasemap} />
-      {/* Fullscreen toggle — same affordance as the activity route map. */}
+      {/* Fullscreen toggle — labeled pill, bottom-left so it never collides
+          with the zoom control or the basemap toggle. */}
       <button
         onClick={() => setFull(f => !f)}
-        title={full ? 'Réduire' : 'Plein écran'}
         style={{
-          position: 'absolute', top: 12, left: 52, zIndex: 4001,
-          width: 34, height: 34, borderRadius: 8, cursor: 'pointer',
+          position: 'absolute', bottom: 14, left: 12, zIndex: 4001,
+          padding: '8px 14px', borderRadius: 999, cursor: 'pointer',
           background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
-          color: tokens.inkMid, fontSize: 15, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: tokens.inkMid, fontFamily: "'Space Grotesk'", fontSize: 12, fontWeight: 700,
+          display: 'inline-flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
         }}
-      >{full ? '✕' : '⤢'}</button>
+      >
+        <span style={{ fontSize: 14 }}>{full ? '✕' : '⤢'}</span>
+        {full ? 'Réduire' : 'Agrandir la carte'}
+      </button>
     </div>
   );
 }
