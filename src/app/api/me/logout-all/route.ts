@@ -23,6 +23,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/db';
 import { getAuthedUser } from '@/lib/api-auth';
+import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { logEvent } from '@/lib/events';
 
 export const dynamic = 'force-dynamic';
@@ -33,6 +34,8 @@ export async function POST(req: NextRequest) {
   if (!authed?.id) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
+  const limited = enforceRateLimit(req, RATE_LIMITS.authedWrite, 'logout-all', { userId: authed.id });
+  if (limited) return limited;
 
   const now = new Date().toISOString();
 

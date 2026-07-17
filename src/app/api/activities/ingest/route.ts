@@ -18,6 +18,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthedUser } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/db';
+import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { logEvent } from '@/lib/events';
 
 export const dynamic = 'force-dynamic';
@@ -83,6 +84,10 @@ function sportFromType(t: string): string {
 export async function POST(req: NextRequest) {
   const authed = await getAuthedUser(req);
   if (!authed?.id) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  // Rate limited: ingest writes a row with a heavy payload, so a runaway or
+  // malicious client must not be able to hammer it.
+  const limited = enforceRateLimit(req, RATE_LIMITS.authedWrite, 'activity-ingest', { userId: authed.id });
+  if (limited) return limited;
   const userId = authed.id;
 
   let body: IngestBody;

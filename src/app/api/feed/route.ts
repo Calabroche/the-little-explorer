@@ -19,6 +19,7 @@ import { getAuthedUser } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/db';
 import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { loadFollowing, loadSocialCounts, loadAuthors, dedupActivities, type Visibility } from '@/lib/social';
+import { signMediaPaths, pathFromLegacyUrl } from '@/lib/media';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -83,17 +84,24 @@ export async function GET(req: NextRequest) {
     loadSocialCounts(ids, viewerId),
     loadAuthors(rows.map(r => r.user_id as string)),
     ids.length
-      ? supabaseAdmin().from('activity_media').select('activity_id, url, kind').in('activity_id', ids).order('position', { ascending: true })
-      : Promise.resolve({ data: [] as { activity_id: number; url: string; kind: string }[] }),
+      ? supabaseAdmin().from('activity_media').select('activity_id, url, path, kind').in('activity_id', ids).order('position', { ascending: true })
+      : Promise.resolve({ data: [] as { activity_id: number; url: string | null; path: string | null; kind: string }[] }),
   ]);
-  // All photos per activity → the card shows a map+photos carousel.
+  // All photos per activity → the card shows a map+photos carousel. The bucket
+  // is private, so every path is turned into a short-lived signed URL. Rows
+  // here already passed the feed's visibility filter above.
+  const mediaList = ((mediaRows.data ?? []) as { activity_id: number; url: string | null; path: string | null; kind: string }[])
+    .filter(m => m.kind === 'image')
+    .map(m => ({ aid: Number(m.activity_id), path: m.path ?? pathFromLegacyUrl(m.url) }))
+    .filter((m): m is { aid: number; path: string } => !!m.path);
+  const signedMedia = await signMediaPaths(mediaList.map(m => m.path));
   const photosByActivity = new Map<number, string[]>();
-  for (const m of (mediaRows.data ?? []) as { activity_id: number; url: string; kind: string }[]) {
-    if (m.kind !== 'image') continue;
-    const aid = Number(m.activity_id);
-    const arr = photosByActivity.get(aid) ?? [];
-    arr.push(m.url);
-    photosByActivity.set(aid, arr);
+  for (const m of mediaList) {
+    const signed = signedMedia.get(m.path);
+    if (!signed) continue;
+    const arr = photosByActivity.get(m.aid) ?? [];
+    arr.push(signed);
+    photosByActivity.set(m.aid, arr);
   }
   const t2 = Date.now();
 

@@ -10,7 +10,7 @@ import { getAuthedUser } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/db';
 import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { viewerCanSeeActivity } from '@/lib/social';
-import { uploadImageDataUrl } from '@/lib/media';
+import { uploadImageDataUrl, signMediaPaths, pathFromLegacyUrl, removeMediaPaths } from '@/lib/media';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -32,11 +32,22 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   const { data, error } = await supabaseAdmin()
     .from('activity_media')
-    .select('id, url, kind, position')
+    .select('id, url, path, kind, position')
     .eq('activity_id', activityId)
     .order('position', { ascending: true });
   if (error) return NextResponse.json({ error: 'db_error' }, { status: 500 });
-  return NextResponse.json(data ?? [], { headers: { 'Cache-Control': 'no-store' } });
+
+  // The bucket is private: hand out short-lived signed URLs, only now that the
+  // viewer has passed the activity's visibility check above.
+  const rows = (data ?? []) as { id: string; url: string | null; path: string | null; kind: string; position: number }[];
+  const paths = rows.map(r => r.path ?? pathFromLegacyUrl(r.url)).filter((p): p is string => !!p);
+  const signed = await signMediaPaths(paths);
+  const out = rows.map(r => {
+    const p = r.path ?? pathFromLegacyUrl(r.url);
+    return { id: r.id, kind: r.kind, position: r.position, url: (p && signed.get(p)) ?? null };
+  }).filter(r => r.url);
+
+  return NextResponse.json(out, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
@@ -61,17 +72,21 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     .from('activity_media').select('id', { count: 'exact', head: true }).eq('activity_id', activityId);
   if ((count ?? 0) >= 12) return NextResponse.json({ error: 'too_many_media', message: '12 max' }, { status: 400 });
 
-  let url: string;
-  try { url = await uploadImageDataUrl(activityId, body.image); }
+  // Upload returns the storage PATH — the bucket is private, there is no
+  // public URL to store.
+  let path: string;
+  try { path = await uploadImageDataUrl(activityId, body.image); }
   catch (e) { console.error('[media] upload failed:', (e as Error).message); return NextResponse.json({ error: 'upload_failed' }, { status: 500 }); }
 
   const { data, error } = await supabaseAdmin()
     .from('activity_media')
-    .insert({ activity_id: activityId, user_id: authed.id, url, kind: 'image', position: count ?? 0 })
-    .select('id, url, kind, position')
+    .insert({ activity_id: activityId, user_id: authed.id, path, kind: 'image', position: count ?? 0 })
+    .select('id, kind, position')
     .single();
   if (error) return NextResponse.json({ error: 'db_error' }, { status: 500 });
-  return NextResponse.json(data);
+
+  const signed = await signMediaPaths([path]);
+  return NextResponse.json({ ...data, url: signed.get(path) ?? null });
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
@@ -90,9 +105,13 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     .eq('id', body.mediaId)
     .eq('activity_id', activityId)
     .eq('user_id', authed.id)   // owner scope
-    .select('id')
+    .select('id, url, path')
     .maybeSingle();
   if (error) return NextResponse.json({ error: 'db_error' }, { status: 500 });
   if (!data) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+
+  // Drop the object too — a deleted photo shouldn't linger in the bucket.
+  const p = (data as { path: string | null; url: string | null }).path ?? pathFromLegacyUrl((data as { url: string | null }).url);
+  if (p) void removeMediaPaths([p]);
   return NextResponse.json({ ok: true });
 }

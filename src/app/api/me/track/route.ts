@@ -21,6 +21,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthedUser } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/db';
+import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { logEvent, EventType } from '@/lib/events';
 
 const ALLOWED: Set<EventType> = new Set<EventType>(['home_view', 'manual_resync', 'activity_view']);
@@ -35,6 +36,10 @@ export async function POST(req: NextRequest) {
   if (!authed?.id) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
+  // A beacon fires often, so use the read budget rather than the write one —
+  // but it still writes rows, so it must be bounded.
+  const limited = enforceRateLimit(req, RATE_LIMITS.authedRead, 'me-track', { userId: authed.id });
+  if (limited) return limited;
 
   let body: { event?: string; props?: Record<string, unknown> };
   try {

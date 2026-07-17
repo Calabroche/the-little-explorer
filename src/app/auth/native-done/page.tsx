@@ -24,6 +24,7 @@
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { randomBytes } from 'crypto';
+import { sha256 } from '@/lib/api-auth';
 import { getServerSession } from 'next-auth/next';
 import { buildAuthOptions } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/db';
@@ -65,6 +66,10 @@ export default async function NativeDonePage() {
   // not monthly. The lookup in `api-auth.ts` filters expired rows.
   const expiresAt = new Date(Date.now() + 90 * 24 * 3600 * 1000).toISOString();
 
+  // Only the sha256 HASH is persisted — the plaintext token exists solely in
+  // the redirect below and then in the device Keychain. A DB dump therefore
+  // contains nothing replayable.
+  //
   // Tolerant of a pre-migration DB: if the `expires_at` column hasn't
   // been added yet (deploy race), the insert with the column fails
   // with a "column does not exist" Postgres error. We retry without
@@ -76,7 +81,7 @@ export default async function NativeDonePage() {
     .from('api_tokens')
     .insert({
       user_id:    session.user.id,
-      token,
+      token_hash: sha256(token),
       label,
       expires_at: expiresAt,
     });
@@ -87,8 +92,8 @@ export default async function NativeDonePage() {
       .schema('next_auth')
       .from('api_tokens')
       .insert({
-        user_id: session.user.id,
-        token,
+        user_id:    session.user.id,
+        token_hash: sha256(token),
         label,
       });
     error = retry.error;

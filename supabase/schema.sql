@@ -180,6 +180,29 @@ create index if not exists api_tokens_expires_idx
   on next_auth.api_tokens (expires_at)
   where expires_at is not null;
 
+-- Bearer tokens are stored HASHED (sha256 hex), never in clear. A database
+-- dump / leaked backup must not hand out replayable session tokens: the
+-- plaintext only ever lives in the one-time redirect and the device Keychain.
+-- api-auth.ts hashes the incoming Bearer and looks up `token_hash`.
+--
+-- Zero-downtime migration order (see the security notes):
+--   A. add the column + backfill hashes from the existing plaintext (both
+--      columns valid → current iOS sessions keep working),
+--   B. deploy the code that reads by hash,
+--   C. drop the plaintext.
+alter table if exists next_auth.api_tokens
+  add column if not exists token_hash text;
+create unique index if not exists api_tokens_hash_idx
+  on next_auth.api_tokens (token_hash);
+-- Step A backfill (needs pgcrypto for digest()).
+create extension if not exists pgcrypto with schema extensions;
+update next_auth.api_tokens
+   set token_hash = encode(extensions.digest(token, 'sha256'), 'hex')
+ where token_hash is null and token is not null;
+-- Step C (run only AFTER the hash-reading code is deployed):
+--   alter table next_auth.api_tokens alter column token drop not null;
+--   update next_auth.api_tokens set token = null where token_hash is not null;
+
 -- ── Activities (our own table, our own conventions) ─────────────────────────
 create table if not exists public.activities (
   id              bigint primary key,                  -- Strava activity id
@@ -672,6 +695,18 @@ create table if not exists public.activity_media (
 create index if not exists activity_media_activity_idx on public.activity_media (activity_id, position);
 grant all on table public.activity_media to postgres;
 grant all on table public.activity_media to service_role;
+
+-- SECURITY: the `media` bucket is PRIVATE. A public bucket meant every photo of
+-- a followers-only / private ride was fetchable by anyone with the URL, forever
+-- — bypassing the visibility model. We now keep only the object `path` and mint
+-- short-lived signed URLs per request, after the viewer passes the same
+-- visibility check as the activity. `url` is legacy (old public URLs) and is
+-- kept nullable so new rows don't need it.
+alter table public.activity_media add column if not exists path text;
+update public.activity_media
+   set path = split_part(url, '/object/public/media/', 2)
+ where path is null and url like '%/object/public/media/%';
+alter table public.activity_media alter column url drop not null;
 
 -- ── Favorite places (itinerary start points) ───────────────────────────────
 -- Saved addresses the user reuses as itinerary steps ("je pars toujours du même

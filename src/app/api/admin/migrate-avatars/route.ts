@@ -8,19 +8,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/db';
 import { isAdminEmail } from '@/lib/admin';
 import { getAuthedUser } from '@/lib/api-auth';
+import { enforceRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { uploadAvatarDataUrl } from '@/lib/avatar';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-// GET is aliased to POST so an admin can trigger the one-shot migration by
-// simply visiting the URL in a browser.
-export async function GET(req: NextRequest) { return POST(req); }
-
+// POST only. This mutates data, so it must not be reachable by a plain GET —
+// a state-changing GET can be triggered cross-site (e.g. an <img> tag on a
+// page an admin visits). The migration is a one-shot anyway.
 export async function POST(req: NextRequest) {
   const authed = await getAuthedUser(req);
   if (!authed) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   if (!isAdminEmail(authed.email)) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  const limited = enforceRateLimit(req, RATE_LIMITS.authedWrite, 'migrate-avatars', { userId: authed.id });
+  if (limited) return limited;
 
   const { data, error } = await supabaseAdmin()
     .schema('next_auth')

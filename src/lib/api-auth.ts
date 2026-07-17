@@ -14,9 +14,12 @@
  * ASWebAuthenticationSession on a native client.
  *
  * Token format: 32 bytes of crypto random, base64url-encoded
- * (≈43 chars). Tokens are sensitive — never log them.
+ * (≈43 chars). Tokens are sensitive — never log them. Only their
+ * sha256 hash is persisted (`api_tokens.token_hash`), so a DB dump
+ * can't be replayed to impersonate anyone.
  */
 
+import { createHash } from 'crypto';
 import { NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { buildAuthOptions } from './auth';
@@ -25,6 +28,11 @@ import { supabaseAdmin } from './db';
 export interface AuthedUser {
   id:    string;
   email: string | null;
+}
+
+/** sha256 hex of a bearer token — the only form we store / look up by. */
+export function sha256(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
 }
 
 /**
@@ -52,6 +60,10 @@ export async function getAuthedUser(req: NextRequest | null = null): Promise<Aut
   const m = auth.match(/^Bearer\s+([\w\-_]+)$/);
   if (!m) return null;
   const token = m[1];
+  // Bearer tokens are stored HASHED (sha256), never in clear: a database
+  // leak/backup must not hand out replayable session tokens. The plaintext
+  // only ever exists in the iOS Keychain and in the one-time redirect.
+  const tokenHash = sha256(token);
 
   // Token lookup — service role bypasses RLS. Tokens that don't
   // exist or are revoked simply don't match here. Expired tokens
@@ -61,7 +73,7 @@ export async function getAuthedUser(req: NextRequest | null = null): Promise<Aut
     .schema('next_auth')
     .from('api_tokens')
     .select('user_id, revoked_at, expires_at, users:user_id(email)')
-    .eq('token', token)
+    .eq('token_hash', tokenHash)
     .is('revoked_at', null)
     .maybeSingle();
 
@@ -86,7 +98,7 @@ export async function getAuthedUser(req: NextRequest | null = null): Promise<Aut
     .schema('next_auth')
     .from('api_tokens')
     .update({ last_used_at: new Date().toISOString() })
-    .eq('token', token)
+    .eq('token_hash', tokenHash)
     .then(undefined, err => console.warn('[api-auth] last_used update failed:', err));
 
   return {
