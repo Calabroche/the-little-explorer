@@ -7,7 +7,8 @@
  * scrolls below (same shell pattern as ProfilePage). Cycling-only tabs
  * (Puissance, Matériel) hide for other sports.
  */
-import { useState, type CSSProperties } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
+import dynamic from 'next/dynamic';
 import { tokens, Activity } from '../tokens';
 import { useIsMobile } from '../ui';
 import { useT } from '@/i18n';
@@ -17,7 +18,10 @@ import { ComparePage } from './ComparePage';
 import { EquipmentPage } from './EquipmentPage';
 import { WrappedPage } from './WrappedPage';
 
-type AnalysesTab = 'puissance' | 'comparer' | 'materiel' | 'bilan';
+// Leaflet is client-only.
+const HeatmapMap = dynamic(() => import('../HeatmapMap').then(m => m.HeatmapMap), { ssr: false });
+
+type AnalysesTab = 'carte' | 'puissance' | 'comparer' | 'materiel' | 'bilan';
 
 export function AnalysesPage({ activities, sport }: { activities: Activity[]; sport: SportId }) {
   const { t } = useT();
@@ -25,11 +29,18 @@ export function AnalysesPage({ activities, sport }: { activities: Activity[]; sp
   const isCycling = sport === 'cycling';
 
   const tabs: { id: AnalysesTab; icon: string; labelKey: string }[] = [
+    { id: 'carte', icon: '◉', labelKey: 'nav.heatmap' },
     ...(isCycling ? [{ id: 'puissance' as const, icon: '⚡', labelKey: 'nav.ftp' }] : []),
     { id: 'comparer', icon: '⇄', labelKey: 'nav.compare' },
     ...(isCycling ? [{ id: 'materiel' as const, icon: '⚙', labelKey: 'nav.equipment' }] : []),
     { id: 'bilan', icon: '✺', labelKey: 'nav.wrapped' },
   ];
+
+  // Every recorded trace for the current sport → the personal heatmap.
+  const traces = useMemo(
+    () => activities.map(a => a.gps).filter((g): g is { lat: number; lng: number }[] => Array.isArray(g) && g.length >= 2),
+    [activities],
+  );
 
   const [tab, setTab] = useState<AnalysesTab>(tabs[0].id);
   const active: AnalysesTab = tabs.some(x => x.id === tab) ? tab : tabs[0].id;
@@ -60,6 +71,15 @@ export function AnalysesPage({ activities, sport }: { activities: Activity[]; sp
       {/* The selected page keeps its own scroll (flex:1 + overflow), so the tab
           bar stays fixed above it. */}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', marginTop: 8 }}>
+        {active === 'carte' && (
+          <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '8px 16px 24px' : '8px 40px 32px' }}>
+            <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: isMobile ? 22 : 28, fontWeight: 900, color: tokens.ink, margin: '4px 0 4px' }}>Ma carte</h1>
+            <p style={{ fontFamily: "'Space Grotesk'", fontSize: 13, color: tokens.inkLight, marginTop: 0, marginBottom: 16 }}>
+              Tous tes tracés superposés. Plus tu passes souvent, plus la ligne est marquée.
+            </p>
+            <HeatmapMap traces={traces} />
+          </div>
+        )}
         {active === 'puissance' && <PerformancePage activities={activities} initialTab="ftp" />}
         {active === 'comparer'  && <ComparePage activities={activities} />}
         {active === 'materiel'  && <EquipmentPage />}
