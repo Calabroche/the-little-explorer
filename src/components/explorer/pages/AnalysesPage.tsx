@@ -72,12 +72,15 @@ export function AnalysesPage({ activities, sport }: { activities: Activity[]; sp
           bar stays fixed above it. */}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', marginTop: 8 }}>
         {active === 'carte' && (
-          <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '8px 16px 24px' : '8px 40px 32px' }}>
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: isMobile ? '8px 16px 16px' : '8px 40px 24px' }}>
             <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: isMobile ? 22 : 28, fontWeight: 900, color: tokens.ink, margin: '4px 0 4px' }}>Ma carte</h1>
-            <p style={{ fontFamily: "'Space Grotesk'", fontSize: 13, color: tokens.inkLight, marginTop: 0, marginBottom: 16 }}>
+            <p style={{ fontFamily: "'Space Grotesk'", fontSize: 13, color: tokens.inkLight, marginTop: 0, marginBottom: 12 }}>
               Tous tes tracés superposés. Plus tu passes souvent, plus la ligne est marquée.
             </p>
-            <HeatmapMap traces={traces} />
+            {/* Map fills the remaining height (was a fixed short block). */}
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <HeatmapMap traces={traces} />
+            </div>
           </div>
         )}
         {active === 'puissance' && <PerformancePage activities={activities} initialTab="ftp" />}
