@@ -486,6 +486,7 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
   const [hoverEleIdx, setHoverEleIdx] = useState<number | null>(null);
 
   const [library, setLibrary]         = useState<Itinerary[]>([]);
+  const [libOpen, setLibOpen]         = useState(false);   // collapsed by default → map stays big
 
   // ── Click-to-add (drop a precise point on the map) ───────────────────────
   // When the user clicks the map a confirmation popup opens at that exact
@@ -1023,7 +1024,10 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
   // see the profile). ~400px is reserved below for those two cards.
   const mapCardStyle: CSSProperties = {
     ...CARD, padding: 0, overflow: 'hidden', position: 'relative',
-    height: isMobile ? 420 : 'clamp(320px, calc(100vh - 400px), 600px)',
+    // Bigger by default — fills most of the viewport; the save box + library
+    // scroll below (the library is collapsed by default so it doesn't shrink
+    // the map).
+    height: isMobile ? 460 : 'clamp(420px, calc(100vh - 230px), 900px)',
   };
   const mapInnerHeight: number | string = '100%';
   // Fullscreen map: cover the whole viewport so the rider can draw comfortably.
@@ -1855,11 +1859,18 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
       </div>
 
       {/* ─── LIBRARY ────────────────────────────────────────────────────── */}
-      <div style={{ marginTop: 32 }}>
-        <Label style={{ display: 'block', marginBottom: 12 }}>
-          {t('itinerary.library')} {library.length > 0 && <span style={{ color: tokens.terra }}>· {library.length}</span>}
-        </Label>
-        {library.length === 0 ? (
+      {/* Collapsed by default so it never sits under the map and shrinks it —
+          the map stays big; open the library only when you need a saved route. */}
+      <div style={{ marginTop: 24 }}>
+        <button onClick={() => setLibOpen(o => !o)} style={{
+          display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginBottom: 12,
+        }}>
+          <span style={{ color: tokens.inkMid, fontSize: 11 }}>{libOpen ? '▾' : '▸'}</span>
+          <Label style={{ display: 'inline' }}>
+            {t('itinerary.library')} {library.length > 0 && <span style={{ color: tokens.terra }}>· {library.length}</span>}
+          </Label>
+        </button>
+        {!libOpen ? null : library.length === 0 ? (
           <div style={{ ...CARD, fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.inkLight, lineHeight: 1.6 }}>
             {t('itinerary.libraryEmpty')}
           </div>

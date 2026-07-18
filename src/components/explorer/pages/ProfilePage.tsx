@@ -11,16 +11,19 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { FeedPage } from './FeedPage';
 import { tokens, Activity, GlobalStats } from '../tokens';
+import { SportDropdown } from '../Sidebar';
 import type { SportId } from '../Sidebar';
 import { Avatar, ConnectionsModal } from '../social/components';
 import { fetchProfile } from '../social/api';
 import type { Profile } from '../social/types';
 
-export function ProfilePage({ activities, stats, sport, onSelect }: {
+export function ProfilePage({ activities, stats, sport, onSelect, onSportChange, availableSports }: {
   activities: Activity[];
   stats: GlobalStats;
   sport: SportId;
   onSelect: (a: Activity) => void;
+  onSportChange?: (s: SportId) => void;
+  availableSports?: SportId[];
 }) {
   const router = useRouter();
   const { data: session } = useSession();
@@ -98,6 +101,13 @@ export function ProfilePage({ activities, stats, sport, onSelect }: {
                   <button onClick={() => setConns('following')} style={linkBtn}><strong>{profile?.following ?? '—'}</strong> abonnements</button>
                 </div>
               </div>
+              {/* Sport selector — moved here from the sidebar, scopes the
+                  dashboard below. Hidden when the user has a single sport. */}
+              {onSportChange && availableSports && availableSports.length > 1 && !isMobile && (
+                <div style={{ flexShrink: 0 }}>
+                  <SportDropdown sport={sport} onChange={onSportChange} available={availableSports} />
+                </div>
+              )}
             </div>
 
             {/* Description — displayed + inline editable, no trip to /settings. */}

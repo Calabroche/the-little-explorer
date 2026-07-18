@@ -396,7 +396,7 @@ export function ExplorerApp() {
   const renderPage = () => {
     switch (page) {
       case 'feed':      return <SocialFeedPage onOpenActivity={openActivityById} activities={filteredActivities} sport={sport} onSportChange={handleSportChange} availableSports={availableSports} />;
-      case 'profile':   return <ProfilePage   activities={filteredActivities} stats={filteredStats!} sport={sport} onSelect={openActivity} />;
+      case 'profile':   return <ProfilePage   activities={filteredActivities} stats={filteredStats!} sport={sport} onSelect={openActivity} onSportChange={handleSportChange} availableSports={availableSports} />;
       // Planner is now a tabbed hub for: itinerary, training plan,
       // auto-route, route proposals. The standalone /itineraire URL
       // still resolves but routes into PlannerPage with the itinerary
@@ -406,7 +406,7 @@ export function ExplorerApp() {
       case 'itinerary': return <PlannerPage activities={filteredActivities} user={user} initialTab="itineraire" sport={sport} />;
       // "Analyses" hub — the single nav item. The old page ids below still
       // resolve for deep links / bookmarks, they just render their bare page.
-      case 'analyses':  return <AnalysesPage activities={filteredActivities} sport={sport} />;
+      case 'analyses':  return <AnalysesPage activities={filteredActivities} sport={sport} onSportChange={handleSportChange} availableSports={availableSports} />;
       case 'compare':   return <ComparePage activities={filteredActivities} />;
       case 'wrapped':   return <WrappedPage activities={filteredActivities} sport={sport} />;
       // 'ftp' + 'training-load' both land on PerformancePage now —

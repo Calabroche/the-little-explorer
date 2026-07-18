@@ -13,6 +13,7 @@ import { tokens, Activity } from '../tokens';
 import { useIsMobile } from '../ui';
 import { useT } from '@/i18n';
 import type { SportId } from '../Sidebar';
+import { SportDropdown } from '../Sidebar';
 import { PerformancePage } from './PerformancePage';
 import { ComparePage } from './ComparePage';
 import { EquipmentPage } from './EquipmentPage';
@@ -23,7 +24,12 @@ const HeatmapMap = dynamic(() => import('../HeatmapMap').then(m => m.HeatmapMap)
 
 type AnalysesTab = 'carte' | 'puissance' | 'comparer' | 'materiel' | 'bilan';
 
-export function AnalysesPage({ activities, sport }: { activities: Activity[]; sport: SportId }) {
+export function AnalysesPage(
+  { activities, sport, onSportChange, availableSports }: {
+    activities: Activity[]; sport: SportId;
+    onSportChange?: (s: SportId) => void; availableSports?: SportId[];
+  },
+) {
   const { t } = useT();
   const isMobile = useIsMobile();
   const isCycling = sport === 'cycling';
@@ -47,8 +53,15 @@ export function AnalysesPage({ activities, sport }: { activities: Activity[]; sp
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      <div style={{ padding: isMobile ? '16px 16px 0' : '24px 40px 0' }}>
-        <div style={tabBarStyle}
+      <div style={{ padding: isMobile ? '16px 16px 0' : '24px 40px 0', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        {/* Sport selector lives here now (moved out of the sidebar) — right where
+            it scopes the analyses + heatmap. */}
+        {onSportChange && availableSports && availableSports.length > 1 && (
+          <div style={{ flexShrink: 0 }}>
+            <SportDropdown sport={sport} onChange={onSportChange} available={availableSports} />
+          </div>
+        )}
+        <div style={{ ...tabBarStyle, flex: 1 }}
           onWheel={e => { const el = e.currentTarget as HTMLDivElement; if (e.deltaY !== 0) el.scrollLeft += e.deltaY; }}>
           {tabs.map(({ id, icon, labelKey }) => {
             const on = active === id;

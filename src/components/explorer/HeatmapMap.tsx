@@ -36,7 +36,7 @@ function clusterBounds(points: [number, number][]): L.LatLngBounds | null {
   const byDist = points
     .map(p => ({ p, d: (p[0] - cLat) ** 2 + ((p[1] - cLng) * kx) ** 2 }))
     .sort((a, b) => a.d - b.d);
-  const keep = byDist.slice(0, Math.max(2, Math.floor(byDist.length * 0.82))).map(x => x.p);
+  const keep = byDist.slice(0, Math.max(2, Math.floor(byDist.length * 0.70))).map(x => x.p);
   return L.latLngBounds(keep);
 }
 
@@ -101,10 +101,12 @@ export function HeatmapMap({ traces }: { traces: { lat: number; lng: number }[][
         onClick={() => setFull(f => !f)}
         style={{
           position: 'absolute', bottom: 14, left: 12, zIndex: 4001,
-          padding: '8px 14px', borderRadius: 999, cursor: 'pointer',
-          background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
-          color: tokens.inkMid, fontFamily: "'Space Grotesk'", fontSize: 12, fontWeight: 700,
-          display: 'inline-flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+          padding: '8px 14px', borderRadius: 999, cursor: 'pointer', border: 'none',
+          // High contrast against the map: white in dark mode, black in light mode.
+          background: dark ? '#ffffff' : '#141414',
+          color: dark ? '#141414' : '#ffffff',
+          fontFamily: "'Space Grotesk'", fontSize: 12, fontWeight: 700,
+          display: 'inline-flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 10px rgba(0,0,0,0.35)',
         }}
       >
         <span style={{ fontSize: 14 }}>{full ? '✕' : '⤢'}</span>

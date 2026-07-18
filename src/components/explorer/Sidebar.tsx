@@ -513,14 +513,9 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
             switching users from the sidebar no longer makes sense. */}
       </div>
 
-      {/* The sport filter is irrelevant on the Accueil feed (it shows every
-          sport). Show it only on your profile + the analysis tools. */}
-      {activePage !== 'feed' && (
-        <div style={{ padding: '14px 12px 4px' }}>
-          <Label style={{ display: 'block', marginBottom: 6 }}>{t('common.sport')}</Label>
-          <SportDropdown sport={sport} onChange={onSportChange} available={availableSports} />
-        </div>
-      )}
+      {/* The sport selector no longer lives in the sidebar. It's shown inline
+          on the pages where it actually matters (Profil, Analyses), right where
+          it affects the content — see ProfilePage / AnalysesPage. */}
 
       {/* Language toggle moved out of the sidebar to the top-right
           floating chip in ExplorerApp. Mobile keeps its own LangToggle
