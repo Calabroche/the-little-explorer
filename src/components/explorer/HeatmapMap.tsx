@@ -79,7 +79,14 @@ export function HeatmapMap({ traces }: { traces: { lat: number; lng: number }[][
     );
   }
 
-  const center = allPoints[Math.floor(allPoints.length / 2)] ?? [46.6, 2.4];
+  // Initial centre = the spatial median (your home area) so the very first
+  // paint is already on the cluster, before FitAll refines the bounds.
+  const center: [number, number] = allPoints.length
+    ? [
+        [...allPoints.map(p => p[0])].sort((a, b) => a - b)[Math.floor(allPoints.length / 2)],
+        [...allPoints.map(p => p[1])].sort((a, b) => a - b)[Math.floor(allPoints.length / 2)],
+      ]
+    : [46.6, 2.4];
 
   const wrapStyle: React.CSSProperties = full
     ? { position: 'fixed', inset: 0, zIndex: 4000, borderRadius: 0, border: 'none' }

@@ -13,6 +13,7 @@ import { Goals } from '../Goals';
 import { PersonalRecords } from '../PersonalRecords';
 import { RunPaceZones } from '../RunPaceZones';
 import { RaceProjector } from '../RaceProjector';
+import { SportDropdown } from '../Sidebar';
 import type { SportId } from '../Sidebar';
 import { useT } from '@/i18n';
 
@@ -603,9 +604,11 @@ interface Props {
   stats: GlobalStats;
   sport: SportId;        // can be any of the 7 sports
   onSelect: (a: Activity) => void;
+  onSportChange?: (s: SportId) => void;
+  availableSports?: SportId[];
 }
 
-export function FeedPage({ activities, stats, sport, onSelect }: Props) {
+export function FeedPage({ activities, stats, sport, onSelect, onSportChange, availableSports }: Props) {
   const isMobile = useIsMobile();
   const { t } = useT();
   const { data: session } = useSession();
@@ -743,7 +746,16 @@ export function FeedPage({ activities, stats, sport, onSelect }: Props) {
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '20px 16px' : '32px 40px' }}>
-      <SectionTag num={1} title={t('feed.sectionTag')} />
+      {/* Section tag + sport selector on the right (moved here from the sidebar
+          / profile header — it scopes this dashboard). */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <SectionTag num={1} title={t('feed.sectionTag')} />
+        {onSportChange && availableSports && availableSports.length > 1 && (
+          <div style={{ flexShrink: 0 }}>
+            <SportDropdown sport={sport} onChange={onSportChange} available={availableSports} />
+          </div>
+        )}
+      </div>
       <h1 style={{ fontFamily: "'Playfair Display'", fontSize: isMobile ? 28 : 40, fontWeight: 900, color: tokens.ink, lineHeight: 1.1, marginBottom: isMobile ? 20 : 32 }}>
         {t('feed.headline', { count: stats.totalActivities })}<br />
         <em style={{ color: tokens.terra, fontStyle: 'italic', fontWeight: 700 }}>{t('feed.headlineEm')}</em>
