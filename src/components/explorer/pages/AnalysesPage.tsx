@@ -53,15 +53,8 @@ export function AnalysesPage(
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      <div style={{ padding: isMobile ? '16px 16px 0' : '24px 40px 0', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        {/* Sport selector lives here now (moved out of the sidebar) — right where
-            it scopes the analyses + heatmap. */}
-        {onSportChange && availableSports && availableSports.length > 1 && (
-          <div style={{ flexShrink: 0 }}>
-            <SportDropdown sport={sport} onChange={onSportChange} available={availableSports} />
-          </div>
-        )}
-        <div style={{ ...tabBarStyle, flex: 1 }}
+      <div style={{ padding: isMobile ? '16px 16px 0' : '24px 40px 0' }}>
+        <div style={tabBarStyle}
           onWheel={e => { const el = e.currentTarget as HTMLDivElement; if (e.deltaY !== 0) el.scrollLeft += e.deltaY; }}>
           {tabs.map(({ id, icon, labelKey }) => {
             const on = active === id;
@@ -86,7 +79,16 @@ export function AnalysesPage(
       <div style={{ flex: 1, minHeight: 0, display: 'flex', marginTop: 8 }}>
         {active === 'carte' && (
           <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: isMobile ? '8px 16px 16px' : '8px 40px 24px' }}>
-            <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: isMobile ? 22 : 28, fontWeight: 900, color: tokens.ink, margin: '4px 0 4px' }}>Ma carte</h1>
+            {/* Title + sport selector on the right, just above the map (moved off
+                the top row where it crowded the floating i / theme / language chips). */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+              <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: isMobile ? 22 : 28, fontWeight: 900, color: tokens.ink, margin: '4px 0 4px' }}>Ma carte</h1>
+              {onSportChange && availableSports && availableSports.length > 1 && (
+                <div style={{ flexShrink: 0 }}>
+                  <SportDropdown sport={sport} onChange={onSportChange} available={availableSports} />
+                </div>
+              )}
+            </div>
             <p style={{ fontFamily: "'Space Grotesk'", fontSize: 13, color: tokens.inkLight, marginTop: 0, marginBottom: 12 }}>
               Tous tes tracés superposés. Plus tu passes souvent, plus la ligne est marquée.
             </p>

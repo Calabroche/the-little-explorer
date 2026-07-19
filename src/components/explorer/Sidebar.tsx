@@ -549,7 +549,7 @@ export function Sidebar({ activePage, onNav, stats, darkMode, onToggleDark, mobi
         })}
       </nav>
 
-      {stats && (
+      {stats && activePage === 'profile' && (
         <div style={{ margin: '0 12px', padding: 16, background: tokens.creamDark, borderRadius: 4 }}>
           <Label style={{ display: 'block', marginBottom: 12 }}>{t('common.atGlance')}</Label>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
