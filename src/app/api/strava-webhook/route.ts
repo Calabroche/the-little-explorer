@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
 import { supabaseAdmin } from '@/lib/db';
 import { logEvent } from '@/lib/events';
 
@@ -32,6 +33,9 @@ import { logEvent } from '@/lib/events';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+// The 200 to Strava is returned immediately; the sync runs in waitUntil, so we
+// need headroom for the sync-one round-trip (token refresh + activity + streams).
+export const maxDuration = 60;
 
 // ── GET: Strava subscription handshake ─────────────────────────────────────
 export async function GET(req: NextRequest) {
@@ -111,25 +115,30 @@ export async function POST(req: NextRequest) {
     },
   }, req);
 
+  // waitUntil keeps the Vercel function alive until the background work settles,
+  // even after we return the 200 below. Without it the fire-and-forget fetch was
+  // killed on freeze — the webhook received events but NOTHING ever synced
+  // (strava_webhook_synced was 0). This is why a followed rider's new activity
+  // never appeared until they manually re-synced.
   if (isActivityCreateOrUpdate) {
-    void dispatchSyncOne(event.owner_id ?? 0, event.object_id ?? 0, req).catch(err => {
+    waitUntil(dispatchSyncOne(event.owner_id ?? 0, event.object_id ?? 0, req).catch(err => {
       console.error('[strava-webhook] dispatch failed:', err);
-    });
+    }));
   } else if (isActivityDelete) {
     // User deleted an activity on Strava → remove it from our store too.
     // Required by the Strava API Agreement (ToS section 2.B.iv:
     // "promptly remove" deleted activities).
-    void purgeActivity(event.object_id ?? 0).catch(err => {
+    waitUntil(purgeActivity(event.object_id ?? 0).catch(err => {
       console.error('[strava-webhook] purge activity failed:', err);
-    });
+    }));
   } else if (isAthleteDeauth) {
     // User revoked our app from Strava → drop their refresh_token so
     // we stop trying to sync. Local data is preserved — they can come
     // back. The full account wipe is handled separately via
     // DELETE /api/me when the user asks for that.
-    void deauthorizeAthlete(event.owner_id ?? 0).catch(err => {
+    waitUntil(deauthorizeAthlete(event.owner_id ?? 0).catch(err => {
       console.error('[strava-webhook] deauth failed:', err);
-    });
+    }));
   }
 
   return NextResponse.json({ ok: true });

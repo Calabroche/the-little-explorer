@@ -609,9 +609,6 @@ function ProfileSection() {
   /// don't have to chain clicks to get a complete dashboard.
   const [resyncPhase, setResyncPhase] = useState<'syncing' | 'streaming' | null>(null);
   const [resyncStreamProgress, setResyncStreamProgress] = useState<{ done: number; total: number } | null>(null);
-  const [backfillState, setBackfillState] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
-  const [backfillProgress, setBackfillProgress] = useState<{ done: number; total: number } | null>(null);
-  const [backfillErrorMessage, setBackfillErrorMessage] = useState<string | null>(null);
 
   /// Loop /api/strava/backfill-streams until done. Shared between the
   /// post-sync auto-chain (called from the main resync flow) and the
@@ -641,25 +638,8 @@ function ProfileSection() {
     }
     return { ok: true };  // hit the 50-iter cap, treat as done
   }, []);
-
-  /// Dedicated "↻ CHARGER CARTES + GRAPHES" button. Kept as a manual
-  /// rerun option for cases where the auto-chain inside resync()
-  /// failed partway or the user wants to retry a specific batch.
-  const backfillStreams = useCallback(async () => {
-    if (backfillState === 'busy') return;
-    setBackfillState('busy');
-    setBackfillErrorMessage(null);
-    const result = await runStreamBackfill((done, total) => {
-      setBackfillProgress({ done, total });
-    });
-    if (!result.ok) {
-      setBackfillErrorMessage(result.detail);
-      setBackfillState('error');
-      return;
-    }
-    setBackfillState('done');
-    window.location.reload();
-  }, [backfillState, runStreamBackfill]);
+  // The dedicated backfill button is gone — resync() chains the stream
+  // backfill itself, so one "RE-SYNCER STRAVA" button fetches everything.
 
   const resync = useCallback(async () => {
     if (resyncState === 'busy') return;
@@ -876,7 +856,7 @@ function ProfileSection() {
                 ? 'SYNCHRO…'
                 : resyncState === 'error'
                   ? '✗ ÉCHEC — RÉESSAYER'
-                  : '↻ RE-SYNCER STRAVA'}
+                  : '↻ TOUT SYNCHRONISER'}
         </button>
       )}
       {resyncState === 'error' && resyncErrorMessage && (
@@ -920,57 +900,9 @@ function ProfileSection() {
         </button>
       )}
 
-      {stravaLinked && (
-        // Backfill button — pulls streams (gps, altitude, hr, speed)
-        // for every activity that doesn't have them yet. Idempotent:
-        // safe to click repeatedly. Shows live progress while running.
-        // Necessary because the bulk /api/strava/sync only fetches
-        // activity summaries (no maps / charts), while the webhook
-        // path (/api/strava/sync-one) ALSO grabs streams — so any
-        // ride pulled via bulk-import looks "empty" in the detail
-        // view until this runs.
-        <>
-          <button
-            onClick={backfillStreams}
-            disabled={backfillState === 'busy'}
-            title="Télécharge les tracés GPS et graphiques pour toutes les sorties qui n'en ont pas encore"
-            style={{
-              width: '100%',
-              padding: '8px 10px',
-              marginBottom: 8,
-              background: backfillState === 'error' ? '#FEE' : tokens.creamDark,
-              border:     `1px solid ${backfillState === 'error' ? '#FCC' : tokens.creamBorder}`,
-              borderRadius: 3,
-              color:        backfillState === 'error' ? '#A00' : tokens.inkMid,
-              fontFamily:   "'Space Grotesk'", fontSize: 11, fontWeight: 600,
-              letterSpacing: '0.04em',
-              cursor:       backfillState === 'busy' ? 'wait' : 'pointer',
-            }}
-          >
-            {backfillState === 'busy' && backfillProgress
-              ? `CHARGEMENT ${backfillProgress.done}/${backfillProgress.total}…`
-              : backfillState === 'busy'
-                ? 'CHARGEMENT…'
-                : backfillState === 'error'
-                  ? '✗ ÉCHEC — RÉESSAYER'
-                  : '↻ CHARGER CARTES + GRAPHES'}
-          </button>
-          {backfillState === 'error' && backfillErrorMessage && (
-            <div style={{
-              marginBottom: 8,
-              padding: '6px 8px',
-              background: '#FFF4F4',
-              border: '1px solid #FCC',
-              borderRadius: 3,
-              fontFamily: "'Space Grotesk'", fontSize: 10,
-              color: '#A00', lineHeight: 1.45,
-              wordBreak: 'break-word',
-            }}>
-              {backfillErrorMessage}
-            </div>
-          )}
-        </>
-      )}
+      {/* The separate "CHARGER CARTES + GRAPHES" button is gone: RE-SYNCER
+          STRAVA above already chains the streams backfill (maps + charts) right
+          after the summary sync, so one button fetches everything. */}
 
       <a
         href="/settings"
