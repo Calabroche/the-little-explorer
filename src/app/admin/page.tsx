@@ -71,6 +71,10 @@ export default function AdminPage() {
   /// on that specific row can show a spinner state while we wait for
   /// the request. Cleared on success / failure.
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  /// Same idea for the force-sync button: which athlete is syncing right now.
+  const [syncingId, setSyncingId] = useState<string | null>(null);
+  /// Result line under the header after a sync run ("Alban : 5 nouvelles").
+  const [syncLog, setSyncLog] = useState<string[]>([]);
 
   const refresh = () => {
     setLoading(true);
@@ -88,6 +92,64 @@ export default function AdminPage() {
   };
 
   useEffect(() => { refresh(); }, []);
+
+  /// Force a Strava sync for someone else. Same endpoint the user's own
+  /// "Tout synchroniser" button hits — an admin may pass targetUserId.
+  /// Needed to backfill athletes whose activities went stale while the
+  /// webhook was down: they'd otherwise have to log in themselves.
+  /// Returns the number of newly inserted activities.
+  const syncOne = async (u: AdminUser): Promise<number> => {
+    const r = await fetch('/api/strava/sync', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ targetUserId: u.id }),
+    });
+    if (!r.ok) {
+      let detail = `HTTP ${r.status}`;
+      try {
+        const body = await r.json() as { error?: string };
+        if (body?.error) detail = body.error;
+      } catch { /* ignore */ }
+      throw new Error(detail);
+    }
+    const body = await r.json() as { count?: number };
+    return body.count ?? 0;
+  };
+
+  const label = (u: AdminUser) => u.name ?? u.email ?? u.id.slice(0, 8);
+
+  const resyncUser = async (u: AdminUser) => {
+    setSyncingId(u.id);
+    try {
+      const n = await syncOne(u);
+      setSyncLog([`${label(u)} : ${n} nouvelle${n > 1 ? 's' : ''} sortie${n > 1 ? 's' : ''}`]);
+      if (n > 0) refresh();
+    } catch (err) {
+      setSyncLog([`${label(u)} : échec — ${(err as Error).message}`]);
+    } finally {
+      setSyncingId(null);
+    }
+  };
+
+  /// Sequential on purpose: Strava rate-limits at 200 requests / 15 min and
+  /// each athlete costs one token refresh + one activity page + streams.
+  /// Parallel would burn the quota and start failing halfway through.
+  const resyncAll = async () => {
+    const athletes = users.filter(u => u.athleteId !== null);
+    if (!confirm(`Re-synchroniser ${athletes.length} athlète(s) depuis Strava ?`)) return;
+    setSyncLog([]);
+    for (const u of athletes) {
+      setSyncingId(u.id);
+      try {
+        const n = await syncOne(u);
+        setSyncLog(prev => [...prev, `${label(u)} : ${n} nouvelle${n > 1 ? 's' : ''}`]);
+      } catch (err) {
+        setSyncLog(prev => [...prev, `${label(u)} : échec — ${(err as Error).message}`]);
+      }
+    }
+    setSyncingId(null);
+    refresh();
+  };
 
   /// Confirmation + DELETE call. Two warnings before the actual
   /// destructive op so we don't fat-finger Hélena out of existence.
@@ -216,6 +278,18 @@ export default function AdminPage() {
           <Link href="/admin/perf" style={headerBtn(tokens.surface, tokens.inkMid, tokens.creamBorder)}>
             PERFORMANCE →
           </Link>
+          <button
+            onClick={resyncAll}
+            disabled={loading || syncingId !== null}
+            title="Relance la sync Strava de tous les athlètes (rattrape les sorties manquées)"
+            style={{
+              ...headerBtn(tokens.creamDark, tokens.inkMid, tokens.creamBorder),
+              cursor: syncingId !== null ? 'wait' : 'pointer',
+              opacity: syncingId !== null ? 0.6 : 1,
+            }}
+          >
+            {syncingId !== null ? 'SYNC…' : '↻ TOUT RESYNCER'}
+          </button>
           <button onClick={refresh} disabled={loading} style={{
             ...headerBtn(tokens.creamDark, tokens.inkMid, tokens.creamBorder),
             cursor: loading ? 'wait' : 'pointer',
@@ -227,6 +301,16 @@ export default function AdminPage() {
           </Link>
         </div>
       </div>
+
+      {syncLog.length > 0 && (
+        <div style={{
+          maxWidth: 1080, margin: '0 auto 16px', padding: '12px 14px',
+          background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
+          borderRadius: 4, fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.inkMid,
+        }}>
+          {syncLog.map((line, i) => <div key={i}>{line}</div>)}
+        </div>
+      )}
 
       <div style={{ ...CARD, maxWidth: 1080, margin: '0 auto' }}>
         {error && (
@@ -352,8 +436,31 @@ export default function AdminPage() {
                     {formatDate(u.createdAt)}
                   </div>
 
-                  {/* Delete action */}
-                  <div>
+                  {/* Actions: force-sync (Strava-linked only) + delete */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {u.athleteId !== null && (
+                      <button
+                        onClick={() => resyncUser(u)}
+                        disabled={syncingId !== null}
+                        title="Relancer la sync Strava de cet athlète"
+                        style={{
+                          width: '100%',
+                          padding: '8px 14px',
+                          background:   'transparent',
+                          border:       `1px solid ${tokens.creamBorder}`,
+                          borderRadius: 3,
+                          color:        tokens.inkMid,
+                          fontFamily:   "'Space Grotesk'",
+                          fontSize:     12,
+                          fontWeight:   600,
+                          cursor:       syncingId !== null ? 'wait' : 'pointer',
+                          opacity:      syncingId !== null && syncingId !== u.id ? 0.5 : 1,
+                          whiteSpace:   'nowrap',
+                        }}
+                      >
+                        {syncingId === u.id ? '…' : '↻ Re-sync'}
+                      </button>
+                    )}
                     <button
                       onClick={() => deleteUser(u)}
                       disabled={deletingId === u.id}

@@ -31,6 +31,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/db';
 import { getAuthedUser } from '@/lib/api-auth';
+import { isAdminEmail } from '@/lib/admin';
+import { logAdminAction } from '@/lib/audit';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -170,7 +172,22 @@ export async function POST(req: NextRequest) {
   if (!authed?.id) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
-  const userId = authed.id;
+
+  // Normally you sync yourself. An admin may pass { targetUserId } to sync
+  // someone else — needed to backfill an athlete whose activities went stale
+  // while the webhook was down (they'd otherwise have to log in and press the
+  // button themselves). Non-admins asking for someone else are ignored, not
+  // errored: they simply sync themselves.
+  let userId = authed.id;
+  const body = (await req.json().catch(() => null)) as { targetUserId?: string } | null;
+  const target = typeof body?.targetUserId === 'string' ? body.targetUserId.trim() : '';
+  if (target && target !== authed.id && isAdminEmail(authed.email)) {
+    userId = target;
+    void logAdminAction(
+      { actorId: authed.id, action: 'force_sync', targetUserId: target },
+      req,
+    );
+  }
 
   // ── 1. Fetch the user's Strava refresh_token from next_auth.accounts ──
   const { data: accountRows, error: accErr } = await supabaseAdmin()
