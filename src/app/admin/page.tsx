@@ -29,6 +29,14 @@ interface AdminUser {
   providers:  string[];
 }
 
+/** An athlete Strava still pushes activities for, with no matching TLE user:
+ *  someone deleted (or gone) who never revoked the app on strava.com. */
+interface GhostAthlete {
+  athleteId: string;
+  events:    number;
+  lastSeen:  string | null;
+}
+
 const CARD: React.CSSProperties = {
   background: tokens.surface,
   border:     `1px solid ${tokens.creamBorder}`,
@@ -65,6 +73,7 @@ function Badge({ label, color }: { label: string; color: string }) {
 
 export default function AdminPage() {
   const [users, setUsers]     = useState<AdminUser[]>([]);
+  const [ghosts, setGhosts]   = useState<GhostAthlete[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
   /// Which user is currently being deleted — keyed by id so the button
@@ -84,9 +93,9 @@ export default function AdminPage() {
         if (r.status === 403) throw new Error('Accès refusé — tu n\'es pas dans l\'allowlist admin.');
         if (r.status === 401) throw new Error('Pas connecté.');
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json() as Promise<{ users: AdminUser[] }>;
+        return r.json() as Promise<{ users: AdminUser[]; ghosts?: GhostAthlete[] }>;
       })
-      .then(d => setUsers(d.users ?? []))
+      .then(d => { setUsers(d.users ?? []); setGhosts(d.ghosts ?? []); })
       .catch(e => setError(e.message ?? 'Erreur inconnue'))
       .finally(() => setLoading(false));
   };
@@ -489,6 +498,51 @@ export default function AdminPage() {
           </>
         )}
       </div>
+
+      {/* Athletes Strava still pushes data for, with no account here. They're
+          NOT users — a webhook never creates an account, otherwise deleting
+          someone would be undone by their next ride. Listed so the admin can
+          put a name on the "Anonyme" owner_ids in the event log. */}
+      {ghosts.length > 0 && (
+        <div style={{ ...CARD, maxWidth: 1080, margin: '16px auto 0' }}>
+          <h2 style={{
+            fontFamily: "'Playfair Display'", fontWeight: 800, fontSize: 18,
+            color: tokens.ink, margin: '0 0 4px',
+          }}>
+            Athlètes sans compte
+          </h2>
+          <p style={{
+            fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.inkMid,
+            lineHeight: 1.5, margin: '0 0 16px', maxWidth: 720,
+          }}>
+            Strava nous envoie encore leurs sorties, mais ils n&apos;ont pas de compte ici :
+            supprimés ou partis, sans avoir révoqué l&apos;app sur strava.com. Leurs sorties
+            sont ignorées. Ce sont eux qui apparaissent en « Anonyme » dans le journal
+            d&apos;événements. Pour revenir, il leur suffit de se reconnecter avec Strava,
+            leur compte sera recréé automatiquement avec leur vrai nom.
+          </p>
+          {ghosts.map(g => (
+            <div key={g.athleteId} style={{
+              display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
+              padding: '10px 0', borderTop: `1px solid ${tokens.creamBorder}`,
+              fontFamily: "'Space Grotesk'", fontSize: 13, color: tokens.inkMid,
+            }}>
+              <a
+                href={`https://www.strava.com/athletes/${g.athleteId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: tokens.terra, fontWeight: 700, textDecoration: 'none' }}
+              >
+                athlète {g.athleteId} ↗
+              </a>
+              <span>{g.events} sortie{g.events > 1 ? 's' : ''} ignorée{g.events > 1 ? 's' : ''}</span>
+              <span style={{ marginLeft: 'auto', fontSize: 12, color: tokens.inkLight }}>
+                dernière {formatDate(g.lastSeen)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </main>
   );
 }

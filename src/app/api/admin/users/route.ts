@@ -121,7 +121,47 @@ export async function GET(req: NextRequest) {
     providers:   providersByUser[u.id] ?? [],
   }));
 
-  return NextResponse.json({ users: enriched }, {
+  // ── Ghost athletes ────────────────────────────────────────────────────
+  // Strava keeps pushing webhooks for every athlete who ever authorized the
+  // app, and revoking that authorization is something only THEY can do from
+  // strava.com — deleting their TLE account doesn't touch it. So the event
+  // log fills up with owner_ids that match no user: people who left (or were
+  // removed) but still ride. sync-one answers `no_user_for_athlete` and drops
+  // the payload, which is correct — a webhook must never resurrect a deleted
+  // account. This surfaces them so the admin can see who's orbiting the app
+  // without being in it, instead of guessing from "Anonyme" log lines.
+  const knownAthleteIds = new Set(
+    userRows.map(u => u.athlete_id).filter((a): a is number => a !== null).map(String),
+  );
+  const ghosts: { athleteId: string; events: number; lastSeen: string | null }[] = [];
+  {
+    const { data: hooks } = await supabaseAdmin()
+      .schema('next_auth')
+      .from('events')
+      .select('properties, occurred_at')
+      .eq('event_type', 'strava_webhook_received')
+      .order('occurred_at', { ascending: false })
+      .limit(1000);
+
+    const agg: Record<string, { events: number; lastSeen: string | null }> = {};
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const h of (hooks ?? []) as any[]) {
+      const owner = h?.properties?.owner_id;
+      if (owner === null || owner === undefined) continue;
+      const key = String(owner);
+      if (knownAthleteIds.has(key)) continue;
+      if (!agg[key]) agg[key] = { events: 0, lastSeen: null };
+      agg[key].events += 1;
+      // Rows arrive newest-first, so the first one we see is the latest.
+      if (!agg[key].lastSeen) agg[key].lastSeen = h.occurred_at ?? null;
+    }
+    for (const [athleteId, v] of Object.entries(agg)) {
+      ghosts.push({ athleteId, events: v.events, lastSeen: v.lastSeen });
+    }
+    ghosts.sort((a, b) => b.events - a.events);
+  }
+
+  return NextResponse.json({ users: enriched, ghosts }, {
     headers: {
       'Cache-Control': 'no-store, must-revalidate',
     },
