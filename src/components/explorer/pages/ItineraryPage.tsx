@@ -1068,6 +1068,80 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
         </>
       )}
 
+      {/* ─── LIBRARY (surfaced at the top) ──────────────────────────────── */}
+      {/* Mirrors the iOS "Bibliothèque" toolbar button (books.vertical icon):
+          a prominent book-icon button up top instead of a faint collapsed row
+          buried under the map. Still collapsed by default so the map stays big;
+          opening it shows the saved routes right here, high on the page. */}
+      <div style={{ marginBottom: 20, display: 'flex', justifyContent: isMobile ? 'stretch' : 'flex-end' }}>
+        <button onClick={() => setLibOpen(o => !o)} style={{
+          display: 'inline-flex', alignItems: 'center', gap: 9,
+          width: isMobile ? '100%' : 'auto', justifyContent: 'center',
+          padding: '10px 16px', borderRadius: 12, cursor: 'pointer',
+          background: libOpen ? tokens.terra : tokens.surface,
+          border: `1px solid ${libOpen ? tokens.terra : tokens.creamBorder}`,
+          color: libOpen ? '#fff' : tokens.ink,
+          fontFamily: "'Space Grotesk'", fontSize: 13, fontWeight: 700, letterSpacing: '0.04em',
+          boxShadow: '0 1px 5px rgba(0,0,0,0.07)', transition: 'background 0.14s, color 0.14s, border-color 0.14s',
+        }}>
+          <BookIcon color={libOpen ? '#fff' : tokens.terra} />
+          <span>{t('itinerary.library')}</span>
+          {library.length > 0 && (
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              minWidth: 20, height: 20, padding: '0 6px', borderRadius: 10,
+              background: libOpen ? 'rgba(255,255,255,0.25)' : tokens.creamDark,
+              color: libOpen ? '#fff' : tokens.terra, fontSize: 11, fontWeight: 800,
+            }}>{library.length}</span>
+          )}
+          <span style={{ fontSize: 11, opacity: 0.75 }}>{libOpen ? '▾' : '▸'}</span>
+        </button>
+      </div>
+      {libOpen && (
+        <div style={{ marginBottom: 24 }}>
+          {library.length === 0 ? (
+            <div style={{ ...CARD, fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.inkLight, lineHeight: 1.6 }}>
+              {t('itinerary.libraryEmpty')}
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gap: 10, gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))' }}>
+              {library.map(it => (
+                <div key={it.id} style={{
+                  ...CARD, padding: 14,
+                  borderTop: activeId === it.id ? `2px solid ${tokens.terra}` : `1px solid ${tokens.creamBorder}`,
+                  cursor: 'pointer',
+                }} onClick={() => { void handleLoad(it); }}>
+                  <div style={{ fontFamily: "'Playfair Display'", fontSize: 16, fontWeight: 700, color: tokens.ink, marginBottom: 4 }}>
+                    {it.loop ? '↺ ' : ''}{it.name}
+                  </div>
+                  <div style={{ fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight, marginBottom: 8, letterSpacing: '0.05em' }}>
+                    {it.waypoints.length} {t('itinerary.stops')}
+                    {it.distanceKm != null && ` · ${it.distanceKm} km`}
+                    {it.durationMin != null && ` · ${formatDuration(it.durationMin * 60)}`}
+                    {it.totalAscent != null && ` · ↗ ${it.totalAscent} m`}
+                  </div>
+                  <div style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkMid, lineHeight: 1.4, marginBottom: 8 }}>
+                    {it.waypoints.slice(0, 4).map(w => w.name).join(' → ')}
+                    {it.waypoints.length > 4 && ` → +${it.waypoints.length - 4}`}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontFamily: "'Space Grotesk'", fontSize: 9, color: tokens.inkLight, letterSpacing: '0.05em' }}>
+                      {new Date(it.createdAt).toLocaleDateString()}
+                    </span>
+                    <button onClick={(e) => { e.stopPropagation(); handleDelete(it.id); }} style={{
+                      fontFamily: "'Space Grotesk'", fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase',
+                      background: 'none', border: 'none', color: tokens.inkLight, cursor: 'pointer',
+                    }}>
+                      {t('itinerary.delete')}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Single column: map (full width) on top, builder underneath.
           `order` puts the map first without moving the JSX blocks. */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -1858,60 +1932,19 @@ export function ItineraryPage({ user, embedded, sport = 'cycling' }: Props) {
         </div>
       </div>
 
-      {/* ─── LIBRARY ────────────────────────────────────────────────────── */}
-      {/* Collapsed by default so it never sits under the map and shrinks it —
-          the map stays big; open the library only when you need a saved route. */}
-      <div style={{ marginTop: 24 }}>
-        <button onClick={() => setLibOpen(o => !o)} style={{
-          display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginBottom: 12,
-        }}>
-          <span style={{ color: tokens.inkMid, fontSize: 11 }}>{libOpen ? '▾' : '▸'}</span>
-          <Label style={{ display: 'inline' }}>
-            {t('itinerary.library')} {library.length > 0 && <span style={{ color: tokens.terra }}>· {library.length}</span>}
-          </Label>
-        </button>
-        {!libOpen ? null : library.length === 0 ? (
-          <div style={{ ...CARD, fontFamily: "'Space Grotesk'", fontSize: 12, color: tokens.inkLight, lineHeight: 1.6 }}>
-            {t('itinerary.libraryEmpty')}
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gap: 10, gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))' }}>
-            {library.map(it => (
-              <div key={it.id} style={{
-                ...CARD, padding: 14,
-                borderTop: activeId === it.id ? `2px solid ${tokens.terra}` : `1px solid ${tokens.creamBorder}`,
-                cursor: 'pointer',
-              }} onClick={() => { void handleLoad(it); }}>
-                <div style={{ fontFamily: "'Playfair Display'", fontSize: 16, fontWeight: 700, color: tokens.ink, marginBottom: 4 }}>
-                  {it.loop ? '↺ ' : ''}{it.name}
-                </div>
-                <div style={{ fontFamily: "'Space Grotesk'", fontSize: 10, color: tokens.inkLight, marginBottom: 8, letterSpacing: '0.05em' }}>
-                  {it.waypoints.length} {t('itinerary.stops')}
-                  {it.distanceKm != null && ` · ${it.distanceKm} km`}
-                  {it.durationMin != null && ` · ${formatDuration(it.durationMin * 60)}`}
-                  {it.totalAscent != null && ` · ↗ ${it.totalAscent} m`}
-                </div>
-                <div style={{ fontFamily: "'Space Grotesk'", fontSize: 11, color: tokens.inkMid, lineHeight: 1.4, marginBottom: 8 }}>
-                  {it.waypoints.slice(0, 4).map(w => w.name).join(' → ')}
-                  {it.waypoints.length > 4 && ` → +${it.waypoints.length - 4}`}
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontFamily: "'Space Grotesk'", fontSize: 9, color: tokens.inkLight, letterSpacing: '0.05em' }}>
-                    {new Date(it.createdAt).toLocaleDateString()}
-                  </span>
-                  <button onClick={(e) => { e.stopPropagation(); handleDelete(it.id); }} style={{
-                    fontFamily: "'Space Grotesk'", fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase',
-                    background: 'none', border: 'none', color: tokens.inkLight, cursor: 'pointer',
-                  }}>
-                    {t('itinerary.delete')}
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
     </Outer>
+  );
+}
+
+/** Small book glyph for the library button — mirrors the iOS
+ *  `books.vertical` SF Symbol. Uses currentColor via the `color` prop so it
+ *  flips white on the active (terra) state. */
+function BookIcon({ color }: { color: string }) {
+  return (
+    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+    </svg>
   );
 }
 

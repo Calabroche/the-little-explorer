@@ -330,18 +330,20 @@ export function SportDropdown({ sport, onChange, available }: {
 // Public, reusable lang toggle (used by the desktop floating chip in
 // ExplorerApp and by the mobile bottom bar below). Local LangToggle
 // above remains for backward-compat with the mobile compact mode.
-export function GlobalLangToggle({ lang, onChange }: { lang: Lang; onChange: (l: Lang) => void }) {
+export function GlobalLangToggle({ lang, onChange, bare = false }: { lang: Lang; onChange: (l: Lang) => void; bare?: boolean }) {
   const opts: { id: Lang; label: string }[] = [
     { id: 'fr', label: 'FR' },
     { id: 'en', label: 'EN' },
   ];
   return (
     <div style={{
-      display: 'flex', gap: 3, padding: 3,
-      background: tokens.surface,
-      border: `1px solid ${tokens.creamBorder}`,
+      display: 'flex', gap: 3, padding: bare ? 0 : 3,
+      // `bare`: drop the pill chrome so this can sit inside a shared container
+      // (the top-right control cluster) without a box-in-a-box look.
+      background: bare ? 'transparent' : tokens.surface,
+      border: bare ? 'none' : `1px solid ${tokens.creamBorder}`,
       borderRadius: 18,
-      boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+      boxShadow: bare ? 'none' : '0 2px 8px rgba(0,0,0,0.08)',
     }}>
       {opts.map(o => {
         const active = lang === o.id;

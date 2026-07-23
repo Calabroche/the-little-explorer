@@ -455,17 +455,26 @@ export function ExplorerApp() {
             dark-mode button). Mobile path has its own pair in the
             bottom-nav top row. */}
         {!isMobile && (
-          <div style={{ position: 'absolute', top: 16, right: 16, zIndex: 1000, display: 'flex', gap: 6, alignItems: 'center' }}>
+          <div style={{
+            position: 'absolute', top: 16, right: 16, zIndex: 1000,
+            display: 'flex', gap: 2, alignItems: 'center',
+            // One unified control cluster instead of three floating chips:
+            // shared surface + border + shadow, borderless buttons inside,
+            // hairline dividers between groups.
+            padding: 3, borderRadius: 20,
+            background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
+            boxShadow: '0 2px 10px rgba(0,0,0,0.10)',
+          }}>
             <button
               onClick={() => setShowWhatsNew(true)}
               title={lang === 'en' ? "What's new" : 'Nouveautés'}
               aria-label="What's new"
               style={{
-                width: 32, height: 32, borderRadius: 16,
-                background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
+                width: 30, height: 30, borderRadius: 15,
+                background: 'transparent', border: 'none',
                 color: tokens.terra, fontSize: 15, fontWeight: 800, fontStyle: 'italic', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontFamily: "'Playfair Display'", boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                fontFamily: "'Playfair Display'",
               }}
             >
               i
@@ -475,16 +484,16 @@ export function ExplorerApp() {
               title={darkMode ? 'Mode clair' : 'Mode sombre'}
               aria-label="Toggle dark mode"
               style={{
-                width: 32, height: 32, borderRadius: 16,
-                background: tokens.surface, border: `1px solid ${tokens.creamBorder}`,
+                width: 30, height: 30, borderRadius: 15,
+                background: 'transparent', border: 'none',
                 color: tokens.inkMid, fontSize: 16, cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
               }}
             >
               {darkMode ? '◑' : '◐'}
             </button>
-            <GlobalLangToggle lang={lang} onChange={setLang} />
+            <div style={{ width: 1, height: 18, background: tokens.creamBorder, margin: '0 4px' }} />
+            <GlobalLangToggle lang={lang} onChange={setLang} bare />
           </div>
         )}
         {analysisActivity

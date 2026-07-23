@@ -53,7 +53,9 @@ export function AnalysesPage(
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      <div style={{ padding: isMobile ? '16px 16px 0' : '24px 40px 0' }}>
+      {/* Extra top padding on desktop so the tab bar clears the floating
+          control cluster (i / theme / language) pinned top-right. */}
+      <div style={{ padding: isMobile ? '16px 16px 0' : '64px 40px 0' }}>
         <div style={tabBarStyle}
           onWheel={e => { const el = e.currentTarget as HTMLDivElement; if (e.deltaY !== 0) el.scrollLeft += e.deltaY; }}>
           {tabs.map(({ id, icon, labelKey }) => {
